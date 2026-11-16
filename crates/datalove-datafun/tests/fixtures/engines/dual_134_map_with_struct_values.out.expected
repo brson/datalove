@@ -29,7 +29,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("%{\"alice\" = {age = 30, active = true}, \"bob\" = {age = 25, active = false}}\n"),
+            debug_output: Some("%{\"alice\" -> {age = 30, active = true}, \"bob\" -> {age = 25, active = false}}\n"),
         ),
     ],
 )

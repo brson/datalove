@@ -15,7 +15,7 @@ require module sys/std/string
 const WORD: string = "static"
 const BIG: int = 123456789012345678901234567890
 const NUMS: [int] = [3, 1, 4, 1, 5]
-const AGES: %{string = u32} = %{ "ada" = : u32 / 36, "alan" = : u32 / 41 }
+const AGES: %{string -> u32} = %{ "ada" -> : u32 / 36, "alan" -> : u32 / 41 }
 const PRIMES: #{u32} = #{ : u32 / 2, : u32 / 3, : u32 / 5 }
 const PERSON: { name: string, langs: [string] } = { name = "ada", langs = ["ae", "notes"] }
 const GRID: [|int, 2|] = [| 1 2 3, 4 5 6 |]

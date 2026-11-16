@@ -52,7 +52,7 @@ fun clones(): string
   let s_copy = s@
   let l: [u32] = [1, 2, 3]
   let l_copy = l@
-  let m: %{u32 = string} = %{1 = "a"}
+  let m: %{u32 -> string} = %{1 -> "a"}
   let m_copy = m@
   let big: int = 99999999999999999999
   let big_copy = big@

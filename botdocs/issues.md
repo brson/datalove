@@ -441,7 +441,7 @@ refused as a pattern is, or read as `T` in parentheses, is the open part.
 
 **Reproduced.** `let t: #{L} = #{}` with `L` recursive is T065, but
 `let s = #{x@}` with `x: L` is accepted and runs, and so does
-`%{x@ = 1}`: the check is made of hints as they are converted, and an
+`%{x@ -> 1}`: the check is made of hints as they are converted, and an
 inferred type is never converted. A generic `fun one<T>(x: T): #{T} where
 { T is ord, }` called with an `L` builds a set of `L` the same way, since
 `ord` admits every type. The runtime orders a recursive value as any other,

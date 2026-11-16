@@ -58,7 +58,7 @@ something else.
 ## The shape
 
 - A **dynamic type** is an IR type that mentions a type parameter: `T`,
-  `(T, u32)`, `?T`, `[T]`, `%{K = V}`.
+  `(T, u32)`, `?T`, `[T]`, `%{K -> V}`.
 - A **dynamic value** is a value of a dynamic type. In a frame it is a **fat
   pointer**, `{ptr, tydesc}`, two words whatever the type: `ptr` is the value
   in its real layout, and `tydesc` describes that layout. Slots, block

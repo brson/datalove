@@ -73,7 +73,7 @@ Analysis(
                     block10:
                         v36 = listelementref *v30[v31]
                         v37 = clone *v36
-                        v38 = staticref %{"a" = [1u32, 2u32, 3u32], "b" = [4u32, 5u32], "c" = []}
+                        v38 = staticref %{"a" -> [1u32, 2u32, 3u32], "b" -> [4u32, 5u32], "c" -> []}
                         v39 = const "b"
                         v40 = mapcontainskey *v38[v39]
                         branch v40, block12, block11

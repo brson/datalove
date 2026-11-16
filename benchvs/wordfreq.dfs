@@ -82,9 +82,9 @@ fun generate(ref vocab: [string]): !string
 end fun
 
 // How many times each lowercased word appears.
-fun count(ref text: string): !%{string = u32}
+fun count(ref text: string): !%{string -> u32}
   let words = string.split_whitespace(ref text)
-  var counts: %{string = u32} = %{}
+  var counts: %{string -> u32} = %{}
   for word in ref words
     let lower = string.to_ascii_lowercase(ref word)
     call map.add(mut counts, ref lower, 1)!
@@ -94,7 +94,7 @@ end fun
 
 // Fold the top entries, by count and then by word, into one number: each
 // count and then each byte of its word, in rank order.
-fun top_checksum(ref counts: %{string = u32}): !u32
+fun top_checksum(ref counts: %{string -> u32}): !u32
   // Sorting ascending on the count's complement puts the largest first, with
   // ties in the order of the words.
   var ranked: [(u32, string)] = []

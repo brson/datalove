@@ -11,20 +11,20 @@
 // point at: it leaves the pointer null rather than inventing an address, and
 // reading a run of no elements through it has to answer without looking.
 
-let repeated_keys: %{bool = u32} = %{false = : u32 / 118, false = : u32 / 75,
-                                     true = : u32 / 41}
-let repeated_numbers: %{u32 = u32} = %{: u32 / 1 = : u32 / 10, : u32 / 1 = : u32 / 20}
+let repeated_keys: %{bool -> u32} = %{false -> : u32 / 118, false -> : u32 / 75,
+                                     true -> : u32 / 41}
+let repeated_numbers: %{u32 -> u32} = %{: u32 / 1 -> : u32 / 10, : u32 / 1 -> : u32 / 20}
 // A key whose duplicate has to be let go of rather than merely skipped.
-let repeated_strings: %{string = u32} = %{"a" = : u32 / 1, "a" = : u32 / 2}
+let repeated_strings: %{string -> u32} = %{"a" -> : u32 / 1, "a" -> : u32 / 2}
 
 let repeated_elements: #{u32} = #{: u32 / 1, : u32 / 1, : u32 / 2}
 let repeated_words: #{string} = #{"a", "a", "b"}
 
 // Written out of order, to show the sort still happens.
 let unsorted: #{u32} = #{: u32 / 9, : u32 / 2, : u32 / 5}
-let unsorted_map: %{u32 = string} = %{: u32 / 9 = "nine", : u32 / 2 = "two"}
+let unsorted_map: %{u32 -> string} = %{: u32 / 9 -> "nine", : u32 / 2 -> "two"}
 
-let nothing_in_them: (#{u32}, %{u32 = u32}) = (#{}, %{})
+let nothing_in_them: (#{u32}, %{u32 -> u32}) = (#{}, %{})
 
 // An aggregate with no members, whose descriptor has no array to point at.
 let empty_struct: {} = {}

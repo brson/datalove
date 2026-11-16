@@ -157,10 +157,10 @@ const NAME: string = "datalove"
 let numbers: [u32] = [1, 2, 3, 4, 5]
 let no_numbers: [u32] = []
 
-// A map is `%{K = V}`. The `=` separates key from value in both the type and
+// A map is `%{K -> V}`. The `=` separates key from value in both the type and
 // the literal, because they are the same shape.
-let scores: %{string = u32} = %{"alice" = 100, "bob" = 85}
-let no_scores: %{string = u32} = %{}
+let scores: %{string -> u32} = %{"alice" -> 100, "bob" -> 85}
+let no_scores: %{string -> u32} = %{}
 
 // A set is `#{T}`.
 let unique: #{u32} = #{1, 2, 3}
@@ -536,7 +536,7 @@ end fun
 // absent, so it is followed by `?` or `!` or taken apart with `if`.
 fun lookup(): ?u32
   let xs: [u32] = [10, 20, 30]
-  let m: %{string = u32} = %{"a" = 1}
+  let m: %{string -> u32} = %{"a" -> 1}
   let head = xs[: index / 0]?
   let mapped = m["a"]?
   ret some (head +? mapped)
@@ -710,8 +710,8 @@ fun fib(n: u32): !u32
 end fun
 
 // A histogram, which touches a map, a var, a loop and a borrow.
-fun tally(ref words: [string]): !%{string = u32}
-  var counts: %{string = u32} = %{}
+fun tally(ref words: [string]): !%{string -> u32}
+  var counts: %{string -> u32} = %{}
   var i: index = 0
   let n = len(ref words)
   loop while i .< n

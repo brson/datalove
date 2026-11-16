@@ -536,7 +536,7 @@ unsafe fn pretty_map(
                     let value_ptr = values_array.add(i as usize * value_size);
 
                     pretty_value(rt, key_ptr, key_ty, string_mut, string_tydesc)?;
-                    push_str(rt, string_mut, string_tydesc, b" = ")?;
+                    push_str(rt, string_mut, string_tydesc, b" -> ")?;
                     pretty_value(rt, value_ptr, value_ty, string_mut, string_tydesc)?;
 
                     entry_count += 1;

@@ -441,8 +441,8 @@ difference does not fit `T`.
 **Map.** A key-value mapping.
 
 ```datalove
-%{K = V}         // type
-%{ 0 = 5 }       // literal
+%{K -> V}        // type
+%{ 0 -> 5 }      // literal
 ```
 
 **Set.** An unordered collection of unique elements.
@@ -817,7 +817,7 @@ through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`, and unit.
 Atoms are always copy. A term, option, tuple or struct is copy if everything in
 it is, and an enum if all its variant payloads are.
 
-**Linear types** have move semantics: `int`, `string`, `[T]`, `%{K = V}`,
+**Linear types** have move semantics: `int`, `string`, `[T]`, `%{K -> V}`,
 `#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`, and every result `!T`,
 whatever `T` is. A term, option, tuple, struct or enum holding a linear type is
 linear.
@@ -1431,7 +1431,7 @@ in the map stays and the provided key is dropped. If the key is absent, the
 provided key and value are inserted as a pair:
 
 ```datalove
-var m: %{string = string} = %{ "a" = "one" }
+var m: %{string -> string} = %{ "a" -> "one" }
 set m["a"] = "uno"    // drops the provided "a" and "one", stores "uno"
 set m["b"] = "two"    // inserts "b" = "two"
 ```
@@ -1765,7 +1765,7 @@ There are three bounds:
 
   A set or a map written over a type parameter has to ask for it. A set keeps
   its elements in order and a map keeps its keys in order, so `#{T}` and
-  `%{T = V}` need `T is ord` whether the collection is a parameter, a return
+  `%{T -> V}` need `T is ord` whether the collection is a parameter, a return
   type or a binding inside the body. A map's values do not, since nothing puts
   them in order, and neither does `[T]`. Every bound implies `ord`, so `float`
   and `fixedint` serve as well.

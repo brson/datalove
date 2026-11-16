@@ -22,8 +22,8 @@ require data local/store/orders: [Order]
 
 // Where each product and customer is, by id. Worked out at compile time from
 // the data, so a lookup is one map probe.
-const PRODUCT_SLOTS: %{u32 = index} = product_slots()
-const CUSTOMER_SLOTS: %{u32 = index} = customer_slots()
+const PRODUCT_SLOTS: %{u32 -> index} = product_slots()
+const CUSTOMER_SLOTS: %{u32 -> index} = customer_slots()
 
 fun next(i: index): index
     ret index.add_wrapping(i, 1)
@@ -32,7 +32,7 @@ end fun
 // A const cannot early-return, so the result is unwrapped here. An error from
 // the build would be a bug in this module, and there is no panic to say so
 // with, so it gives an empty index, which every lookup then reports.
-fun product_slots(): %{u32 = index}
+fun product_slots(): %{u32 -> index}
     if build_product_slots() |slots|
         ret slots
     else |e|
@@ -40,8 +40,8 @@ fun product_slots(): %{u32 = index}
     end if
 end fun
 
-fun build_product_slots(): !%{u32 = index}
-    var slots: %{u32 = index} = %{}
+fun build_product_slots(): !%{u32 -> index}
+    var slots: %{u32 -> index} = %{}
     var i: index = 0
     loop while i .< list.len(ref products)
         call map.insert(mut slots, products[i]!.id, i)
@@ -50,7 +50,7 @@ fun build_product_slots(): !%{u32 = index}
     ret ok slots
 end fun
 
-fun customer_slots(): %{u32 = index}
+fun customer_slots(): %{u32 -> index}
     if build_customer_slots() |slots|
         ret slots
     else |e|
@@ -58,8 +58,8 @@ fun customer_slots(): %{u32 = index}
     end if
 end fun
 
-fun build_customer_slots(): !%{u32 = index}
-    var slots: %{u32 = index} = %{}
+fun build_customer_slots(): !%{u32 -> index}
+    var slots: %{u32 -> index} = %{}
     var i: index = 0
     loop while i .< list.len(ref customers)
         call map.insert(mut slots, customers[i]!.id, i)

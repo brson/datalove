@@ -174,7 +174,7 @@ fn test_parse_string() {
 #[test]
 fn test_parse_map() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": %{u32 = u32} / %{ 0 = 5, 2 = 2 }"));
+    let source = Source::new(db, S(": %{u32 -> u32} / %{ 0 -> 5, 2 -> 2 }"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint().X();
     match type_hint {

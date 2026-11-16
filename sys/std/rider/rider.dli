@@ -119,20 +119,20 @@ native fun list_fill<T>(mut self: [T], ref elem: T, n: index)
 // Maps and sets. Generic over their key, value or element type, which the
 // implementation reads off the container's descriptor. A key or element being
 // looked up is borrowed, so it arrives as itself.
-native fun map_len<K, V>(ref self: %{K = V}): index where { K is ord, }
-native fun map_clear<K, V>(mut self: %{K = V}) where { K is ord, }
-native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool where { K is ord, }
-native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V where { K is ord, }
-native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V) where { K is ord, }
+native fun map_len<K, V>(ref self: %{K -> V}): index where { K is ord, }
+native fun map_clear<K, V>(mut self: %{K -> V}) where { K is ord, }
+native fun map_contains_key<K, V>(ref self: %{K -> V}, ref key: K): bool where { K is ord, }
+native fun map_get<K, V>(ref self: %{K -> V}, ref key: K): ?V where { K is ord, }
+native fun map_insert<K, V>(mut self: %{K -> V}, key: K, value: V) where { K is ord, }
 // Add to the value under a key, from zero if it's absent, in one lookup. False
 // if the sum overflowed, which leaves the map as it was.
-native fun map_add<K, V>(mut self: %{K = V}, ref key: K, amount: V): bool where { K is ord, V is fixedint, }
-native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) where { K is ord, }
+native fun map_add<K, V>(mut self: %{K -> V}, ref key: K, amount: V): bool where { K is ord, V is fixedint, }
+native fun map_remove<K, V>(mut self: %{K -> V}, ref key: K) where { K is ord, }
 // The whole map read out in one walk, onto the end of a list. The list is the
 // caller's, so a walk can append to one it already has.
-native fun map_keys_into<K, V>(ref self: %{K = V}, mut list: [K]) where { K is ord, }
-native fun map_values_into<K, V>(ref self: %{K = V}, mut list: [V]) where { K is ord, }
-native fun map_entries_into<K, V>(ref self: %{K = V}, mut list: [(K, V)]) where { K is ord, }
+native fun map_keys_into<K, V>(ref self: %{K -> V}, mut list: [K]) where { K is ord, }
+native fun map_values_into<K, V>(ref self: %{K -> V}, mut list: [V]) where { K is ord, }
+native fun map_entries_into<K, V>(ref self: %{K -> V}, mut list: [(K, V)]) where { K is ord, }
 
 // Tensors. The rank is part of the type rather than a parameter, so these are
 // written at rank 1 -- the shape a list-like walk wants. What they need that a

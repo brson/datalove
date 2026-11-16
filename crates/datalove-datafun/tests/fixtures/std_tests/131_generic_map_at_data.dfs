@@ -6,17 +6,17 @@ import map.len
 //
 // A `data` bound to a type parameter is a value like any other, and goes into
 // the map as it stands. A map has two sides, and they can be bound
-// differently: `%{k = v}` in a generic over both, called at `K := data`, has a
+// differently: `%{k -> v}` in a generic over both, called at `K := data`, has a
 // `data` key and a value of some other type. When elements in a generic were
 // themselves wrapped in a `data`, the insert took both sides the same way, so
 // that entry went nowhere and everything in it was leaked -- silently, because
 // a map nobody counts looks much the same empty.
 
-fun pair<K, V>(k: K, v: V): %{K = V} where { K is ord, }
-  ret %{k = v}
+fun pair<K, V>(k: K, v: V): %{K -> V} where { K is ord, }
+  ret %{k -> v}
 end fun
 
-fun size<K, V>(ref m: %{K = V}): index where { K is ord, }
+fun size<K, V>(ref m: %{K -> V}): index where { K is ord, }
   ret len(ref m)
 end fun
 

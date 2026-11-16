@@ -10,7 +10,7 @@ type Json: rec J enum {
     term Num f64,
     term Str string,
     term Arr [J],
-    term Obj %{string = J},
+    term Obj %{string -> J},
 }
 
 fun size(j: Json): int
@@ -33,8 +33,8 @@ fun size(j: Json): int
 end fun
 
 let doc: Json = term Obj %{
-    "head" = term Obj %{ "id" = term Num 1.0 },
-    "ops" = term Arr [term Num 2.5, atom Null, term Str "x", term Arr [term Bool true]],
+    "head" -> term Obj %{ "id" -> term Num 1.0 },
+    "ops" -> term Arr [term Num 2.5, atom Null, term Str "x", term Arr [term Bool true]],
 }
 debuglog doc
 debuglog size(doc@)

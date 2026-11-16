@@ -14,7 +14,7 @@ fun take(a: int): int
 end fun
 
 // The value moves the key out of its binding before the lookup uses it.
-fun key_moved(m: %{string = string}, k: string): ?%{string = string}
+fun key_moved(m: %{string -> string}, k: string): ?%{string -> string}
     var b = m
     set b[k]? = k
     ret some b

@@ -9,8 +9,8 @@ import map.len
 // A `for` visits the entries in their keys' order, each key beside its own
 // value; `keys` and `values` read the two out as lists in the same order.
 
-let scores = %{"c" = 3, "a" = 1, "b" = 2}
-let by_number = %{7 = "seven", 1 = "one"}
+let scores = %{"c" -> 3, "a" -> 1, "b" -> 2}
+let by_number = %{7 -> "seven", 1 -> "one"}
 
 var paired = ""
 var total = 0
@@ -24,7 +24,7 @@ let all_values = values(ref scores)
 let numeric_keys = keys(ref by_number)
 let numeric_values = values(ref by_number)
 
-let empty: %{string = u32} = %{}
+let empty: %{string -> u32} = %{}
 let empty_keys = keys(ref empty)
 
 let output = ((paired, total), all_keys, all_values,

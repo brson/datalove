@@ -22,7 +22,7 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
 #[test]
 fn test_clone_empty_map() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": %{u32 = string} / %{}")?;
+    let typechecked = compile_str(&db, ": %{u32 -> string} / %{}")?;
 
     let rt = datalove_rt::rust::Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -85,7 +85,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
 #[test]
 fn test_clone_map_single_entry() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": %{u32 = string} / %{ 1 = \"hello\" }")?;
+    let typechecked = compile_str(&db, ": %{u32 -> string} / %{ 1 -> \"hello\" }")?;
 
     let rt = datalove_rt::rust::Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -149,7 +149,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
 fn test_clone_map_multiple_entries() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile_str(&db,
-        ": %{u32 = string} / %{ 1 = \"one\", 2 = \"two\", 3 = \"three\", 4 = \"four\", 5 = \"five\" }"
+        ": %{u32 -> string} / %{ 1 -> \"one\", 2 -> \"two\", 3 -> \"three\", 4 -> \"four\", 5 -> \"five\" }"
     )?;
 
     let rt = datalove_rt::rust::Runtime::new();
@@ -214,7 +214,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
 fn test_clone_map_nested_values() -> AnyResult<()> {
     let db = Database::default();
     let typechecked = compile_str(&db,
-        ": %{u32 = (u32, string)} / %{ 1 = (10, \"first\"), 2 = (20, \"second\") }"
+        ": %{u32 -> (u32, string)} / %{ 1 -> (10, \"first\"), 2 -> (20, \"second\") }"
     )?;
 
     let rt = datalove_rt::rust::Runtime::new();

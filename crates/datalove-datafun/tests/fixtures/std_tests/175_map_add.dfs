@@ -3,8 +3,8 @@ import map.add
 
 // `map.add` counts from zero under a new key and adds in place under an old
 // one. The key is borrowed, so a string key is still the caller's after.
-fun words(): !(%{string = u32}, string)
-  var counts: %{string = u32} = %{}
+fun words(): !(%{string -> u32}, string)
+  var counts: %{string -> u32} = %{}
   let word = "apple"
   call add(mut counts, ref word, : u32 / 1)!
   call add(mut counts, ref "pear", : u32 / 5)!
@@ -13,39 +13,39 @@ fun words(): !(%{string = u32}, string)
 end fun
 
 // Every fixed-width value type.
-fun widths(): !(%{u8 = i8}, %{i16 = u16}, %{u32 = i32}, %{i64 = u64}, %{index = offset})
-  var a: %{u8 = i8} = %{}
+fun widths(): !(%{u8 -> i8}, %{i16 -> u16}, %{u32 -> i32}, %{i64 -> u64}, %{index -> offset})
+  var a: %{u8 -> i8} = %{}
   call add(mut a, ref : u8 / 1, : i8 / -100)!
   call add(mut a, ref : u8 / 1, : i8 / -28)!
-  var b: %{i16 = u16} = %{}
+  var b: %{i16 -> u16} = %{}
   call add(mut b, ref : i16 / -1, : u16 / 65000)!
-  var c: %{u32 = i32} = %{}
+  var c: %{u32 -> i32} = %{}
   call add(mut c, ref : u32 / 7, : i32 / 2147483000)!
   call add(mut c, ref : u32 / 7, : i32 / 647)!
-  var d: %{i64 = u64} = %{}
+  var d: %{i64 -> u64} = %{}
   call add(mut d, ref : i64 / 0, : u64 / 18446744073709551000)!
-  var e: %{index = offset} = %{}
+  var e: %{index -> offset} = %{}
   call add(mut e, ref : index / 3, : offset / -5)!
   call add(mut e, ref : index / 3, : offset / 2)!
   ret ok (a, b, c, d, e)
 end fun
 
 // An overflow fails and leaves the map as it was, which the caller sees.
-fun bump(mut counts: %{string = u8}, ref key: string, n: u8): !()
+fun bump(mut counts: %{string -> u8}, ref key: string, n: u8): !()
   ret add(mut counts, ref key, n)
 end fun
 
-var small: %{string = u8} = %{"x" = 250}
+var small: %{string -> u8} = %{"x" -> 250}
 let fits = bump(mut small, ref "x", : u8 / 5)
 let overflows = bump(mut small, ref "x", : u8 / 1)
 let new_key_at_max = bump(mut small, ref "y", : u8 / 255)
 
 // From a caller generic over the value, whose amount arrives boxed.
-fun tally<V>(mut totals: %{string = V}, ref key: string, amount: V): !() where { V is fixedint, }
+fun tally<V>(mut totals: %{string -> V}, ref key: string, amount: V): !() where { V is fixedint, }
   ret add(mut totals, ref key, amount)
 end fun
 
-var generic: %{string = u16} = %{}
+var generic: %{string -> u16} = %{}
 let g1 = tally(mut generic, ref "k", : u16 / 30000)
 let g2 = tally(mut generic, ref "k", : u16 / 30000)
 let g3 = tally(mut generic, ref "k", : u16 / 30000)

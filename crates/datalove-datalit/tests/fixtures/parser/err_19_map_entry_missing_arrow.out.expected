@@ -15,7 +15,7 @@
             "value": {
               "expr": {
                 "ParseError": {
-                  "message": "expected '=' between map key and value"
+                  "message": "expected '->' between map key and value"
                 }
               },
               "type_hint": null
@@ -31,7 +31,7 @@
       "code": "D017",
       "labels": [
         {
-          "message": "expected '=' after key",
+          "message": "expected '->' after key",
           "span": [
             5,
             6
@@ -39,7 +39,7 @@
           "text": "2"
         }
       ],
-      "message": "expected '=' between map key and value"
+      "message": "expected '->' between map key and value"
     }
   ]
 }

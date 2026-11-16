@@ -15,7 +15,7 @@ fun put_tensor<T>(mut t: [|T, 1|], v: T): ?bool
   ret some true
 end fun
 
-fun put_map<T>(mut m: %{u32 = T}, k: u32, v: T): ?bool
+fun put_map<T>(mut m: %{u32 -> T}, k: u32, v: T): ?bool
   set m[k]? = v
   ret some true
 end fun
@@ -30,7 +30,7 @@ end fun
 fun fill<T>(x: T, n: u32): u32
   var xs: [T] = [x@]
   var t: [|T, 1|] = [| x@ |]
-  var m: %{u32 = T} = %{1 = x@}
+  var m: %{u32 -> T} = %{1 -> x@}
   var refused: u32 = 0
   var i: u32 = 0
   loop while i .< n

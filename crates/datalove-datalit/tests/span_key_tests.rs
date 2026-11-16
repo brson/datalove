@@ -69,7 +69,7 @@ fn every_expression_gets_its_own_position() {
         "[[1, 2], [3, 4]]",
         "[[[1]]]",
         ": ?u32 / 42",
-        ": %{u32 = u32} / %{\n  0 = 5,\n  2 = 2,\n  3 = : u32 / 2,\n}",
+        ": %{u32 -> u32} / %{\n  0 -> 5,\n  2 -> 2,\n  3 -> : u32 / 2,\n}",
         "[7, 7, 7, 7]",
     ] {
         let found = positions(src);
@@ -97,7 +97,7 @@ fn chunks_number_apart() {
     for src in [
         "[1, 2, 3]",
         "[[1, 2], [3, 4]]",
-        ": %{u32 = u32} / %{\n  0 = 5,\n  2 = 2,\n  3 = : u32 / 2,\n}",
+        ": %{u32 -> u32} / %{\n  0 -> 5,\n  2 -> 2,\n  3 -> : u32 / 2,\n}",
         "{xs = [7, 7], ys = #{7, 8}}",
     ] {
         let found = positions_cut(src, true);

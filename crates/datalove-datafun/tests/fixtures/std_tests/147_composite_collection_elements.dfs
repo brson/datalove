@@ -29,7 +29,7 @@ let nums: [u32] = [10, 20]
 let zipped = zip(ref names, ref nums)
 
 // A map's entries as pairs, in sort order, and back again.
-let m: %{string = u32} = %{"b" = 2, "a" = 1, "c" = 3}
+let m: %{string -> u32} = %{"b" -> 2, "a" -> 1, "c" -> 3}
 let listed = entries(ref m)
 
 let rebuilt = from_entries(entries(ref m))

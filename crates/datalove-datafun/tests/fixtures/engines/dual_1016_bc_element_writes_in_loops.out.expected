@@ -140,7 +140,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("(some [{x = 7, y = 8}, {x = 7, y = 8}], none, some [{x = 1, y = 100}, {x = 3, y = 100}], none)\n(some %{1 = {x = 1, y = 1}, 2 = {x = 2, y = 9}}, none)\n"),
+            debug_output: Some("(some [{x = 7, y = 8}, {x = 7, y = 8}], none, some [{x = 1, y = 100}, {x = 3, y = 100}], none)\n(some %{1 -> {x = 1, y = 1}, 2 -> {x = 2, y = 9}}, none)\n"),
         ),
     ],
 )

@@ -94,7 +94,7 @@ compiled per type.
 
 **Collections are already generic.** `dtlv_rti_btreemap_insert_local` takes key and value
 type descriptors. Lists, maps, sets, tensors and tables are implemented once for all
-element types. Nothing about `[T]` or `%{K = V}` needs monomorphization to run.
+element types. Nothing about `[T]` or `%{K -> V}` needs monomorphization to run.
 
 **There is a working erased representation.** `data` is two words using the `anypack`
 encoding, with tags `SmallImmediate`, `InlineWithTyDesc` and `TwoPointers`, so small
@@ -382,7 +382,7 @@ lost drop would leak and a doubled one would crash:
 - taking an owned `[T]` and reading it
 - returning it
 - forwarding it to another generic
-- an owned `%{K = V}`
+- an owned `%{K -> V}`
 
 The fifth is where it stops. Moving the parameter into a local:
 
@@ -609,7 +609,7 @@ this area has had.
 > (What each backend carries)(generics.md#user-content-what-each-backend-carries).
 >
 > The reading half was also less done than it said. A map lookup inside a
-> generic described the map by its static type, a `%{data = data}`, and returned
+> generic described the map by its static type, a `%{data -> data}`, and returned
 > `none` for a key that was there -- quietly, and the same way in all four
 > backends. And a container the generic *owned* was never opened at all: it
 > arrives wrapped, and the index was emitted straight at the wrapper.
@@ -627,7 +627,7 @@ arrived at.
 
 Each of these was checked by compiling it, not by reading the rules.
 
-| Position | Bare `T` | `?T` `!T` `??T` | Tuple, struct, term, enum | Collection: `[T]`, `%{K = V}`, `#{T}` |
+| Position | Bare `T` | `?T` `!T` `??T` | Tuple, struct, term, enum | Collection: `[T]`, `%{K -> V}`, `#{T}` |
 |---|---|---|---|---|
 | `in`, owned | yes | yes | yes | yes |
 | `ref`, `mut` | yes | yes | yes | yes |
@@ -657,7 +657,7 @@ the first to reach a parameter fixes it. `sys/std`'s `option`, `result`,
 refused.** That is the only thing left here, and it is narrow.
 
 A collection over a type parameter can be built: `var out: [T] = []` works, and
-so do `#{T}` and `%{K = V}`. One that arrives carries a descriptor saying what
+so do `#{T}` and `%{K -> V}`. One that arrives carries a descriptor saying what
 its elements are; one written in the body has no value to read one off, so the
 call site hands one over as a trailing argument. Nothing is worked out at run
 time, because `[T]` with `T` bound to a concrete type is a concrete type and

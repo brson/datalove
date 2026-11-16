@@ -12,7 +12,7 @@ data local/shop/orders
 ----------
 data local/shop/rates
 ----------
-%{ "apple" = 2, "fig" = 1 }
+%{ "apple" -> 2, "fig" -> 1 }
 ----------
 module local/shop/report
 ----------
@@ -20,7 +20,7 @@ module local/shop/report
 type Order: {sku: string, qty: u32, price: f64}
 
 require data local/shop/orders: [Order]
-require data local/shop/rates: %{string = u32}
+require data local/shop/rates: %{string -> u32}
 
 // One order's fields, or none past the end. The fixtures have no `list.len`.
 fun price_at(i: index): ?f64

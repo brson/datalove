@@ -35,7 +35,7 @@ fun borrow_first<T>(xs: [T]): ?T
   ret take(ref xs[0]?)
 end fun
 
-fun map_at<K, V>(m: %{K = V}, k: K): ?V where { K is ord, }
+fun map_at<K, V>(m: %{K -> V}, k: K): ?V where { K is ord, }
   ret some (m[k]?@)
 end fun
 
@@ -61,7 +61,7 @@ let ns: [u8] = [1, 2, 3]
 debuglog first(ns@)
 debuglog at(ns@, 1)
 
-let m: %{string = string} = %{"a" = "alpha", "b" = "beta"}
+let m: %{string -> string} = %{"a" -> "alpha", "b" -> "beta"}
 debuglog map_at(m@, "b")
 debuglog map_at(m@, "z")
 

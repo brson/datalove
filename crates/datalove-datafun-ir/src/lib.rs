@@ -1033,7 +1033,7 @@ pub enum ConstValue {
     ///
     /// The type is kept because a `data` carries its own descriptor at run
     /// time and the value alone cannot always say what that should be: an
-    /// empty map says `%{() = ()}`, which is not a type the program has and
+    /// empty map says `%{() -> ()}`, which is not a type the program has and
     /// which a backend has no descriptor for. The same reason a tensor keeps
     /// its shape.
     Data { payload_type: Box<IrType>, value: Box<ConstValue> },

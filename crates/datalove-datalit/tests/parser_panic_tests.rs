@@ -58,12 +58,12 @@ fn type_hint_enum_variant_missing_name() {
     assert_parse_error(&json, "enum variant without name");
 }
 
-/// Map type hint missing equals between key and value type.
-/// `%{K = V}` expects an equals sign.
+/// Map type hint missing an arrow between key and value type.
+/// `%{K -> V}` expects an arrow.
 #[test]
-fn type_hint_map_missing_equals() {
+fn type_hint_map_missing_arrow() {
     let json = parse(": %{i32 i32} / @42");
-    assert_parse_error(&json, "map missing equals");
+    assert_parse_error(&json, "map missing arrow");
 }
 
 /// Tensor type hint missing comma between element type and rank.
@@ -94,12 +94,12 @@ fn expr_type_hint_missing_slash() {
     assert_parse_error(&json, "type hint missing slash");
 }
 
-/// Map entry missing equals between key and value.
-/// `%{k = v}` expects `=`.
+/// Map entry missing an arrow between key and value.
+/// `%{k -> v}` expects `->`.
 #[test]
-fn expr_map_entry_missing_equals() {
+fn expr_map_entry_missing_arrow() {
     let json = parse("%{@1 @2}");
-    assert_parse_error(&json, "map entry missing equals");
+    assert_parse_error(&json, "map entry missing arrow");
 }
 
 /// Struct field missing equals between name and value.

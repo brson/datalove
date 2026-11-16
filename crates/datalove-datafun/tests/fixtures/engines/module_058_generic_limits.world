@@ -33,7 +33,7 @@ fun in_list<T>(x: [T]): [T]
   ret x
 end fun
 
-fun in_map<K, V>(m: %{K = V}): %{K = V} where { K is ord, }
+fun in_map<K, V>(m: %{K -> V}): %{K -> V} where { K is ord, }
   ret m
 end fun
 
@@ -72,8 +72,8 @@ fun build_a_list<T>(): [T]
   ret out
 end fun
 
-fun build_a_map<K, V>(): %{K = V} where { K is ord, }
-  var out: %{K = V} = %{}
+fun build_a_map<K, V>(): %{K -> V} where { K is ord, }
+  var out: %{K -> V} = %{}
   ret out
 end fun
 

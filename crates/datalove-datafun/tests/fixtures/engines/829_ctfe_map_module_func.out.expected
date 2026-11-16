@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     fn compute():
                     block0:
-                        v6 = staticref %{10u32 = 100u32, 20u32 = 200u32, 30u32 = 300u32}
+                        v6 = staticref %{10u32 -> 100u32, 20u32 -> 200u32, 30u32 -> 300u32}
                         v7 = clone *v6
                         return v7
                 """,
@@ -58,7 +58,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "%{10 = 100, 20 = 200, 30 = 300}",
+            output: "%{10 -> 100, 20 -> 200, 30 -> 300}",
         ),
     ],
 )

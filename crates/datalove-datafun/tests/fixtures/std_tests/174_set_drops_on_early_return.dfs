@@ -13,8 +13,8 @@ fun missed_value(i: index): ?[string]
   ret some xs
 end fun
 
-fun missed_key(i: index): ?[%{string = string}]
-  var maps: [%{string = string}] = [%{"k" = "v"}]
+fun missed_key(i: index): ?[%{string -> string}]
+  var maps: [%{string -> string}] = [%{"k" -> "v"}]
   set maps[i]?[make("a key the upsert never takes")] = make("and its value")
   ret some maps
 end fun
@@ -25,8 +25,8 @@ end fun
 
 // The value fails before the key is moved into the statement, so the key is
 // still the binding's to drop.
-fun failed_value_keeps_key(): ?%{string = string}
-  var m: %{string = string} = %{}
+fun failed_value_keeps_key(): ?%{string -> string}
+  var m: %{string -> string} = %{}
   let k = make("a key still in its binding")
   set m[k] = nothing()?
   ret some m

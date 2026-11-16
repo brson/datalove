@@ -11,7 +11,7 @@ require module sys/std/string
 fun local(i: int): !(index, bool, int, [int], string)
   const L: [int] = [10, 20, 30]
   const S: string = "local"
-  const M: %{string = int} = %{ "k" = 7 }
+  const M: %{string -> int} = %{ "k" -> 7 }
   const N: u32 = 3
   var total = 0
   var j: index = 0

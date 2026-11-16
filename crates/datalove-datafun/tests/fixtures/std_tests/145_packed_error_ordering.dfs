@@ -31,7 +31,7 @@ let signed: #{!i32} = #{: !i32 / er error : i32 / -5, : !i32 / er error : i32 / 
 let floats: #{!f64} = #{: !f64 / er error : f64 / 0.0, : !f64 / er error : f64 / 1.5}
 
 // A map keyed on one, which sorts the same way.
-let keyed: %{!u32 = string} = %{: !u32 / er error : bool / true = : string / "t"}
+let keyed: %{!u32 -> string} = %{: !u32 / er error : bool / true -> : string / "t"}
 
 // And a bare `data` and `error` beside them, which always read all three.
 let datas: #{data} = #{data : u32 / 1, data : string / "s", data : bool / true}

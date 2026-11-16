@@ -26,7 +26,7 @@ fun nest_map<T>(x: T, n: u32): !u32
     debuglog x
     ret ok 0
   end if
-  let m: %{u32 = T} = %{n = x}
+  let m: %{u32 -> T} = %{n -> x}
   ret ok (nest_map(m, n -! 1)! +! 1)
 end fun
 

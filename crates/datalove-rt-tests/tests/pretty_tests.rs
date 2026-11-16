@@ -393,14 +393,14 @@ fn test_pretty_set_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_map_empty() -> AnyResult<()> {
-    test_pretty(": %{u32 = string} / %{}", "%{}")
+    test_pretty(": %{u32 -> string} / %{}", "%{}")
 }
 
 #[test]
 fn test_pretty_map_single() -> AnyResult<()> {
     test_pretty(
-        ": %{u32 = string} / %{1 = \"one\"}",
-        "%{1 = \"one\"}",
+        ": %{u32 -> string} / %{1 -> \"one\"}",
+        "%{1 -> \"one\"}",
     )
 }
 
@@ -408,16 +408,16 @@ fn test_pretty_map_single() -> AnyResult<()> {
 fn test_pretty_map_multiple() -> AnyResult<()> {
     // Maps are ordered by key.
     test_pretty(
-        ": %{u32 = string} / %{2 = \"two\", 1 = \"one\"}",
-        "%{1 = \"one\", 2 = \"two\"}",
+        ": %{u32 -> string} / %{2 -> \"two\", 1 -> \"one\"}",
+        "%{1 -> \"one\", 2 -> \"two\"}",
     )
 }
 
 #[test]
 fn test_pretty_map_string_keys() -> AnyResult<()> {
     test_pretty(
-        ": %{string = u32} / %{\"b\" = 2, \"a\" = 1}",
-        "%{\"a\" = 1, \"b\" = 2}",
+        ": %{string -> u32} / %{\"b\" -> 2, \"a\" -> 1}",
+        "%{\"a\" -> 1, \"b\" -> 2}",
     )
 }
 
@@ -434,8 +434,8 @@ fn test_pretty_list_of_tuples() -> AnyResult<()> {
 #[test]
 fn test_pretty_map_of_lists() -> AnyResult<()> {
     test_pretty(
-        ": %{string = [u32]} / %{\"nums\" = [1, 2, 3]}",
-        "%{\"nums\" = [1, 2, 3]}",
+        ": %{string -> [u32]} / %{\"nums\" -> [1, 2, 3]}",
+        "%{\"nums\" -> [1, 2, 3]}",
     )
 }
 
@@ -458,8 +458,8 @@ fn test_pretty_option_of_list() -> AnyResult<()> {
 #[test]
 fn test_pretty_deeply_nested() -> AnyResult<()> {
     test_pretty(
-        ": %{string = ?[(u32, bool)]} / %{\"data\" = some [(1, true)]}",
-        "%{\"data\" = some [(1, true)]}",
+        ": %{string -> ?[(u32, bool)]} / %{\"data\" -> some [(1, true)]}",
+        "%{\"data\" -> some [(1, true)]}",
     )
 }
 

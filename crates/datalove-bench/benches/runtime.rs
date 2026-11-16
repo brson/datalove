@@ -106,7 +106,7 @@ const MAP_DEEP_SOURCE: &str = r#"
 type K: ((u32, u32), (u32, u32))
 
 fun build_deep(n: u32): !u32
-  var m: %{K = u32} = %{}
+  var m: %{K -> u32} = %{}
   var i: u32 = 0
   loop while i .< n
     set m[((i, i), (i, i))] = i
@@ -121,7 +121,7 @@ debuglog build_deep(4000)
 /// Insert into a map, comparing keys on every B-tree probe.
 const MAP_SOURCE: &str = r#"
 fun build_map(n: u32): !u32
-  var m: %{u32 = u32} = %{}
+  var m: %{u32 -> u32} = %{}
   var i: u32 = 0
   loop while i .< n
     set m[i] = i

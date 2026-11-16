@@ -4,7 +4,7 @@
 // A `data` carries its own descriptor at run time, and the constant that
 // becomes one kept the value without it: `Data(Box<ConstValue>)`. So a backend
 // writing one had to work the type out from the value, and a value cannot
-// always say it. An empty map gives `%{() = ()}`, which is not a type the
+// always say it. An empty map gives `%{() -> ()}`, which is not a type the
 // program has and which the cranelift AOT had no descriptor for: "TyDesc not
 // found for inner type Map(Unit, Unit)".
 //
@@ -14,10 +14,10 @@
 //
 // A result goes the same way, its error side being an `error`.
 
-const EMPTY_MAP: data = data : %{u32 = string} / %{}
+const EMPTY_MAP: data = data : %{u32 -> string} / %{}
 const EMPTY_LIST: data = data : [u32] / []
 const EMPTY_SET: data = data : #{u32} / #{}
-const EMPTY_IN_ERROR: error = error : %{u32 = string} / %{}
+const EMPTY_IN_ERROR: error = error : %{u32 -> string} / %{}
 const EMPTY_IN_RESULT: !u32 = er error : [u32] / []
 
 // A `none`, which says as little about what it would have held.
@@ -26,7 +26,7 @@ const NOTHING: data = data : ?u32 / none
 // And the ones that could say their own type, which still can.
 const A_NUMBER: data = data : u32 / 7
 const A_STRING: data = data : string / "held"
-const FULL_MAP: data = data : %{u32 = string} / %{: u32 / 1 = : string / "one"}
+const FULL_MAP: data = data : %{u32 -> string} / %{: u32 / 1 -> : string / "one"}
 const A_TUPLE_ERROR: !index = er error : (u32, u8) / (: u32 / 3, : u8 / 4)
 
 // A tensor inside a `data`, which wanted both this and the tensor constant.

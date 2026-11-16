@@ -32,7 +32,7 @@ var appended: [string] = ["x"]
 let did_append = insert(mut appended, 1, "y")
 let appended_len = len(ref appended)
 
-var scores: %{string = u32} = %{"a" = 1}
+var scores: %{string -> u32} = %{"a" -> 1}
 let present = get_or(ref scores, ref "a", 99)
 let absent = get_or(ref scores, ref "zz", 99)
 let inserted = insert_if_absent(mut scores, "b", 2)

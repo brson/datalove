@@ -14,9 +14,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v2 = const %{{} = true}
-                        v6 = const %{{} = some true}
-                        v10 = const %{{} = ok true}
+                        v2 = const %{{} -> true}
+                        v6 = const %{{} -> some true}
+                        v10 = const %{{} -> ok true}
                         debuglog v2
                         debuglog v6
                         debuglog v10
@@ -27,7 +27,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("%{{} = true}\n%{{} = some true}\n%{{} = ok true}\n"),
+            debug_output: Some("%{{} -> true}\n%{{} -> some true}\n%{{} -> ok true}\n"),
         ),
     ],
 )

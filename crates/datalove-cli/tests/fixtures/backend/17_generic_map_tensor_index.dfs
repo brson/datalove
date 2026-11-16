@@ -15,17 +15,17 @@ fun take<T>(ref x: T): ?T
   ret some (x@)
 end fun
 
-fun map_at<K, V>(ref m: %{K = V}, k: K): ?V where { K is ord, }
+fun map_at<K, V>(ref m: %{K -> V}, k: K): ?V where { K is ord, }
   ret some (m[k]?@)
 end fun
 
-fun map_borrow<K, V>(ref m: %{K = V}, k: K): ?V where { K is ord, }
+fun map_borrow<K, V>(ref m: %{K -> V}, k: K): ?V where { K is ord, }
   ret take(ref m[k]?)
 end fun
 
 // A map reached through a field of a borrowed generic aggregate, so the
 // descriptor is narrowed for the field and then asked what it holds.
-fun map_in_field<K, V>(ref p: {m: %{K = V}, n: u32}, k: K): ?V where { K is ord, }
+fun map_in_field<K, V>(ref p: {m: %{K -> V}, n: u32}, k: K): ?V where { K is ord, }
   ret some (p.m[k]?@)
 end fun
 
@@ -39,7 +39,7 @@ end fun
 
 // Concrete callers, which were always right and stay right: the static type is
 // the whole truth there, so the stride is still a compile-time constant.
-fun concrete_map_at(ref m: %{string = string}, k: string): ?string
+fun concrete_map_at(ref m: %{string -> string}, k: string): ?string
   ret some (m[k]?@)
 end fun
 
@@ -47,19 +47,19 @@ fun concrete_tensor_at(ref t: [|u8, 1|], i: index): ?u8
   ret some (t[i]?@)
 end fun
 
-let words: %{string = string} = %{"a" = "alpha", "b" = "beta"}
+let words: %{string -> string} = %{"a" -> "alpha", "b" -> "beta"}
 debuglog map_at(ref words, "b")
 debuglog map_borrow(ref words, "a")
 
 // Narrow keys and values, where a width taken from anything but the
 // descriptor is wrong.
-let small: %{u8 = u8} = %{1 = 10, 2 = 20}
+let small: %{u8 -> u8} = %{1 -> 10, 2 -> 20}
 debuglog map_at(ref small, 2)
 
 // A key that is missing still says so.
 debuglog map_at(ref words, "z")
 
-let held: {m: %{string = u32}, n: u32} = {m = %{"a" = 1, "b" = 2}, n = 9}
+let held: {m: %{string -> u32}, n: u32} = {m = %{"a" -> 1, "b" -> 2}, n = 9}
 debuglog map_in_field(ref held, "b")
 
 let wide: [|u64, 1|] = [| 100 200 300 |]

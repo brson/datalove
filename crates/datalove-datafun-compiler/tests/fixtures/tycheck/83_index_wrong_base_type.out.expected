@@ -12,7 +12,7 @@
           "text": "a[i]?"
         }
       ],
-      "message": "`u32` cannot be indexed; a list `[T]`, a map `%{K = V}` or a tensor `[|T, N|]` can"
+      "message": "`u32` cannot be indexed; a list `[T]`, a map `%{K -> V}` or a tensor `[|T, N|]` can"
     }
   ],
   "errors": [

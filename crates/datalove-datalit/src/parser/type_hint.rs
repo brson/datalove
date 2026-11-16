@@ -196,15 +196,15 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::Table(ast::TypeHintTable { columns })
             } else if let Some(iter) = stream.eat_branch(Sigil::PercentBraceOpen) {
-                // Map type hint: %{K = V}
+                // Map type hint: %{K -> V}
                 let mut sub_parser = branch(iter, stream.alias_base());
                 let key_type = sub_parser.parse_type_hint();
-                if !sub_parser.eat_sigil(Sigil::Equals) {
+                if !sub_parser.eat_sigil(Sigil::Arrow) {
                     let ts = sub_parser.peek_text_span();
                     return stream.type_hint_error(ts,
-                        "expected '=' between map key and value types",
-                        DCode::MapTypeWithoutEquals,
-                        "expected '=' between key and value types"
+                        "expected '->' between map key and value types",
+                        DCode::MapTypeWithoutArrow,
+                        "expected '->' between key and value types"
                     );
                 }
                 let value_type = sub_parser.parse_type_hint();

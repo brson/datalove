@@ -27,9 +27,9 @@
           "message": "recursive type in a key",
           "span": [
             0,
-            24
+            25
           ],
-          "text": ": rec L %{L = int} / %{}"
+          "text": ": rec L %{L -> int} / %{}"
         }
       ],
       "message": "the recursive type `L` is a map's key or a set's element"

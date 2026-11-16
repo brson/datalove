@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = staticref data [1i64, 2i64, 3i64]
                         v1 = clone *v0
-                        v2 = staticref [data #{4u16, 5u16}, data %{"a" = 6i8}]
+                        v2 = staticref [data #{4u16, 5u16}, data %{"a" -> 6i8}]
                         v3 = clone *v2
                         v4 = staticref err error (7u64, "x")
                         v5 = clone *v4
@@ -49,7 +49,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("(data [1, 2, 3], [data #{4, 5}, data %{\"a\" = 6}], er error (7, \"x\"), {d = data (8, true), n = 9})\n"),
+            debug_output: Some("(data [1, 2, 3], [data #{4, 5}, data %{\"a\" -> 6}], er error (7, \"x\"), {d = data (8, true), n = 9})\n"),
         ),
     ],
 )

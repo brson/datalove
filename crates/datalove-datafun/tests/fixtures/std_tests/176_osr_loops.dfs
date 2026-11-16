@@ -82,8 +82,8 @@ fun evens(n: u32): ![u32]
     ret ok out
 end fun
 
-fun counts(ref words: [string]): !%{string = u32}
-    var seen: %{string = u32} = %{}
+fun counts(ref words: [string]): !%{string -> u32}
+    var seen: %{string -> u32} = %{}
     var i: index = 0
     loop while i .< list.len(ref words)
         call map.add(mut seen, ref words[i]!@, 1)!

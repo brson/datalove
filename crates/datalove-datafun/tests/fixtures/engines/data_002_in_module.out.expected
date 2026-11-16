@@ -67,7 +67,7 @@ Analysis(
                     
                     fn rate_at(p0):
                     block0:
-                        v0 = staticref %{"apple" = 2u32, "fig" = 1u32}
+                        v0 = staticref %{"apple" -> 2u32, "fig" -> 1u32}
                         v1, v2 = mapget *v0[p0]
                         branch v2, block2, block1
                     block1:

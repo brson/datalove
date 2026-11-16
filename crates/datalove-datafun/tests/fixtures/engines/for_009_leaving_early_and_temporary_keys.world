@@ -10,7 +10,7 @@ fun key(): string
   ret "a key long enough to be on the heap rather than inline"
 end fun
 
-fun leave(ref xss: [[string]], ref m: %{string = [string]}, ref grid: [|int, 2|]): int
+fun leave(ref xss: [[string]], ref m: %{string -> [string]}, ref grid: [|int, 2|]): int
   var seen = 0
   for xs in ref xss
     let made = "built in the body, and dropped on the way out"
@@ -31,7 +31,7 @@ end fun
 
 // An element step whose key is built for the lookup, which is let go of once
 // the reference is had, before the walk.
-fun keyed(ref m: %{string = [string]}): !(index, index)
+fun keyed(ref m: %{string -> [string]}): !(index, index)
   var a: index = : index / 0
   for x in ref m["a key long enough to be on the heap rather than inline"]!
     set a = icall add_wrapping_index(a, : index / 1)
@@ -43,9 +43,9 @@ fun keyed(ref m: %{string = [string]}): !(index, index)
   ret ok (a, b)
 end fun
 
-fun main(): !(int, [[string]], %{string = [string]}, [|int, 2|], (index, index))
+fun main(): !(int, [[string]], %{string -> [string]}, [|int, 2|], (index, index))
   let xss = [["first, long enough to be on the heap"], ["second, long enough to be on the heap"]]
-  let m = %{"a key long enough to be on the heap rather than inline" = ["value, long enough to be on the heap", "b"]}
+  let m = %{"a key long enough to be on the heap rather than inline" -> ["value, long enough to be on the heap", "b"]}
   let grid = [| 1 2, 3 4 |]
   let seen = leave(ref xss, ref m, ref grid)
   let counts = keyed(ref m)!

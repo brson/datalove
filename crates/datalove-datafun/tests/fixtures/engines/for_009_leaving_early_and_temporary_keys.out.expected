@@ -201,7 +201,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("ok (1, [[\"first, long enough to be on the heap\"], [\"second, long enough to be on the heap\"]], %{\"a key long enough to be on the heap rather than inline\" = [\"value, long enough to be on the heap\", \"b\"]}, [| 1 2, 3 4 |], (2, 2))\n"),
+            debug_output: Some("ok (1, [[\"first, long enough to be on the heap\"], [\"second, long enough to be on the heap\"]], %{\"a key long enough to be on the heap rather than inline\" -> [\"value, long enough to be on the heap\", \"b\"]}, [| 1 2, 3 4 |], (2, 2))\n"),
         ),
     ],
 )

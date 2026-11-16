@@ -11,7 +11,7 @@ require module local/store/sales
 
 // The pairs bought together most often, with how often, the lesser id first.
 fun top_pairs(n: index): ![(u64, u32, u32)]
-    var together: %{(u32, u32) = u64} = %{}
+    var together: %{(u32, u32) -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!

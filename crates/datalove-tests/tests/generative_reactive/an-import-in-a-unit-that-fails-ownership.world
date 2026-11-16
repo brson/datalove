@@ -7,7 +7,7 @@ type Type1: offset
 
 type Enum0_0: enum { atom Enum0_0V0, term Enum0_0V1 {| y1: { z9: i8 }, name0: offset, x4: u32 |}, term Enum0_0V2 string }
 
-type Enum0_1: enum { term Enum0_1V0 [%{string = int}], term Enum0_1V1 u32, term Enum0_1V2 u64, term Enum0_1V3 u32 }
+type Enum0_1: enum { term Enum0_1V0 [%{string -> int}], term Enum0_1V1 u32, term Enum0_1V2 u64, term Enum0_1V3 u32 }
 
 fun gen0_0<T>(ref x: [T]): bool
   ret true

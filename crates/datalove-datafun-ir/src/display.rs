@@ -229,7 +229,7 @@ impl fmt::Display for ConstValue {
                 write!(f, "%{{")?;
                 for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{} = {}", k, v)?;
+                    write!(f, "{} -> {}", k, v)?;
                 }
                 write!(f, "}}")
             }

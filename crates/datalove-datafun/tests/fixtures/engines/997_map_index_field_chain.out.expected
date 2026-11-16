@@ -51,7 +51,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("some %{1 = {x = 99, y = 20}, 2 = {x = 30, y = 40}}\n"),
+            debug_output: Some("some %{1 -> {x = 99, y = 20}, 2 -> {x = 30, y = 40}}\n"),
         ),
     ],
 )

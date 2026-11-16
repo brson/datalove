@@ -16,7 +16,7 @@ let k_b = "b"
 let k_missing = "missing"
 let k_zz = "zz"
 
-var scores: %{string = u32} = %{"a" = (: u32 / 1)}
+var scores: %{string -> u32} = %{"a" -> (: u32 / 1)}
 call insert(mut scores, "b", (: u32 / 2))
 call insert(mut scores, "c", (: u32 / 3))
 
@@ -32,7 +32,7 @@ let after_remove = (removed, len(ref scores), contains_key(ref scores, ref k_a))
 // A value that owns memory, so a missed drop shows up as a leak.
 let k1 = : u32 / 1
 let k2 = : u32 / 2
-var names: %{u32 = string} = %{}
+var names: %{u32 -> string} = %{}
 let started_empty = is_empty(ref names)
 call insert(mut names, k1, "one")
 call insert(mut names, k2, "two")

@@ -15,7 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const {name = "root", kids = [{name = "a", kids = []}, {name = "b", kids = [{name = "c", kids = []}]}]}
-                        v1 = const enum Arr([enum Num(1f64), enum Obj(%{"k" = enum Null})])
+                        v1 = const enum Arr([enum Num(1f64), enum Obj(%{"k" -> enum Null})])
                         debuglog v0
                         v2 = getfieldref v0.1
                         v3 = const 1index
@@ -37,7 +37,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("{name = \"root\", kids = [{name = \"a\", kids = []}, {name = \"b\", kids = [{name = \"c\", kids = []}]}]}\n[{name = \"c\", kids = []}]\nenum { term Arr [enum { term Num 1.0 }, enum { term Obj %{\"k\" = enum { atom Null }} }] }\n"),
+            debug_output: Some("{name = \"root\", kids = [{name = \"a\", kids = []}, {name = \"b\", kids = [{name = \"c\", kids = []}]}]}\n[{name = \"c\", kids = []}]\nenum { term Arr [enum { term Num 1.0 }, enum { term Obj %{\"k\" -> enum { atom Null }} }] }\n"),
         ),
     ],
 )

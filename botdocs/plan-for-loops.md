@@ -292,7 +292,7 @@ Sets and maps do not, for now:
   element; for a set, it is a trap.
 - **Two bindings already mean key and value on a map.** `for i, x` on a set
   and `for k, v` on a map would read alike and mean different things. For a
-  `#{index}` turned into a `%{index = V}` the change would typecheck.
+  `#{index}` turned into a `%{index -> V}` the change would typecheck.
 
 Nothing in the protocol would change if they did: the counter is the
 lowering's, not the cursor's.

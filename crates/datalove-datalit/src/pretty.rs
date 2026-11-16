@@ -223,7 +223,7 @@ fn pretty_expr<'db>(
                     out.push_str(", ");
                 }
                 pretty_expr_full(db, &entry.key, out, indent);
-                out.push_str(" = ");
+                out.push_str(" -> ");
                 pretty_expr_full(db, &entry.value, out, indent);
             }
             out.push('}');

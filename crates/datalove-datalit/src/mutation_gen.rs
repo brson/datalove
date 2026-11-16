@@ -682,9 +682,9 @@ fn apply_swap_map_key_value<'db>(
             let val_pp = pretty_print(db, &e.value);
             if i == 0 {
                 // Swap key and value for first entry.
-                format!("{}: {}", val_pp, key_pp)
+                format!("{} -> {}", val_pp, key_pp)
             } else {
-                format!("{}: {}", key_pp, val_pp)
+                format!("{} -> {}", key_pp, val_pp)
             }
         }).collect();
 

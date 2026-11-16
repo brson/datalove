@@ -27,8 +27,8 @@ fun listify<T>(x: T, y: T): [T]
   ret [x, y]
 end fun
 
-fun mapify<K, V>(k: K, v: V): %{K = V} where { K is ord, }
-  ret %{k = v}
+fun mapify<K, V>(k: K, v: V): %{K -> V} where { K is ord, }
+  ret %{k -> v}
 end fun
 
 fun identity<T>(x: T): T
@@ -46,7 +46,7 @@ fun a_list(): [u16]
   ret listify(: u16 / 7, : u16 / 8)
 end fun
 
-fun a_map(): %{u16 = string}
+fun a_map(): %{u16 -> string}
   let bound: u32 = LIMIT
   ret mapify(: u16 / 1, "held")
 end fun
@@ -57,7 +57,7 @@ fun nothing_built(): u16
   ret identity(: u16 / 9)
 end fun
 
-fun main(): (#{u16}, [u16], %{u16 = string}, u16)
+fun main(): (#{u16}, [u16], %{u16 -> string}, u16)
   ret (a_set(), a_list(), a_map(), nothing_built())
 end fun
 

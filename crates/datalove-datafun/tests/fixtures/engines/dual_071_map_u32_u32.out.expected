@@ -25,7 +25,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("%{1 = 100, 2 = 200}\n"),
+            debug_output: Some("%{1 -> 100, 2 -> 200}\n"),
         ),
     ],
 )

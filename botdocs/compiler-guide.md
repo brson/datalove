@@ -1075,7 +1075,7 @@ reads that binding where it lives instead of copying it to print it.
 
 **A type a reader sees is written as datalove writes it**, and one place
 spells that syntax out: `TypeSyntax` in `datalove-datalit/src/type_syntax.rs`,
-whose `Display` is the syntax -- `[T]`, `%{K = V}`, `?T`, `(T,)`, `{ x: T }`,
+whose `Display` is the syntax -- `[T]`, `%{K -> V}`, `?T`, `(T,)`, `{ x: T }`,
 `enum { atom A, term B T }`. Every form a type is held in maps itself onto it:
 `TypeHint::syntax` as written (an alias stays its name), datalit's
 `Type::syntax` as checked, `PType`'s as half inferred (`_` for what nothing

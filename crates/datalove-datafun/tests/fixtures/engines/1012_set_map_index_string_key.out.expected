@@ -61,7 +61,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("ok %{\"a\" = 7}\n"),
+            debug_output: Some("ok %{\"a\" -> 7}\n"),
         ),
     ],
 )

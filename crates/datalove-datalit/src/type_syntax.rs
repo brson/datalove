@@ -27,7 +27,7 @@ pub enum TypeSyntax<'a> {
     List(Box<TypeSyntax<'a>>),
     /// `#{A}`.
     Set(Box<TypeSyntax<'a>>),
-    /// `%{K = V}`.
+    /// `%{K -> V}`.
     Map(Box<TypeSyntax<'a>>, Box<TypeSyntax<'a>>),
     /// `?A`.
     Option(Box<TypeSyntax<'a>>),
@@ -74,7 +74,7 @@ impl fmt::Display for TypeSyntax<'_> {
             TypeSyntax::Table(columns) => write!(f, "{{| {} |}}", Fields(columns)),
             TypeSyntax::List(elem) => write!(f, "[{elem}]"),
             TypeSyntax::Set(elem) => write!(f, "#{{{elem}}}"),
-            TypeSyntax::Map(key, value) => write!(f, "%{{{key} = {value}}}"),
+            TypeSyntax::Map(key, value) => write!(f, "%{{{key} -> {value}}}"),
             TypeSyntax::Option(inner) => write!(f, "?{inner}"),
             TypeSyntax::Result(inner) => write!(f, "!{inner}"),
             TypeSyntax::Tensor(elem, rank) => write!(f, "[|{elem}, {rank}|]"),
@@ -150,7 +150,7 @@ mod tests {
             (TypeSyntax::Table(vec![("a".into(), word("u32"))]), "{| a: u32 |}"),
             (TypeSyntax::List(Box::new(word("int"))), "[int]"),
             (TypeSyntax::Set(Box::new(word("int"))), "#{int}"),
-            (TypeSyntax::Map(Box::new(word("string")), Box::new(word("int"))), "%{string = int}"),
+            (TypeSyntax::Map(Box::new(word("string")), Box::new(word("int"))), "%{string -> int}"),
             (TypeSyntax::Option(Box::new(TypeSyntax::List(Box::new(word("u8"))))), "?[u8]"),
             (TypeSyntax::Result(Box::new(TypeSyntax::unit())), "!()"),
             (TypeSyntax::Tensor(Box::new(word("i32")), 2), "[|i32, 2|]"),
@@ -176,14 +176,14 @@ mod tests {
         let types = [
             "()", "(int,)", "(int, string)", "((u8,), ())",
             "{ x: f32, y: f32 }", "{}", "{| a: u32, b: string |}",
-            "[int]", "[[u8]]", "#{string}", "%{string = [int]}",
+            "[int]", "[[u8]]", "#{string}", "%{string -> [int]}",
             "?int", "??int", "![u8]", "!()", "?!int", "[|i32, 2|]",
             "atom Red", "term Foo int", "term Foo ?(int, int)",
             "enum { atom Red, term Custom string }",
             "data", "error", "index", "offset", "bool",
             "Point", "[Point]",
             "rec L [L]", "rec T { v: int, kids: [T] }", "?rec L { next: [L] }",
-            "rec J enum { atom Null, term Arr [J], term Obj %{string = J} }",
+            "rec J enum { atom Null, term Arr [J], term Obj %{string -> J} }",
         ];
         for written in types {
             let source = bct::input::Source::new(&db, fmt!(": {written} / 0"));

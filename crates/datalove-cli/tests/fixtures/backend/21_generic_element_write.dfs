@@ -22,7 +22,7 @@ fun put_tensor<T>(mut t: [|T, 1|], i: index, v: T): ?index
   ret some i
 end fun
 
-fun put_map<K, V>(mut m: %{K = V}, k: K, v: V): ?index where { K is ord, }
+fun put_map<K, V>(mut m: %{K -> V}, k: K, v: V): ?index where { K is ord, }
   set m[k]? = v
   ret some (: index / 0)
 end fun
@@ -57,12 +57,12 @@ var tenw: [|string, 1|] = [| "a" "b" |]
 let e = put_tensor(mut tenw, : index / 1, "zed")
 debuglog tenw
 
-var m: %{string = u32} = %{"a" = 1, "b" = 2}
+var m: %{string -> u32} = %{"a" -> 1, "b" -> 2}
 let k: string = "b"
 let f = put_map(mut m, k, : u32 / 9)
 debuglog m
 
-var mw: %{string = string} = %{"a" = "x"}
+var mw: %{string -> string} = %{"a" -> "x"}
 let k2: string = "a"
 let g = put_map(mut mw, k2, "zed")
 debuglog mw

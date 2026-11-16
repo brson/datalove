@@ -185,10 +185,13 @@ fn mentions(ty: &str, tp: &str) -> bool {
 }
 
 /// Split at the commas not inside brackets.
+///
+/// The `>` of a map's `->` closes nothing.
 fn split_top(s: &str) -> Vec<&str> {
     let (mut parts, mut depth, mut start) = (Vec::new(), 0, 0);
     for (i, c) in s.char_indices() {
         match c {
+            '>' if s[..i].ends_with('-') => {}
             '(' | '[' | '{' | '<' => depth += 1,
             ')' | ']' | '}' | '>' => depth -= 1,
             ',' if depth == 0 => {

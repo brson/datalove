@@ -4,14 +4,14 @@ scriptunit-fragment
 
 // Compound assignment through every kind of place: a field, a tuple field, a
 // list, map and tensor element, and fields of elements.
-fun places(): !({n: u32, t: (u32, int)}, [u32], %{string = int}, [|u32, 1|], [{n: u32, total: int}])
+fun places(): !({n: u32, t: (u32, int)}, [u32], %{string -> int}, [|u32, 1|], [{n: u32, total: int}])
     var s = {n = (: u32 / 1), t = ((: u32 / 2), 3)}
     set s.n +!= 10
     set s.t.0 *!= 5
     set s.t.1 += 1000
     var xs: [u32] = [1, 2, 3]
     set xs[(: index / 1)]! +!= 40
-    var m: %{string = int} = %{"a" = 1}
+    var m: %{string -> int} = %{"a" -> 1}
     set m["a"]! *= 100000000000000000000
     var t: [|u32, 1|] = [| 10 20 30 |]
     set t[(: index / 2)]! -!= 5
@@ -35,14 +35,14 @@ debuglog bump([1, 2, 255], (: index / 0))
 debuglog bump([1, 2, 255], (: index / 5))
 debuglog bump([1, 2, 255], (: index / 2))
 
-fun bump_key(m: %{string = int}, k: string): !%{string = int}
+fun bump_key(m: %{string -> int}, k: string): !%{string -> int}
     var b = m
     set b[k]! += 1
     ret ok b
 end fun
 
-debuglog bump_key(%{"a" = 1, "b" = 2}, "b")
-debuglog bump_key(%{"a" = 1, "b" = 2}, "c")
+debuglog bump_key(%{"a" -> 1, "b" -> 2}, "b")
+debuglog bump_key(%{"a" -> 1, "b" -> 2}, "c")
 
 // A key is evaluated, and looked up, once.
 fun counted_key(mut calls: u32): !index

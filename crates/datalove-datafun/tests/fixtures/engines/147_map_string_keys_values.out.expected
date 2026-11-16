@@ -42,7 +42,7 @@ Analysis(
                         unit_end
                 """,
             ),
-            output: "%{\"one\" = \"first\", \"two\" = \"second\"}",
+            output: "%{\"one\" -> \"first\", \"two\" -> \"second\"}",
         ),
     ],
 )

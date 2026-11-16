@@ -358,7 +358,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("ok ({n = 11, t = (10, 1003)}, [1, 42, 3], %{\"a\" = 100000000000000000000}, [| 10 20 25 |], [{n = 101, total = 10}, {n = 2, total = -5}])\nsome [2, 2, 255]\nnone\nnone\nok %{\"a\" = 1, \"b\" = 3}\ner error \"key not found\"\nok ([5, 18, 7], 1)\n"),
+            debug_output: Some("ok ({n = 11, t = (10, 1003)}, [1, 42, 3], %{\"a\" -> 100000000000000000000}, [| 10 20 25 |], [{n = 101, total = 10}, {n = 2, total = -5}])\nsome [2, 2, 255]\nnone\nnone\nok %{\"a\" -> 1, \"b\" -> 3}\ner error \"key not found\"\nok ([5, 18, 7], 1)\n"),
         ),
     ],
 )

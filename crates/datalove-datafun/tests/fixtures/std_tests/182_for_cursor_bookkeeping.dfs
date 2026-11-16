@@ -29,7 +29,7 @@ fun sum_set(ref s: #{u32}): !(u32, u32)
 end fun
 
 fun wide_values(n: u32): !(u32, u64)
-  var m: %{u32 = u64} = %{}
+  var m: %{u32 -> u64} = %{}
   var i: u32 = 0
   loop while i .< n
     call map.insert(mut m, i, : u64 / 1000000007 *! i@)
@@ -45,7 +45,7 @@ fun wide_values(n: u32): !(u32, u64)
 end fun
 
 fun unit_values(n: u32): !(u32, u32)
-  var m: %{u32 = ()} = %{}
+  var m: %{u32 -> ()} = %{}
   var i: u32 = 0
   loop while i .< n
     call map.insert(mut m, i, ())

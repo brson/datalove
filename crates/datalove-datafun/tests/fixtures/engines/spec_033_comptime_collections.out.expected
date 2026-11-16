@@ -91,7 +91,7 @@ Analysis(
                     block0:
                         v2 = const [7int, 8int]
                         v4 = const [9int]
-                        v7 = const %{"a" = 1int}
+                        v7 = const %{"a" -> 1int}
                         v10 = const #{2int, 3int}
                         v14 = const {name = "ada", tags = ["x"]}
                         v17 = const enum Points([1int])
@@ -149,7 +149,7 @@ Analysis(
                     
                     fn map_get__ct2():
                     block0:
-                        v8 = staticref %{"a" = 1int}
+                        v8 = staticref %{"a" -> 1int}
                         v0 = const "a"
                         v1 = mapcontainskey *v8[v0]
                         branch v1, block2, block1

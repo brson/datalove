@@ -30,7 +30,7 @@ erasure that [Generics and Specialization](plan-generics.md) describes.
 ## The shape
 
 - A **dynamic type** is an IR type that mentions a type parameter: `T`,
-  `(T, u32)`, `?T`, `[T]`, `%{K = V}` (`IrType::is_dynamic`).
+  `(T, u32)`, `?T`, `[T]`, `%{K -> V}` (`IrType::is_dynamic`).
 - A **dynamic value** is a value of a dynamic type. In a frame it is a
   **pointer**, one word whatever the type, at the value in its real layout.
   What describes it is the function's **descriptor table** entry for its

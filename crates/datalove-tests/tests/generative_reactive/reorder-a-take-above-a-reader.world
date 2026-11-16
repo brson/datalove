@@ -7,7 +7,7 @@ type Type1: [u64]
 
 const CONST0_0: string = "data"
 
-type Enum0_0: enum { term Enum0_0V0 %{f64 = [offset]}, term Enum0_0V1 string }
+type Enum0_0: enum { term Enum0_0V0 %{f64 -> [offset]}, term Enum0_0V1 string }
 
 type Enum0_1: enum { term Enum0_1V0 i16, term Enum0_1V1 index, term Enum0_1V2 string, atom Enum0_1V3 }
 
@@ -19,7 +19,7 @@ fun gen0_1<T>(x: T)
   let unwanted: T = x
 end fun
 
-fun fn0(ref p0: offset, p1: %{f64 = i32})
+fun fn0(ref p0: offset, p1: %{f64 -> i32})
   let a0: string = "data"
   call gen0_1(a0)
   const C1: {| z4: i64, z8: f64 |} = {| z4, z8; : i64 / 74, : f64 / 64.8; : i64 / 123, : f64 / 102.6 |}

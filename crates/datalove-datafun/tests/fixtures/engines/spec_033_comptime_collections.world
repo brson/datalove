@@ -14,7 +14,7 @@ fun list_head(const xs: [int]): !int
     ret ok (xs[(: index / 0)]!@)
 end fun
 
-fun map_get(const m: %{string = int}): !int
+fun map_get(const m: %{string -> int}): !int
     ret ok (m["a"]!@)
 end fun
 
@@ -43,7 +43,7 @@ require module local/test/collconst
 
 const XS: [int] = [:int/7, :int/8]
 const YS: [int] = [:int/9]
-const M: %{string = int} = %{ "a" = :int/1 }
+const M: %{string -> int} = %{ "a" -> :int/1 }
 const S: #{int} = #{ :int/2, :int/3 }
 const P: {name: string, tags: [string]} = {name = "ada", tags = ["x"]}
 const E: enum { atom Empty, term Points [int] } = term Points [:int/1]

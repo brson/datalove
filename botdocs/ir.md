@@ -761,7 +761,7 @@ Three of them keep more than the value:
 - `Data { payload_type, value }` and `Error { payload_type, value }` keep the
   type of what they hold, because a `data` carries its own descriptor at run
   time and the value alone cannot always say what that should be: an empty map
-  says `%{() = ()}`, which is not a type the program has and which no backend
+  says `%{() -> ()}`, which is not a type the program has and which no backend
   has a descriptor for.
 - `Tensor { shape, elements }` keeps the shape, because nine numbers are a 3 by
   3 or a 9 by 1 depending only on that. The rank belongs to the type; the

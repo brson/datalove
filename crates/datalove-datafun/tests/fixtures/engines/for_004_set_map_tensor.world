@@ -5,7 +5,7 @@ module local/test/main
 // Sets walk in order, maps by key with each value beside it, and a tensor
 // of rank above 1 by rows, each a view of one rank less.
 
-fun map_total(ref m: %{string = int}): (int, int)
+fun map_total(ref m: %{string -> int}): (int, int)
   var keys = 0
   var total = 0
   for k, v in ref m
@@ -50,7 +50,7 @@ end fun
 fun main(): (int, (int, int), int, (index, int), int)
   let empty: #{u32} = #{}
   ret (walk_order(ref #{: u32 / 3, : u32 / 1, : u32 / 2}),
-       map_total(ref %{"a" = 1, "b" = 20}),
+       map_total(ref %{"a" -> 1, "b" -> 20}),
        grid_sum(ref [| 1 2 3, 4 5 6 |]),
        cube_rows(ref [| 1 2, 3 4,, 5 6, 7 8 |]),
        walk_order(ref empty))

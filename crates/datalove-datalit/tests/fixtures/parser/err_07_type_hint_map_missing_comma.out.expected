@@ -2,12 +2,12 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected '=' between map key and value types"
+        "message": "expected '->' between map key and value types"
       }
     },
     "type_hint": {
       "ParseError": {
-        "message": "expected '=' between map key and value types"
+        "message": "expected '->' between map key and value types"
       }
     }
   },
@@ -16,7 +16,7 @@
       "code": "D044",
       "labels": [
         {
-          "message": "expected '=' between key and value types",
+          "message": "expected '->' between key and value types",
           "span": [
             8,
             14
@@ -24,7 +24,7 @@
           "text": "string"
         }
       ],
-      "message": "expected '=' between map key and value types"
+      "message": "expected '->' between map key and value types"
     }
   ]
 }

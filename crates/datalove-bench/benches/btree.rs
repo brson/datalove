@@ -16,7 +16,7 @@ fn main() {
 
 const SIZES: &[usize] = &[1_000, 10_000, 100_000];
 
-/// Descriptors for a `string`, a `u32`, a `%{string = u32}` and a
+/// Descriptors for a `string`, a `u32`, a `%{string -> u32}` and a
 /// `#{string}`, leaked: a benchmark process makes one set.
 struct Types {
     string: &'static rtdt::TyDesc,

@@ -106,7 +106,7 @@ pub enum Shape {
     ListifyTwo,
     /// `fun f<T>(x: T): #{T}` -- a set, whose elements are kept in order.
     Setify,
-    /// `fun f<K, V>(k: K, v: V): %{K = V}` -- two parameters, one of them
+    /// `fun f<K, V>(k: K, v: V): %{K -> V}` -- two parameters, one of them
     /// ordered and the other not.
     Mapify,
     /// `fun f<T>(ref x: [T]): bool` -- borrows a collection of a parameter,
@@ -215,7 +215,7 @@ pub fn gen_generic_function(name: &str, shape: Shape) -> String {
         Shape::Setify => format!(
             "fun {name}<{names}>(x: T): #{{T}}{clause}\n  ret #{{x}}\nend fun"),
         Shape::Mapify => format!(
-            "fun {name}<{names}>(k: K, v: V): %{{K = V}}{clause}\n  ret %{{k = v}}\nend fun"),
+            "fun {name}<{names}>(k: K, v: V): %{{K -> V}}{clause}\n  ret %{{k -> v}}\nend fun"),
         Shape::Borrow => format!(
             "fun {name}<{names}>(ref x: [T]): bool{clause}\n  ret true\nend fun"),
         Shape::AddChecked => format!(

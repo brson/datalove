@@ -187,7 +187,7 @@ collection    = list | set | map | struct | table | tensor ;
 list          = "[", [ expr, { ",", expr }, [ "," ] ], "]" ;
 set           = "#{", [ expr, { ",", expr }, [ "," ] ], "}" ;
 map           = "%{", [ entry, { ",", entry }, [ "," ] ], "}" ;
-entry         = expr, "=", expr ;               (* D017 *)
+entry         = expr, "->", expr ;              (* D017 *)
 struct        = "{", [ sfield, { ",", sfield }, [ "," ] ], "}" ;
 sfield        = NAME, "=", expr ;               (* D058, D038 *)
 table         = "{|", [ ROWSEPS ], [ header_row, { ROWSEPS, data_row }, [ ROWSEPS ] ], "|}" ;
@@ -340,7 +340,7 @@ A fault in syntax the two languages share has datalit's D-code in both:
 unmatched brackets (D054, D055), a malformed or suffixed number (D019, D060),
 `atom` and `term` without a name (D035, D036), an `enum` literal without `{`
 (D037), a non-ASCII name (D043), a hint without its `/` (D049), a struct field
-without its name or `=` (D058), a map entry without `=` (D017), D030, D031,
+without its name or `=` (D058), a map entry without `->` (D017), D030, D031,
 D033, D034, D038 to D041, tensor-shape D023, every type-hint fault, and every
 type diagnostic. A P-code is for datafun's own syntax. An unexpected token is
 one too, since what may come where differs between the two expression

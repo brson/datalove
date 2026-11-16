@@ -6,8 +6,8 @@
         {
           "message": "no type of this name is in scope",
           "span": [
-            504,
-            507
+            506,
+            509
           ],
           "text": "NoG"
         }

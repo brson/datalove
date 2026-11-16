@@ -41,9 +41,9 @@ end fun
 
 // Revenue, cost and units by category, the biggest first.
 fun by_category(): ![(u64, string, u64, u64)]
-    var revenue: %{string = u64} = %{}
-    var cost: %{string = u64} = %{}
-    var units: %{string = u64} = %{}
+    var revenue: %{string -> u64} = %{}
+    var cost: %{string -> u64} = %{}
+    var units: %{string -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!
@@ -72,8 +72,8 @@ end fun
 
 // Revenue and sales by month of trading, oldest first. A month is thirty days.
 fun by_month(): ![(u32, u64, u64)]
-    var revenue: %{u32 = u64} = %{}
-    var sales: %{u32 = u64} = %{}
+    var revenue: %{u32 -> u64} = %{}
+    var sales: %{u32 -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!
@@ -93,8 +93,8 @@ end fun
 
 // The products that sold the most units, with the units and the revenue.
 fun top_products(n: index): ![(u64, u32, u64)]
-    var units: %{u32 = u64} = %{}
-    var revenue: %{u32 = u64} = %{}
+    var units: %{u32 -> u64} = %{}
+    var revenue: %{u32 -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!
@@ -119,8 +119,8 @@ end fun
 
 // Lines returned and lines shipped, by category.
 fun returns_by_category(): ![(string, u64, u64)]
-    var returned: %{string = u64} = %{}
-    var shipped: %{string = u64} = %{}
+    var returned: %{string -> u64} = %{}
+    var shipped: %{string -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         let is_return = db.is_returned(o)!
@@ -159,6 +159,6 @@ fun order_revenue(o: index): !u64
 end fun
 
 // Add to a running total under a key, starting it at nothing.
-fun add<K>(mut totals: %{K = u64}, ref key: K, amount: u64): !() where { K is ord, }
+fun add<K>(mut totals: %{K -> u64}, ref key: K, amount: u64): !() where { K is ord, }
     ret map.add(mut totals, ref key, amount)
 end fun

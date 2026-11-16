@@ -490,7 +490,7 @@ Indexing is defined over the element of a collection:
 | `C` | `key(C)` | `elem(C)` |
 |-----|----------|-----------|
 | `[T]` | `index` | `T` |
-| `%{K = V}` | `K` | `V` |
+| `%{K -> V}` | `K` | `V` |
 | `[|T, 1|]` | `index` | `T` |
 | `[|T, k|]`, `k > 1` | `index` | `[|T, k-1|]`, a view |
 
@@ -688,7 +688,7 @@ with kind `var`).
 -------------------------- (Place-Field)    -------------------------------- (Place-Tuple)
 Γ ⊢ p.ℓ :=: T                      Γ ⊢ p.i :=: Tᵢ
 
-Γ ⊢ p :=: C    Γ ⊢ k ⇐ key(C)                    Γ ⊢ p :=: %{K = V}    Γ ⊢ k ⇐ K
+Γ ⊢ p :=: C    Γ ⊢ k ⇐ key(C)                    Γ ⊢ p :=: %{K -> V}    Γ ⊢ k ⇐ K
 ------------------------------- (Place-Index)    -------------------------------- (Place-Upsert)
 Γ ⊢ p[k]? :=: elem(C)                            Γ ⊢ p[k] :=: V
 Γ ⊢ p[k]! :=: elem(C)
@@ -762,7 +762,7 @@ where `walk` gives the bindings each collection admits, each of kind `let`:
 | `[\|T, 1\|]` | `x : T` | `i : index`, `x : T` |
 | `[\|T, n\|]`, n > 1 | `x : [\|T, n-1\|]` | `i : index`, `x : [\|T, n-1\|]` |
 | `#{T}` | `x : T` | -- |
-| `%{K = V}` | -- | `k : K`, `v : V` |
+| `%{K -> V}` | -- | `k : K`, `v : V` |
 
 The collection is read in a borrowed position. A collection that is not a
 place is F108, one of any other type F087, and one with the wrong number of

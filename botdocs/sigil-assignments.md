@@ -75,8 +75,9 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `=` - Equals
   - Assignment in let statements: `let x = value`
   - Struct field assignment: `{ x = 1 }`
-  - Map entry assignment: `%{ 1 = 10 }`
-  - Map type key-value separator: `%{K = V}`
+
+  `:` and `=` follow a name: `:` gives its type and `=` its value. Where the
+  left side is not a name, as a map key is not, neither is used.
 
 - `|` - Pipe
   - Binding delimiter in if statements: `if condition |x|`
@@ -119,8 +120,8 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 ### Asymmetric Braces (close with `}`)
 
 - `%{` - PercentBraceOpen (closes with `}`)
-  - Map types: `%{K = V}`
-  - Map literals: `%{ 1 = 10, 2 = 20 }`
+  - Map types: `%{K -> V}`
+  - Map literals: `%{ 1 -> 10, 2 -> 20 }`
 - `#{` - HashBraceOpen (closes with `}`)
   - Set types: `#{T}`
   - Set literals: `#{ 1, 2, 3 }`
@@ -165,6 +166,9 @@ Compound assignment in `set`, as bare arithmetic: `set total += amount`.
 
 ### Other
 - `:-` - ColonDash: Reserved, not yet used in parser
+- `->` - Arrow: Key-value separator in map types and literals, the same in
+  both: `%{string -> u32}`, `%{"a" -> 1}`. A map is a finite function, and a
+  key is a value rather than a name, so neither `:` nor `=` belongs there
 
 ## Three-Character Sigils
 

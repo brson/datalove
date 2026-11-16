@@ -35,7 +35,7 @@ fun shapes(ref xs: [u64]): ([(u64, u64)], [u64], { a: u64 }, u64)
 end fun
 
 // A map's copy value beside a key that is cloned.
-fun rows(ref m: %{string = u64}): [(u64, string)]
+fun rows(ref m: %{string -> u64}): [(u64, string)]
   var out: [(u64, string)] = []
   for k, v in ref m
     set out = [(v, k@)]
@@ -46,7 +46,7 @@ end fun
 fun main(): (?u64, ?u64, ([(u64, u64)], [u64], { a: u64 }, u64), [(u64, string)])
   let xs = [: u64 / 3, : u64 / 8, : u64 / 21]
   ret (first_over(ref xs, : u64 / 5), first_over(ref xs, : u64 / 99), shapes(ref xs),
-       rows(ref %{"a" = : u64 / 1, "b" = : u64 / 2}))
+       rows(ref %{"a" -> : u64 / 1, "b" -> : u64 / 2}))
 end fun
 
 ----------

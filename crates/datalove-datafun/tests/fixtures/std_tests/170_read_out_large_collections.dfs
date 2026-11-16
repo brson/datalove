@@ -13,8 +13,8 @@ require module sys/std/string
 // The set is built by inserting, which splits leaves, and a split leaf was
 // once left out of the chain: a set of two hundred read out as five.
 
-fun squares(n: u32): !%{u32 = string}
-  var out: %{u32 = string} = %{}
+fun squares(n: u32): !%{u32 -> string}
+  var out: %{u32 -> string} = %{}
   var i: u32 = 0
   loop while i .< n
     // Inserted in a scrambled order, so that the tree is built by splitting.
@@ -25,11 +25,11 @@ fun squares(n: u32): !%{u32 = string}
   ret ok out
 end fun
 
-fun generic_keys<K, V>(ref m: %{K = V}): [K] where { K is ord, }
+fun generic_keys<K, V>(ref m: %{K -> V}): [K] where { K is ord, }
   ret map.keys(ref m)
 end fun
 
-fun generic_entries<K, V>(ref m: %{K = V}): [(K, V)] where { K is ord, }
+fun generic_entries<K, V>(ref m: %{K -> V}): [(K, V)] where { K is ord, }
   ret map.entries(ref m)
 end fun
 

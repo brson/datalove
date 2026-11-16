@@ -16,8 +16,8 @@ fun names(): [string]
   ret ["a", "b"]
 end fun
 
-fun ages(): %{string = string}
-  ret %{"ada" = "36"}
+fun ages(): %{string -> string}
+  ret %{"ada" -> "36"}
 end fun
 
 fun reading(): {r: !f32}

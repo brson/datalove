@@ -109,7 +109,7 @@ fn write_expr<'db>(
                     out.push_str(", ");
                 }
                 write_expr_full(db, &entry.key, out);
-                out.push_str(" = ");
+                out.push_str(" -> ");
                 write_expr_full(db, &entry.value, out);
             }
             out.push('}');
@@ -385,7 +385,7 @@ mod tests {
             key_type: Box::new(TypeHint::String),
             value_type: Box::new(TypeHint::I32),
         });
-        assert_eq!(pretty_type_hint(db, map), "%{string = i32}");
+        assert_eq!(pretty_type_hint(db, map), "%{string -> i32}");
     }
 
     #[test]

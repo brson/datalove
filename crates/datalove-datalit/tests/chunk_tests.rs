@@ -80,8 +80,8 @@ fn lists() {
 
 #[test]
 fn maps_and_sets() {
-    check("%{1 = 2, 3 = 4, 5 = 6}", 1);
-    check("%{\"a\" = [1, 2], \"b\" = [3]}", 1);
+    check("%{1 -> 2, 3 -> 4, 5 -> 6}", 1);
+    check("%{\"a\" -> [1, 2], \"b\" -> [3]}", 1);
     check("#{1, 2, 3, 4}", 1);
     check("#{[1], [2, 3], []}", 1);
 }
@@ -89,7 +89,7 @@ fn maps_and_sets() {
 #[test]
 fn only_the_outermost_is_cut() {
     check("[[1, 2], [3, 4], [5, 6]]", 1);
-    check("%{1 = #{1, 2}, 2 = #{3, 4}}", 1);
+    check("%{1 -> #{1, 2}, 2 -> #{3, 4}}", 1);
 }
 
 #[test]
@@ -111,8 +111,8 @@ fn errors_inside_elements() {
     check("[1, 2x, 3, 4]", 1);
     check("[1, 0x, 3, -]", 1);
     check("[{a = }, {a = 1}, {a 2}]", 1);
-    check("%{1 = 2, 3 4, 5 = 6}", 1);
-    check("%{1 = 2, = 4, 5 = 6}", 1);
+    check("%{1 -> 2, 3 4, 5 -> 6}", 1);
+    check("%{1 -> 2, -> 4, 5 -> 6}", 1);
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn a_missing_separator_stops_the_collection() {
     check("[1, 2, 3, 4 5]", 1);
     // An error before it means the leftover is not complained of again.
     check("[1, 2x, 3 4, 5]", 1);
-    check("%{1 = 2, 3 = 4 5 = 6, 7 = 8}", 1);
+    check("%{1 -> 2, 3 -> 4 5 -> 6, 7 -> 8}", 1);
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn empty_elements() {
 fn types_that_do_not_check() {
     check(": [u8] / [1, 2, 300, 4]", 1);
     check(": [u32] / [1, \"two\", 3]", 1);
-    check(": %{u32 = string} / %{1 = \"a\", 2 = 3}", 1);
+    check(": %{u32 -> string} / %{1 -> \"a\", 2 -> 3}", 1);
 }
 
 /// A long list with something wrong every so often, cut after every element,

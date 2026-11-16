@@ -22,7 +22,7 @@ const ERR: !u32 = er error : u32 / 10
 
 const A_LIST: [u32] = [: u32 / 1, : u32 / 2, : u32 / 3]
 const A_SET: #{u32} = #{: u32 / 3, : u32 / 1, : u32 / 2}
-const A_MAP: %{u32 = string} = %{: u32 / 1 = : string / "one"}
+const A_MAP: %{u32 -> string} = %{: u32 / 1 -> : string / "one"}
 
 const A_DATA: data = data : u32 / 11
 const AN_ERROR: error = error : string / "went wrong"

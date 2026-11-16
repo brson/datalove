@@ -7,7 +7,7 @@ require module sys/std/map
 // hold something.
 
 var s: #{u32} = #{}
-var m: %{u32 = u32} = %{}
+var m: %{u32 -> u32} = %{}
 var i: u32 = : u32 / 0
 loop while i .< : u32 / 300
   let inserted = set.insert(mut s, i)

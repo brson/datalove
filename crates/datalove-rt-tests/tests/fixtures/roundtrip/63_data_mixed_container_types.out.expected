@@ -1,1 +1,1 @@
-: #{data} / #{data [1, 2], data [5], data %{1 = 1.0}, data %{"aaaaaaaa" = true}}
+: #{data} / #{data [1, 2], data [5], data %{1 -> 1.0}, data %{"aaaaaaaa" -> true}}

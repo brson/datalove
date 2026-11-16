@@ -8,7 +8,7 @@ module local/test/m
 // own type could hold one, and skips the rest; these are the ones it has to
 // walk.
 const D: data = data (: [i64] / [1, 2, 3])
-const N: [data] = [data (: #{u16} / #{4, 5}), data (: %{string = i8} / %{"a" = 6})]
+const N: [data] = [data (: #{u16} / #{4, 5}), data (: %{string -> i8} / %{"a" -> 6})]
 const E: !u8 = er error (: u64 / 7, "x")
 const S: {d: data, n: u32} = {d = data (: i32 / 8, true), n = 9}
 

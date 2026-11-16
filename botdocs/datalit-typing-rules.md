@@ -80,7 +80,7 @@ T ::= bool | u8 | u16 | u32 | u64 | i8 | i16 | i32 | i64
     | {ℓ₁: T₁, ..., ℓₙ: Tₙ}            struct
     | [T]                              list
     | #{T}                             set
-    | %{K = V}                         map
+    | %{K -> V}                         map
     | ?T                               option
     | !T                               result
     | [|T, k|]                         tensor of rank k ≥ 1
@@ -107,7 +107,7 @@ e ::= true | false | n | h | r | s
     | {ℓ₁ = e₁, ..., ℓₙ = eₙ}
     | [e₁, ..., eₙ]
     | #{e₁, ..., eₙ}
-    | %{e₁ = e₁', ..., eₙ = eₙ'}
+    | %{e₁ -> e₁', ..., eₙ -> eₙ'}
     | [| d₁ ... dₖ | e₁ ... eₘ |]      tensor, shape d₁ × ... × dₖ, row-major
     | {| ℓ₁, ..., ℓₙ; ē₁; ...; ēₘ |}   table, each row ēⱼ = eⱼ₁, ..., eⱼₙ
     | none | some e | ok e | er e
@@ -193,7 +193,7 @@ hint is converted, and failing one is an error on the hinted expression.
   infinitely large: `rec L { next: ?L }` and `rec L L` are refused. So is
   `rec A { b: rec B { a: A, bs: [B] } }`: the list guards `B`, not `A`.
 - **A recursive type is not ordered** (T065). No `rec`, and no use of a `rec`'s
-  name, is in a map's key or a set's element: `rec L %{L = int}` and
+  name, is in a map's key or a set's element: `rec L %{L -> int}` and
   `#{rec L [L]}` are refused. A recursive value is finite, so it could be
   ordered, but every comparison would be deep.
 - **A name in a type is a `rec`'s** (T059). Datalit has no aliases, so any
@@ -303,7 +303,7 @@ The rules, with `α:c` a fresh variable of class `c`:
 
 α    β    ⊢ eᵢ ⇝ κᵢ    ⊢ eᵢ' ⇝ νᵢ    α ≐ κᵢ    β ≐ νᵢ
 ------------------------------------------------------ (Inf-Map)
-⊢ %{e₁ = e₁', ..., eₙ = eₙ'} ⇝ %{α = β}
+⊢ %{e₁ -> e₁', ..., eₙ -> eₙ'} ⇝ %{α -> β}
 
 α    ⊢ eᵢ ⇝ τᵢ    α ≐ τᵢ
 ------------------------------------------ (Inf-Tensor)
@@ -489,7 +489,7 @@ with the wrong number of fields is T039, and with a field out of place T042.
 
 ⊢ eᵢ ⇐ K    ⊢ eᵢ' ⇐ V
 -------------------------------------- (Check-Map)
-⊢ %{e₁ = e₁', ..., eₙ = eₙ'} ⇐ %{K = V}
+⊢ %{e₁ -> e₁', ..., eₙ -> eₙ'} ⇐ %{K -> V}
 ```
 
 With `n = 0` these have no premises, so an empty collection checks against a

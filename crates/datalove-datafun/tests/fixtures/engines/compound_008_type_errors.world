@@ -54,7 +54,7 @@ fun mismatched(a: u32, b: u64): !u32
 end fun
 
 // A bare map index inserts, and there may be nothing to update.
-fun bare_map_index(m: %{string = int}): %{string = int}
+fun bare_map_index(m: %{string -> int}): %{string -> int}
     var b = m
     set b["a"] += 1
     ret b

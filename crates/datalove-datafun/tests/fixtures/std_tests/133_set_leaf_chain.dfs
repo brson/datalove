@@ -41,8 +41,8 @@ fun after_a_list(): #{u32}
 end fun
 
 fun after_a_map(): #{string}
-  let a: %{u32 = string} = %{: u32 / 1 = : string / "one"}
-  let b: %{u32 = string} = through_a_generic(a)
+  let a: %{u32 -> string} = %{: u32 / 1 -> : string / "one"}
+  let b: %{u32 -> string} = through_a_generic(a)
   ret #{"c", "a", "b"}
 end fun
 

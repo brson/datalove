@@ -11,8 +11,8 @@ require module local/store/sales
 // The customers who spent the most, with what they spent and over how many
 // orders.
 fun top_customers(n: index): ![(u64, u32, u64)]
-    var spent: %{u32 = u64} = %{}
-    var orders: %{u32 = u64} = %{}
+    var spent: %{u32 -> u64} = %{}
+    var orders: %{u32 -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!
@@ -32,8 +32,8 @@ end fun
 
 // Revenue and buying customers by country, the biggest first.
 fun by_country(): ![(u64, string, u64)]
-    var revenue: %{string = u64} = %{}
-    var buyers: %{string = #{u32}} = %{}
+    var revenue: %{string -> u64} = %{}
+    var buyers: %{string -> #{u32}} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!
@@ -60,16 +60,16 @@ end fun
 
 // For each tier: customers in it, how many bought, and what they spent.
 fun by_tier(): ![(string, u64, u64, u64)]
-    var members: %{string = u64} = %{}
+    var members: %{string -> u64} = %{}
     var c: index = 0
     loop while c .< db.customer_count()
         call sales.add(mut members, ref db.customer_tier(db.customer_id_at(c)!)!, 1)!
         set c +!= 1
     end loop
 
-    var spent: %{string = u64} = %{}
-    var buyers: %{u32 = bool} = %{}
-    var buying: %{string = u64} = %{}
+    var spent: %{string -> u64} = %{}
+    var buyers: %{u32 -> bool} = %{}
+    var buying: %{string -> u64} = %{}
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!

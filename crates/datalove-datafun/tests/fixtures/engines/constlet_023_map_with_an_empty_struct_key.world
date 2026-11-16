@@ -6,9 +6,9 @@ scriptunit-fragment
 // runtime built, by the runtime's node layout, so the values are where the
 // runtime put them: right after the keys' offset, as the keys take none.
 
-const E: %{{} = bool} = %{: {} / {} = true}
-const F: %{{} = ?bool} = %{: {} / {} = : ?bool / some true}
-const G: %{{} = !bool} = %{: {} / {} = : !bool / ok : bool / true}
+const E: %{{} -> bool} = %{: {} / {} -> true}
+const F: %{{} -> ?bool} = %{: {} / {} -> : ?bool / some true}
+const G: %{{} -> !bool} = %{: {} / {} -> : !bool / ok : bool / true}
 debuglog E
 debuglog F
 debuglog G

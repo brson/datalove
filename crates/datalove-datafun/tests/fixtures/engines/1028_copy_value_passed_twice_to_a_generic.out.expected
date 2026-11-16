@@ -56,7 +56,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("%{true = true}\n%{false = false}\n"),
+            debug_output: Some("%{true -> true}\n%{false -> false}\n"),
         ),
     ],
 )

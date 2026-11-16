@@ -26,8 +26,8 @@ fun a_list(): [u32]
   ret [: u32 / 7, : u32 / 8]
 end fun
 
-fun a_map(): %{u32 = u32}
-  ret %{: u32 / 1 = : u32 / 9}
+fun a_map(): %{u32 -> u32}
+  ret %{: u32 / 1 -> : u32 / 9}
 end fun
 
 // A field off a value, by index and by name.

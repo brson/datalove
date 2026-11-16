@@ -1572,7 +1572,7 @@ pub(crate) fn resolve_index_types<'db>(
                 Type::Datalit(datalit::tycheck::Type::Index),
             ))
         }
-        _ => Err(format!("`{}` cannot be indexed; a list `[T]`, a map `%{{K = V}}` or a tensor `[|T, N|]` can", type_to_string(db, base_ty))),
+        _ => Err(format!("`{}` cannot be indexed; a list `[T]`, a map `%{{K -> V}}` or a tensor `[|T, N|]` can", type_to_string(db, base_ty))),
     }
 }
 

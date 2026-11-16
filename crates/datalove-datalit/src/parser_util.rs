@@ -167,7 +167,7 @@ pub fn type_name_suggestion(word: &str) -> Option<String> {
     let spelled = match lower.as_str() {
         "tuple" => "(T, ...)",
         "list" => "[T]",
-        "map" => "%{K = V}",
+        "map" => "%{K -> V}",
         "set" => "#{T}",
         "table" => "{| name: T |}",
         "tensor" => "[|T, N|]",

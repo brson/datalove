@@ -258,15 +258,15 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+      "input": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
       "outcome": {
         "Unit": {
           "Ran": [
             {
               "Value": {
                 "name": "budget",
-                "ty": "%{string = int}",
-                "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "ty": "%{string -> int}",
+                "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               }
             }
           ]
@@ -375,15 +375,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -396,7 +396,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -413,8 +413,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -429,14 +429,14 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "var spent: %{string = int} = %{}",
+      "input": "var spent: %{string -> int} = %{}",
       "outcome": {
         "Unit": {
           "Ran": [
             {
               "Slot": {
                 "name": "spent",
-                "ty": "%{string = int}",
+                "ty": "%{string -> int}",
                 "value": "%{}"
               }
             }
@@ -546,15 +546,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -567,7 +567,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -583,14 +583,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -621,8 +621,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -631,7 +631,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": "%{}"
         },
         {
@@ -751,15 +751,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -772,7 +772,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -788,14 +788,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -809,7 +809,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "spent",
-                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+                "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}"
               ]
             ],
             "provides": [
@@ -857,8 +857,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -867,8 +867,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}"
         },
         {
           "name": "transactions",
@@ -995,15 +995,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -1016,7 +1016,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -1032,14 +1032,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -1053,7 +1053,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "spent",
-                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+                "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}"
               ]
             ],
             "provides": [
@@ -1145,8 +1145,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -1160,8 +1160,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}"
         },
         {
           "name": "transactions",
@@ -1178,8 +1178,8 @@ DataloveReplay.register("reactive-transactions", {
             {
               "Value": {
                 "name": "output",
-                "ty": "{ spent: %{string = int}, over: [string] }",
-                "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}, over = []}"
+                "ty": "{ spent: %{string -> int}, over: [string] }",
+                "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}, over = []}"
               }
             }
           ]
@@ -1288,15 +1288,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -1309,7 +1309,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -1325,14 +1325,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -1444,8 +1444,8 @@ DataloveReplay.register("reactive-transactions", {
               {
                 "Value": {
                   "name": "output",
-                  "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}, over = []}"
+                  "ty": "{ spent: %{string -> int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}, over = []}"
                 }
               }
             ]
@@ -1458,7 +1458,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}, over = []}"
+                "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}, over = []}"
               ]
             ],
             "provides": [
@@ -1478,8 +1478,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -1488,8 +1488,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "output",
-          "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 23819, \"other\" = 3315}, over = []}"
+          "ty": "{ spent: %{string -> int}, over: [string] }",
+          "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 23819, \"other\" -> 3315}, over = []}"
         },
         {
           "name": "over",
@@ -1498,7 +1498,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": null
         },
         {
@@ -1533,7 +1533,7 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Slot": {
                     "name": "spent",
-                    "ty": "%{string = int}",
+                    "ty": "%{string -> int}",
                     "value": "%{}"
                   }
                 }
@@ -1570,8 +1570,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "output",
-                    "ty": "{ spent: %{string = int}, over: [string] }",
-                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                    "ty": "{ spent: %{string -> int}, over: [string] }",
+                    "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 27134}, over = [\"groceries\"]}"
                   }
                 }
               ]
@@ -1682,15 +1682,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -1703,7 +1703,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -1719,14 +1719,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -1838,8 +1838,8 @@ DataloveReplay.register("reactive-transactions", {
               {
                 "Value": {
                   "name": "output",
-                  "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                  "ty": "{ spent: %{string -> int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 27134}, over = [\"groceries\"]}"
                 }
               }
             ]
@@ -1852,7 +1852,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 27134}, over = [\"groceries\"]}"
               ]
             ],
             "provides": [
@@ -1872,8 +1872,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -1882,8 +1882,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "output",
-          "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 13435, \"groceries\" = 27134}, over = [\"groceries\"]}"
+          "ty": "{ spent: %{string -> int}, over: [string] }",
+          "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 13435, \"groceries\" -> 27134}, over = [\"groceries\"]}"
         },
         {
           "name": "over",
@@ -1892,7 +1892,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": null
         },
         {
@@ -1929,7 +1929,7 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Slot": {
                     "name": "spent",
-                    "ty": "%{string = int}",
+                    "ty": "%{string -> int}",
                     "value": "%{}"
                   }
                 }
@@ -1966,8 +1966,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "output",
-                    "ty": "{ spent: %{string = int}, over: [string] }",
-                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+                    "ty": "{ spent: %{string -> int}, over: [string] }",
+                    "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"dining\", \"groceries\"]}"
                   }
                 }
               ]
@@ -2078,15 +2078,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 15000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 15000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -2099,7 +2099,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -2115,14 +2115,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -2234,8 +2234,8 @@ DataloveReplay.register("reactive-transactions", {
               {
                 "Value": {
                   "name": "output",
-                  "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+                  "ty": "{ spent: %{string -> int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"dining\", \"groceries\"]}"
                 }
               }
             ]
@@ -2248,7 +2248,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+                "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"dining\", \"groceries\"]}"
               ]
             ],
             "provides": [
@@ -2268,8 +2268,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 15000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 15000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -2278,8 +2278,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "output",
-          "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"dining\", \"groceries\"]}"
+          "ty": "{ spent: %{string -> int}, over: [string] }",
+          "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"dining\", \"groceries\"]}"
         },
         {
           "name": "over",
@@ -2288,7 +2288,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": null
         },
         {
@@ -2299,7 +2299,7 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+      "input": "/edit 4 let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 20000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
       "outcome": {
         "Edited": [
           {
@@ -2310,8 +2310,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "budget",
-                    "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+                    "ty": "%{string -> int}",
+                    "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 25000, \"other\" -> 5000}"
                   }
                 }
               ]
@@ -2325,7 +2325,7 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Slot": {
                     "name": "spent",
-                    "ty": "%{string = int}",
+                    "ty": "%{string -> int}",
                     "value": "%{}"
                   }
                 }
@@ -2362,8 +2362,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "output",
-                    "ty": "{ spent: %{string = int}, over: [string] }",
-                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                    "ty": "{ spent: %{string -> int}, over: [string] }",
+                    "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"groceries\"]}"
                   }
                 }
               ]
@@ -2474,15 +2474,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 25000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000,\n  \"other\" = 5000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 25000,\n  \"dining\" -> 20000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000,\n  \"other\" -> 5000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 25000, \"other\" -> 5000}"
                 }
               }
             ]
@@ -2495,7 +2495,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 25000, \"other\" -> 5000}"
               ]
             ],
             "provides": [
@@ -2511,14 +2511,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -2630,8 +2630,8 @@ DataloveReplay.register("reactive-transactions", {
               {
                 "Value": {
                   "name": "output",
-                  "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                  "ty": "{ spent: %{string -> int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"groceries\"]}"
                 }
               }
             ]
@@ -2644,7 +2644,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+                "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"groceries\"]}"
               ]
             ],
             "provides": [
@@ -2664,8 +2664,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 25000, \"other\" = 5000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 25000, \"other\" -> 5000}"
         },
         {
           "name": "category",
@@ -2674,8 +2674,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "output",
-          "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = [\"groceries\"]}"
+          "ty": "{ spent: %{string -> int}, over: [string] }",
+          "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = [\"groceries\"]}"
         },
         {
           "name": "over",
@@ -2684,7 +2684,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": null
         },
         {
@@ -2695,7 +2695,7 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
+      "input": "/edit 4 let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"bills\" -> 15000\n}",
       "outcome": {
         "Edited": [
           {
@@ -2706,8 +2706,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "budget",
-                    "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
+                    "ty": "%{string -> int}",
+                    "value": "%{\"bills\" -> 15000, \"dining\" -> 20000, \"groceries\" -> 30000}"
                   }
                 }
               ]
@@ -2721,7 +2721,7 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Slot": {
                     "name": "spent",
-                    "ty": "%{string = int}",
+                    "ty": "%{string -> int}",
                     "value": "%{}"
                   }
                 }
@@ -2858,15 +2858,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"bills\" -> 15000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"dining\" -> 20000, \"groceries\" -> 30000}"
                 }
               }
             ]
@@ -2879,7 +2879,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
+                "%{\"bills\" -> 15000, \"dining\" -> 20000, \"groceries\" -> 30000}"
               ]
             ],
             "provides": [
@@ -2895,14 +2895,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -2916,7 +2916,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "spent",
-                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}"
               ]
             ],
             "provides": [
@@ -3026,8 +3026,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"dining\" = 20000, \"groceries\" = 30000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"dining\" -> 20000, \"groceries\" -> 30000}"
         },
         {
           "name": "category",
@@ -3036,8 +3036,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}"
         },
         {
           "name": "transactions",
@@ -3047,7 +3047,7 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
+      "input": "/edit 4 let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"car\" -> \"lots\",\n  \"bills\" -> 15000\n}",
       "outcome": {
         "Edited": [
           {
@@ -3065,7 +3065,7 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Slot": {
                     "name": "spent",
-                    "ty": "%{string = int}",
+                    "ty": "%{string -> int}",
                     "value": "%{}"
                   }
                 }
@@ -3198,7 +3198,7 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = \"lots\",\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"car\" -> \"lots\",\n  \"bills\" -> 15000\n}",
           "status": "NotCompiled",
           "outcome": {
             "NotCompiled": "mismatched types: expected `int`, found `string`"
@@ -3207,7 +3207,7 @@ DataloveReplay.register("reactive-transactions", {
           "ran": false,
           "detail": {
             "unit": 4,
-            "diagnostics": "\u001b[31m[F016] Error:\u001b[0m mismatched types: expected `int`, found `string`\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 4:4:11 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m4 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249mc\u001b[0m\u001b[38;5;249ma\u001b[0m\u001b[38;5;249mr\u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m=\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;201ml\u001b[0m\u001b[38;5;201mo\u001b[0m\u001b[38;5;201mt\u001b[0m\u001b[38;5;201ms\u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;249m,\u001b[0m\n \u001b[38;5;240m  │\u001b[0m           \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m              \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m type mismatch\n\u001b[38;5;246m───╯\u001b[0m\n",
+            "diagnostics": "\u001b[31m[F016] Error:\u001b[0m mismatched types: expected `int`, found `string`\n   \u001b[38;5;246m╭\u001b[0m\u001b[38;5;246m─\u001b[0m\u001b[38;5;246m[\u001b[0m unit 4:4:12 \u001b[38;5;246m]\u001b[0m\n   \u001b[38;5;246m│\u001b[0m\n \u001b[38;5;246m4 │\u001b[0m \u001b[38;5;249m \u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249mc\u001b[0m\u001b[38;5;249ma\u001b[0m\u001b[38;5;249mr\u001b[0m\u001b[38;5;249m\"\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;249m-\u001b[0m\u001b[38;5;249m>\u001b[0m\u001b[38;5;249m \u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;201ml\u001b[0m\u001b[38;5;201mo\u001b[0m\u001b[38;5;201mt\u001b[0m\u001b[38;5;201ms\u001b[0m\u001b[38;5;201m\"\u001b[0m\u001b[38;5;249m,\u001b[0m\n \u001b[38;5;240m  │\u001b[0m            \u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m┬\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m  \n \u001b[38;5;240m  │\u001b[0m               \u001b[38;5;201m╰\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m\u001b[38;5;201m─\u001b[0m type mismatch\n\u001b[38;5;246m───╯\u001b[0m\n",
             "bindings": [],
             "provides": [],
             "reads": [],
@@ -3220,14 +3220,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -3241,7 +3241,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "spent",
-                "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+                "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}"
               ]
             ],
             "provides": [
@@ -3338,8 +3338,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}"
         },
         {
           "name": "transactions",
@@ -3349,7 +3349,7 @@ DataloveReplay.register("reactive-transactions", {
       ]
     },
     {
-      "input": "/edit 4 let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+      "input": "/edit 4 let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000\n}",
       "outcome": {
         "Edited": [
           {
@@ -3360,8 +3360,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "budget",
-                    "ty": "%{string = int}",
-                    "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+                    "ty": "%{string -> int}",
+                    "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
                   }
                 }
               ]
@@ -3390,8 +3390,8 @@ DataloveReplay.register("reactive-transactions", {
                 {
                   "Value": {
                     "name": "output",
-                    "ty": "{ spent: %{string = int}, over: [string] }",
-                    "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+                    "ty": "{ spent: %{string -> int}, over: [string] }",
+                    "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
                   }
                 }
               ]
@@ -3502,15 +3502,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
                 }
               }
             ]
@@ -3523,7 +3523,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
               ]
             ],
             "provides": [
@@ -3539,14 +3539,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -3658,8 +3658,8 @@ DataloveReplay.register("reactive-transactions", {
               {
                 "Value": {
                   "name": "output",
-                  "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+                  "ty": "{ spent: %{string -> int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
                 }
               }
             ]
@@ -3672,7 +3672,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+                "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
               ]
             ],
             "provides": [
@@ -3692,8 +3692,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
         },
         {
           "name": "category",
@@ -3702,8 +3702,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "output",
-          "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+          "ty": "{ spent: %{string -> int}, over: [string] }",
+          "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
         },
         {
           "name": "over",
@@ -3712,7 +3712,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": null
         },
         {
@@ -3727,8 +3727,8 @@ DataloveReplay.register("reactive-transactions", {
       "outcome": {
         "Unit": {
           "Value": {
-            "ty": "{ spent: %{string = int}, over: [string] }",
-            "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+            "ty": "{ spent: %{string -> int}, over: [string] }",
+            "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
           }
         }
       },
@@ -3835,15 +3835,15 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 4,
           "expression": false,
-          "source": "let budget: %{string = int} = %{\n  \"groceries\" = 30000,\n  \"dining\" = 20000,\n  \"car\" = 10000,\n  \"bills\" = 15000\n}",
+          "source": "let budget: %{string -> int} = %{\n  \"groceries\" -> 30000,\n  \"dining\" -> 20000,\n  \"car\" -> 10000,\n  \"bills\" -> 15000\n}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Value": {
                   "name": "budget",
-                  "ty": "%{string = int}",
-                  "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+                  "ty": "%{string -> int}",
+                  "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
                 }
               }
             ]
@@ -3856,7 +3856,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "budget",
-                "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+                "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
               ]
             ],
             "provides": [
@@ -3872,14 +3872,14 @@ DataloveReplay.register("reactive-transactions", {
         {
           "number": 5,
           "expression": false,
-          "source": "var spent: %{string = int} = %{}",
+          "source": "var spent: %{string -> int} = %{}",
           "status": "Ran",
           "outcome": {
             "Ran": [
               {
                 "Slot": {
                   "name": "spent",
-                  "ty": "%{string = int}",
+                  "ty": "%{string -> int}",
                   "value": "%{}"
                 }
               }
@@ -3991,8 +3991,8 @@ DataloveReplay.register("reactive-transactions", {
               {
                 "Value": {
                   "name": "output",
-                  "ty": "{ spent: %{string = int}, over: [string] }",
-                  "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+                  "ty": "{ spent: %{string -> int}, over: [string] }",
+                  "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
                 }
               }
             ]
@@ -4005,7 +4005,7 @@ DataloveReplay.register("reactive-transactions", {
             "bindings": [
               [
                 "output",
-                "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+                "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
               ]
             ],
             "provides": [
@@ -4028,8 +4028,8 @@ DataloveReplay.register("reactive-transactions", {
           "status": "Ran",
           "outcome": {
             "Value": {
-              "ty": "{ spent: %{string = int}, over: [string] }",
-              "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+              "ty": "{ spent: %{string -> int}, over: [string] }",
+              "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
             }
           },
           "compiled": true,
@@ -4052,8 +4052,8 @@ DataloveReplay.register("reactive-transactions", {
       "environment": [
         {
           "name": "budget",
-          "ty": "%{string = int}",
-          "value": "%{\"bills\" = 15000, \"car\" = 10000, \"dining\" = 20000, \"groceries\" = 30000}"
+          "ty": "%{string -> int}",
+          "value": "%{\"bills\" -> 15000, \"car\" -> 10000, \"dining\" -> 20000, \"groceries\" -> 30000}"
         },
         {
           "name": "category",
@@ -4062,8 +4062,8 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "output",
-          "ty": "{ spent: %{string = int}, over: [string] }",
-          "value": "{spent = %{\"bills\" = 12753, \"car\" = 4650, \"dining\" = 15325, \"groceries\" = 27134}, over = []}"
+          "ty": "{ spent: %{string -> int}, over: [string] }",
+          "value": "{spent = %{\"bills\" -> 12753, \"car\" -> 4650, \"dining\" -> 15325, \"groceries\" -> 27134}, over = []}"
         },
         {
           "name": "over",
@@ -4072,7 +4072,7 @@ DataloveReplay.register("reactive-transactions", {
         },
         {
           "name": "spent",
-          "ty": "%{string = int}",
+          "ty": "%{string -> int}",
           "value": null
         },
         {

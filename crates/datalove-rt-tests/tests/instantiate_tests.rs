@@ -321,8 +321,8 @@ fn an_option_and_a_result() {
 fn the_containers() {
     round_trip(": [u8] / []", &[": u8 / 1"]);
     round_trip(": #{u16} / #{}", &[": u16 / 1"]);
-    round_trip(": %{u8 = string} / %{}", &[": u8 / 1", r#": string / "x""#]);
-    round_trip(": %{u8 = string} / %{}", &[r#": string / "x""#]);
+    round_trip(": %{u8 -> string} / %{}", &[": u8 / 1", r#": string / "x""#]);
+    round_trip(": %{u8 -> string} / %{}", &[r#": string / "x""#]);
     round_trip(": [|u8, 2|] / [| 1 2, 3 4 |]", &[": u8 / 1"]);
 }
 
@@ -339,8 +339,8 @@ fn a_term_and_an_enum() {
 
 #[test]
 fn nested_forms() {
-    round_trip(r#": [(?u8, %{u8 = [string]})] / []"#, &[": u8 / 1"]);
-    round_trip(r#": [(?u8, %{u8 = [string]})] / []"#, &[": u8 / 1", r#": string / "x""#]);
+    round_trip(r#": [(?u8, %{u8 -> [string]})] / []"#, &[": u8 / 1"]);
+    round_trip(r#": [(?u8, %{u8 -> [string]})] / []"#, &[": u8 / 1", r#": string / "x""#]);
     round_trip(": ?[?(u16, u8)] / none", &[": u8 / 1", ": u16 / 1"]);
 }
 

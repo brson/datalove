@@ -2768,7 +2768,7 @@ mod tests {
     #[test]
     fn test_rec_descriptors_of_two_tables_compare() -> AnyResult<()> {
         let db = Database::default();
-        let source = r#": rec J enum { atom Null, term Arr [J], term Obj %{string = J} } / term Arr [term Obj %{ "k" = atom Null }, term Arr []]"#;
+        let source = r#": rec J enum { atom Null, term Arr [J], term Obj %{string -> J} } / term Arr [term Obj %{ "k" -> atom Null }, term Arr []]"#;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut table_a = TyDescTable::new(&db);

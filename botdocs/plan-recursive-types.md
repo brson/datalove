@@ -99,7 +99,7 @@ type Json: rec J enum {
   term Num f64,
   term Str string,
   term Arr [J],
-  term Obj %{string = J},
+  term Obj %{string -> J},
 }
 ```
 
@@ -116,7 +116,7 @@ type Json: rec J enum {
 
 ## The guard rule
 
-Each use of a bound name must have at least one of `[_]`, `%{_ = _}`, `#{_}`
+Each use of a bound name must have at least one of `[_]`, `%{_ -> _}`, `#{_}`
 or `{| |}` between it and its own binder. Structs, tuples, `?`, `!`, terms,
 enums and inner `rec` binders do not count.
 

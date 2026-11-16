@@ -43,7 +43,7 @@ let empty: {| x: u32 |} = {| x |}
 let wide: {| a: u8, b: f64, c: index, d: string |} = {| a, b, c, d; : u8 / 1, : f64 / 2.5, : index / 3, : string / "d" |}
 
 // A column that owns something, and a column that is a table.
-let owning: {| x: [u32], y: %{u32 = string} |} = {| x, y; : [u32] / [: u32 / 1, : u32 / 2], : %{u32 = string} / %{: u32 / 1 = : string / "v"} |}
+let owning: {| x: [u32], y: %{u32 -> string} |} = {| x, y; : [u32] / [: u32 / 1, : u32 / 2], : %{u32 -> string} / %{: u32 / 1 -> : string / "v"} |}
 let nested: {| x: {| y: u32 |} |} = {| x; : {| y: u32 |} / {| y; : u32 / 5 |} |}
 
 // Passed, returned, cloned, dropped.
@@ -57,7 +57,7 @@ let borrowed = borrow(ref three_rows)
 let in_option: ?{| x: u32 |} = some {| x; : u32 / 5 |}
 let in_list: [{| x: u32 |}] = [{| x; : u32 / 6 |}, {| x |}]
 let in_set: #{{| x: u32 |}} = #{{| x; : u32 / 1 |}, {| x; : u32 / 2 |}}
-let in_map: %{{| x: u32 |} = u32} = %{{| x; : u32 / 1 |} = : u32 / 9}
+let in_map: %{{| x: u32 |} -> u32} = %{{| x; : u32 / 1 |} -> : u32 / 9}
 
 // And written as a constant, which is built rather than copied.
 const TABLE: {| x: u32, y: string |} = {| x, y; : u32 / 8, : string / "e" |}

@@ -1,1 +1,1 @@
-%{ 1 = none, : u8 / 2 = some "x" }
+%{ 1 -> none, : u8 / 2 -> some "x" }

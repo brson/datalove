@@ -764,7 +764,7 @@ fn test_destroy_result_ok_string() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_empty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, ": %{u32 = u32} / %{}")?;
+    let typechecked = compile_str(&db, ": %{u32 -> u32} / %{}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -813,7 +813,7 @@ fn test_destroy_map_empty() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_primitives() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, "%{10 = 100, 20 = 200, 30 = 300}")?;
+    let typechecked = compile_str(&db, "%{10 -> 100, 20 -> 200, 30 -> 300}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -862,7 +862,7 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_strings() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#"%{"key1" = "val1", "key2" = "val2"}"#)?;
+    let typechecked = compile_str(&db, r#"%{"key1" -> "val1", "key2" -> "val2"}"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -911,7 +911,7 @@ fn test_destroy_map_strings() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_tuples() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, "%{(1, 2) = (3, 4), (5, 6) = (7, 8)}")?;
+    let typechecked = compile_str(&db, "%{(1, 2) -> (3, 4), (5, 6) -> (7, 8)}")?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -960,7 +960,7 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
 #[test]
 fn test_destroy_map_nested() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked = compile_str(&db, r#"%{"outer" = ["inner1", "inner2"]}"#)?;
+    let typechecked = compile_str(&db, r#"%{"outer" -> ["inner1", "inner2"]}"#)?;
 
     let rt1 = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1014,7 +1014,7 @@ fn test_destroy_map_large() -> AnyResult<()> {
         if i > 0 {
             map_literal.push_str(", ");
         }
-        map_literal.push_str(&format!("{} = {}", i, i * 10));
+        map_literal.push_str(&format!("{} -> {}", i, i * 10));
     }
     map_literal.push('}');
 

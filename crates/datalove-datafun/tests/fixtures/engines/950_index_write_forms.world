@@ -31,7 +31,7 @@ fun list_writes(): ?int
 end fun
 
 fun map_writes(): ?int
-    var m: %{u32 = int} = %{ 1 = :int/10 }
+    var m: %{u32 -> int} = %{ 1 -> :int/10 }
     call bump(mut m[(: u32 / 1)]?)
     debuglog m[(: u32 / 1)]?
     set m[(: u32 / 1)]? = :int/50

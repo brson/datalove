@@ -156,8 +156,8 @@ codes! {
     ///
     /// Tabled in `botdocs/datalit-ebnf.md` (Diagnostics).
     pub enum DCode = b'D' {
-        /// A map entry without `=`.
-        MapEntryWithoutEquals = 17,
+        /// A map entry without `->`.
+        MapEntryWithoutArrow = 17,
         /// End of input or a bracket where an expression is expected.
         ExpectedExpression = 18,
         /// A malformed number.
@@ -198,8 +198,8 @@ codes! {
         TensorTypeRankZero = 42,
         /// A non-ASCII name.
         NonAsciiName = 43,
-        /// A map type without `=`.
-        MapTypeWithoutEquals = 44,
+        /// A map type without `->`.
+        MapTypeWithoutArrow = 44,
         /// A bad tensor rank.
         BadTensorRank = 45,
         /// An unexpected token in a type.

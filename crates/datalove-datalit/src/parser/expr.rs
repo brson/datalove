@@ -98,15 +98,15 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// One entry of a map, `key = value`.
+    /// One entry of a map, `key -> value`.
     pub(super) fn parse_map_entry(&mut self) -> ast::ExprMapEntry<'db> {
         let key = self.parse_expr_full();
-        if !self.eat_sigil(Sigil::Equals) {
+        if !self.eat_sigil(Sigil::Arrow) {
             let ts = self.peek_text_span();
             let error_expr = self.emit_expr_error(ts,
-                "expected '=' between map key and value",
-                DCode::MapEntryWithoutEquals,
-                "expected '=' after key"
+                "expected '->' between map key and value",
+                DCode::MapEntryWithoutArrow,
+                "expected '->' after key"
             );
             let error_value = ast::ExprFull::new(None, None, error_expr);
             return ast::ExprMapEntry { key, value: error_value };
@@ -336,7 +336,7 @@ impl<'db> Parser<'db> {
                 ast::Expr::List(ast::ExprList { elements })
             }
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
-                // Map: %{k = v, ...}
+                // Map: %{k -> v, ...}
                 let inner = match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),

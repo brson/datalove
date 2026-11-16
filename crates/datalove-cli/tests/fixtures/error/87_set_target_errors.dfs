@@ -5,7 +5,7 @@
 // `set` does -- which before this pointed at the `set` keyword.
 
 // F074 a bare index partway along, and one into a list.
-var m: %{u32 = [i32]} = %{1 = [1]}
+var m: %{u32 -> [i32]} = %{1 -> [1]}
 let k: u32 = 1
 let j: index = 0
 set m[k][j]! = 5

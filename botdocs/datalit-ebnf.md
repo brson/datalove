@@ -32,7 +32,7 @@ a special sequence described in English, and `(* x *)` is a comment.
 Comments in the grammar name the diagnostic a violation produces.
 
 The terminals are tokens as `crates/bcts/src/lexer.rs` makes them, matched
-longest first, so `%{`, `#{`, `{|`, `|}`, `[|` and `|]` are each one token:
+longest first, so `%{`, `#{`, `{|`, `|}`, `[|`, `|]` and `->` are each one token:
 `% {` and `[ | 1 | ]` are not maps or tensors. Brackets are matched before
 parsing.
 
@@ -59,7 +59,7 @@ list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
 tuple_type     = "(", ws, [ type_list ], ws, ")" ;  (* (T,) is the 1-tuple *)
 struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
 table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
-map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;  (* D044 *)
+map_type       = "%{", ws, type, ws, "->", ws, type, [ ws, "," ], ws, "}" ;  (* D044 *)
 set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
 tensor_type    = "[|", ws, type, ws, ",", ws, rank, [ ws, "," ], ws, "|]" ;  (* D047 *)
 rank           = digit, { digit } ;                 (* 1 to 2^32-1, no "_": D045; 0: D042 *)
@@ -103,7 +103,7 @@ expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 field_list     = field, { ws, ",", ws, field }, [ ws, "," ] ;
 field          = ident, ws, "=", ws, full_expr ;    (* D058; names unique: D038 *)
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
-entry          = full_expr, ws, "=", ws, full_expr ;  (* D017 *)
+entry          = full_expr, ws, "->", ws, full_expr ;  (* D017 *)
 
 (* Tensor. The rank is the longest comma_run plus one. *)
 tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
@@ -207,7 +207,7 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 
 | Code | Refuses | Where |
 |---|---|---|
-| D017 | Map entry without `=` | `expr.rs:107` |
+| D017 | Map entry without `->` | `expr.rs:107` |
 | D018 | End of input or a bracket where an expression is expected | `expr.rs:394` |
 | D019 | A malformed number | `expr.rs:81` |
 | D020 | An unexpected sigil or error token | `expr.rs:264` |
@@ -228,7 +228,7 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D041 | A tensor body that does not fit its header | `expr.rs:486`, `chunk.rs:358` |
 | D042 | A tensor type of rank 0 | `type_hint.rs:245` |
 | D043 | A non-ASCII name | `mod.rs:40` |
-| D044 | Map type without `=` | `type_hint.rs:206` |
+| D044 | Map type without `->` | `type_hint.rs:206` |
 | D045 | Bad tensor rank | `type_hint.rs:252` |
 | D046 | Unexpected token in a type | `type_hint.rs:294` |
 | D047 | Tensor type without its `,` | `type_hint.rs:236` |

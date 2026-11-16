@@ -107,7 +107,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("enum { term Obj %{\"head\" = enum { term Obj %{\"id\" = enum { term Num 1.0 }} }, \"ops\" = enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str \"x\" }, enum { term Arr [enum { term Bool true }] }] }} }\n9\nenum { term Obj %{\"head\" = enum { term Obj %{\"id\" = enum { term Num 1.0 }} }, \"ops\" = enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str \"x\" }, enum { term Arr [enum { term Bool true }] }] }} }\n"),
+            debug_output: Some("enum { term Obj %{\"head\" -> enum { term Obj %{\"id\" -> enum { term Num 1.0 }} }, \"ops\" -> enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str \"x\" }, enum { term Arr [enum { term Bool true }] }] }} }\n9\nenum { term Obj %{\"head\" -> enum { term Obj %{\"id\" -> enum { term Num 1.0 }} }, \"ops\" -> enum { term Arr [enum { term Num 2.5 }, enum { atom Null }, enum { term Str \"x\" }, enum { term Arr [enum { term Bool true }] }] }} }\n"),
         ),
     ],
 )

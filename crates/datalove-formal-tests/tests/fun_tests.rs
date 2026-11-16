@@ -88,7 +88,7 @@ const CORPUS: &[&str] = &[
     // A `for` over a list, a set and a map, with one name and two, and over
     // what cannot be walked, with something wrong in the body each time.
     "let l: [u8] = [1]\nfor x in ref l\n  call nope()\nend for\nfor i, x in ref l\n  let a: u8 = i\nend for\n",
-    "let s: #{u8} = #{1}\nfor i, x in ref s\n  call nope()\nend for\nlet m: %{u8 = bool} = %{1 = true}\nfor k in ref m\n  call nope()\nend for\n",
+    "let s: #{u8} = #{1}\nfor i, x in ref s\n  call nope()\nend for\nlet m: %{u8 -> bool} = %{1 -> true}\nfor k in ref m\n  call nope()\nend for\n",
     "let n: u8 = 1\nfor x in ref n\n  call nope()\nend for\nfor x in ref zz\n  call nope()\nend for\n",
     "let t: [|u8, 2|] = [| 1 2, 3 4 |]\nfor r in ref t\n  let a: u8 = r\nend for\nbreak\n",
     // A negated literal with a hint of its own has the hint's type, and is not
@@ -114,7 +114,7 @@ const CORPUS: &[&str] = &[
     "type E: Zz\ntype E: u8\nlet x: E = 300\ntype E: u8\ntype L: [L]\nlet a: L = []\ntype A: u8\ntype B: (A, A)\nlet y: B = (1, 300)\n",
     // An alias's `rec` is datalit's, a `rec` may not take an alias's name, and
     // a recursive alias is no map's key or set's element.
-    "type J: rec J u8\nlet x: J = 1\ntype A: u8\ntype K: rec A [A]\ntype R: rec R [R]\nlet m: %{R = u8} = %{}\nlet s: #{(u8, R)} = #{}\nlet l: [R] = []\ntype S: rec S (R, [S])\n",
+    "type J: rec J u8\nlet x: J = 1\ntype A: u8\ntype K: rec A [A]\ntype R: rec R [R]\nlet m: %{R -> u8} = %{}\nlet s: #{(u8, R)} = #{}\nlet l: [R] = []\ntype S: rec S (R, [S])\n",
     "fun f(): u8\n  ret 0\nend fun\ntype f: u8\nfun f(): u8\n  ret 1\nend fun\nlet x: Zz = 1\ntype E: enum { atom A }\nfun g(e: E, z: Zz): u8\n  let y: Qq = 1\n  ret 0\nend fun\nlet h: E = : E / enum { atom A }\nlet k = : Qq / 1\n",
     // Patterns: a tuple's and a struct's parts, an atom's and a term's; one
     // that does not fit is F071 and binds nothing.
@@ -136,7 +136,7 @@ const CORPUS: &[&str] = &[
     // Indexes: with `?` and `!` and neither, into what cannot be indexed,
     // with a key of the wrong type, returning early where the function does
     // not, and a non-copy element moved out.
-    "fun f(l: [u8], m: %{string = u8}, n: u8, ls: [string]): ?u8\n  let a = l[0]?\n  let b = l[0]!\n  let c = l[0]\n  let d = n[0]?\n  let e = l[true]?\n  let g = m[\"k\"]?\n  let h = m[1]?\n  let i = ls[0]?\n  let j = ls[0]?@\n  debuglog ls[0]?\n  ret l[0]?\nend fun\n",
+    "fun f(l: [u8], m: %{string -> u8}, n: u8, ls: [string]): ?u8\n  let a = l[0]?\n  let b = l[0]!\n  let c = l[0]\n  let d = n[0]?\n  let e = l[true]?\n  let g = m[\"k\"]?\n  let h = m[1]?\n  let i = ls[0]?\n  let j = ls[0]?@\n  debuglog ls[0]?\n  ret l[0]?\nend fun\n",
     // A tensor of rank 2 indexes to a row, a view, which no `mut` argument
     // may be.
     "fun g(mut r: [|u8, 1|])\nend fun\nfun h(ref r: [|u8, 1|])\nend fun\nfun f(mut t: [|u8, 2|]): ?()\n  let r = t[0]?\n  call g(mut t[0]?)\n  call h(ref t[0]?)\n  let x: u8 = t[0]?[1]?\n  ret some ()\nend fun\n",
@@ -144,14 +144,14 @@ const CORPUS: &[&str] = &[
     "fun f(s: {l: [string], t: (u8, [u8])}): ?u8\n  let a = s.l[0]?\n  let b = s.t.1[0]?\n  let c = s.t.1\n  let d = s.l\n  ret s.t.0\nend fun\n",
     // `set` through a place: fields, indexes, a map's insertion, views, and
     // the early returns its indexes make.
-    "fun f(mut s: {a: u8, l: [u8]}, mut m: %{string = u8}, mut t: [|u8, 2|], mut n: u8): ?()\n  set s.a = 1\n  set s.zz = 1\n  set s.l[0]? = 2\n  set s.l[0] = 2\n  set m[\"k\"] = 1\n  set m[\"k\"] += 1\n  set m[1] = true\n  set m[\"k\"]? = 2\n  set m[\"k\"]! = 2\n  set t[0]? = t[1]?\n  set t[0]?[1]? = 1\n  set n[0]? = 1\n  set s.l[0][0]? = 1\n  set s.a +!= 1\n  set s.a += 1\n  set s.a += true\n  ret some ()\nend fun\n",
+    "fun f(mut s: {a: u8, l: [u8]}, mut m: %{string -> u8}, mut t: [|u8, 2|], mut n: u8): ?()\n  set s.a = 1\n  set s.zz = 1\n  set s.l[0]? = 2\n  set s.l[0] = 2\n  set m[\"k\"] = 1\n  set m[\"k\"] += 1\n  set m[1] = true\n  set m[\"k\"]? = 2\n  set m[\"k\"]! = 2\n  set t[0]? = t[1]?\n  set t[0]?[1]? = 1\n  set n[0]? = 1\n  set s.l[0][0]? = 1\n  set s.a +!= 1\n  set s.a += 1\n  set s.a += true\n  ret some ()\nend fun\n",
     // A `for` over a field or an element.
     "fun f(s: {l: [u8], ls: [[u8]]}): ?()\n  for x in ref s.l\n    let a: u8 = x\n  end for\n  for x in ref s.ls[0]?\n    let a: string = x\n  end for\n  for x in ref s.zz\n    call nope()\n  end for\n  ret some ()\nend fun\n",
     // Signatures: a type parameter in a set's element or a map's key has to be
     // ordered (F061), at any depth but a map's value.
-    "fun a<T>(s: #{T})\nend fun\nfun b<T>(x: T): %{T = u8}\n  ret %{}\nend fun\nfun c<T>(m: %{u8 = #{?T}}) where { T is ord, }\nend fun\nfun d<T>(l: [%{(T,) = u8}])\nend fun\nfun e<T>(m: %{u8 = T})\nend fun\ncall a(#{})\n",
+    "fun a<T>(s: #{T})\nend fun\nfun b<T>(x: T): %{T -> u8}\n  ret %{}\nend fun\nfun c<T>(m: %{u8 -> #{?T}}) where { T is ord, }\nend fun\nfun d<T>(l: [%{(T,) -> u8}])\nend fun\nfun e<T>(m: %{u8 -> T})\nend fun\ncall a(#{})\n",
     // Bindings in a body are held to F061 too, where their type is written.
-    "fun f<T, U>(x: T, y: U): u8 where { T is ord, }\n  var s: #{T}\n  var t: #{U}\n  let u: %{U = T} = %{}\n  let v: [#{U}] = []\n  let w: #{T} = #{x}\n  let z = #{y}\n  ret 0\nend fun\n",
+    "fun f<T, U>(x: T, y: U): u8 where { T is ord, }\n  var s: #{T}\n  var t: #{U}\n  let u: %{U -> T} = %{}\n  let v: [#{U}] = []\n  let w: #{T} = #{x}\n  let z = #{y}\n  ret 0\nend fun\n",
     // A bounded type parameter has the operators every type of its bound has.
     "fun f<F, I, O, A>(a: F, b: F, i: I, j: I, o: O, p: O, x: A): ?bool where { F is float, I is fixedint, O is ord, }\n  let s = a + b\n  let d = a / b\n  let n = -a\n  let c = a .< b\n  let e = a == b\n  let k = i +? j\n  let m = i + j\n  let q = -?i\n  let r = -i\n  let t = i <= j\n  let u = o == p\n  let v = o .< p\n  let w = x == x\n  let y = (a, a) == (b, b)\n  let z = -!i\n  let g = not a\n  ret some true\nend fun\nfun h<F, I>(mut a: F, mut i: I): ?() where { F is float, I is fixedint, }\n  set a += a\n  set i +?= i\n  set i += i\n  set a +?= a\n  ret some ()\nend fun\n",
     // A type parameter is no literal's type, and is not copied.
@@ -238,7 +238,7 @@ fn mutate(rng: &mut SeededRng, text: &str) -> String {
             3 => fmt!("let w = [{a}{}]", pick(rng, &[".0", ".a", "[0]?", "?", "!", "[0]!"])),
             4 => fmt!("let w = [{a}@, {}]", pick(rng, &[lit.as_str(), a.as_str(), ": u8 / 1", ": [T] / []"])),
             5 => fmt!("let w = [{a}@]"),
-            6 => fmt!("let w = [{a}, {}]", pick(rng, &[a.as_str(), "[1]", "some 1", "none", "(1, 2)", "%{1 = 2}"])),
+            6 => fmt!("let w = [{a}, {}]", pick(rng, &[a.as_str(), "[1]", "some 1", "none", "(1, 2)", "%{1 -> 2}"])),
             7 => fmt!("let w = gen0_{}({a}, {lit})", rng.random_range(0..3)),
             8 => fmt!("let w = [: rec L ({}, [L]) / ({a}, [])]", pick(rng, &["T", "u8"])),
             9 => fmt!("let w: {} = {lit}", pick(rng, &["T", "?T", "[T]"])),
@@ -732,7 +732,7 @@ fn statement_typing_agrees() {
 /// recursive: the check-once theorem leaves recursive arguments out.
 const ANY_ARGS: &[&str] = &[
     "u8", "i64", "int", "f32", "f64", "string", "bool", "[u8]", "?u8", "!u8", "(u8, string)",
-    "{a: u8, b: string}", "%{string = u8}", "#{i32}", "[|f64, 2|]", "enum { atom A, term B u8 }",
+    "{a: u8, b: string}", "%{string -> u8}", "#{i32}", "[|f64, 2|]", "enum { atom A, term B u8 }",
 ];
 const FLOAT_ARGS: &[&str] = &["f32", "f64"];
 const FIXED_ARGS: &[&str] = &["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "index", "offset"];

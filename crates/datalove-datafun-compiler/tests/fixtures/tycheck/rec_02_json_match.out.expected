@@ -16,7 +16,7 @@
     {
       "kind": "variable",
       "name": "doc",
-      "type": "rec J enum { term Arr [J], atom Null, term Num f64, term Obj %{string = J} }"
+      "type": "rec J enum { term Arr [J], atom Null, term Num f64, term Obj %{string -> J} }"
     },
     {
       "kind": "variable",

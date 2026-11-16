@@ -68,6 +68,7 @@ pub enum Sigil {
 
     // Two-character sigils (must come before single-character variants).
     ColonDash,
+    Arrow,
     PlusQuestion,
     MinusQuestion,
     StarQuestion,
@@ -632,6 +633,7 @@ impl Sigil {
 
             // Two-character sigils.
             Sigil::ColonDash => ":-",
+            Sigil::Arrow => "->",
             Sigil::PlusQuestion => "+?",
             Sigil::MinusQuestion => "-?",
             Sigil::StarQuestion => "*?",
