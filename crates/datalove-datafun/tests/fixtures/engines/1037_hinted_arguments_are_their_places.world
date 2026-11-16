@@ -1,0 +1,43 @@
+----------
+module local/test/main
+----------
+
+// A hint says only what type a value is. A `mut` or `out` argument under one
+// is written back to the place under it, a variable or a part of one, and an
+// operand under one is read where it is, as without the hint, so a string
+// compared under a hint is still there to read after.
+fun nine(mut a: u8): u8
+    set a = 9
+    ret a@
+end fun
+
+fun put(out a: string)
+    set a = "a-long-heap-string-put-through-a-hint"
+end fun
+
+fun test(): !(u8, u8, [u8], {f: string, g: (u8, u8)}, string, bool, string)
+    var x: u8 = 1
+    let n: u8 = nine(mut : u8 / x)
+    var l: [u8] = [1, 2]
+    let n1: u8 = nine(mut : u8 / l[1]!)
+    var r: {f: string, g: (u8, u8)} = {f = "a-long-heap-string-0123456789", g = (3, 4)}
+    let n2: u8 = nine(mut : u8 / r.g.0)
+    call put(out : string / r.f)
+    var s: string
+    call put(out : string / s)
+    let e: bool = (: string / s) == "x"
+    ret ok (n +! n1 +! n2, x, l, r, s@, e, s)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()

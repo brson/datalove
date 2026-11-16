@@ -934,6 +934,9 @@ fn dump() {
 /// reaches only after them; and copy arguments and operands read where
 /// written.
 const RUN_CORPUS: &[&str] = &[
+    // A hint on a `mut` or `out` argument says only its type: what the
+    // parameter came to is written back to the place under it.
+    "fun nine(mut a: u8): u8\n  set a = : u8 / 9\n  ret a@\nend fun\nfun put(out a: u8)\n  set a = : u8 / 7\nend fun\nvar x: u8 = : u8 / 1\ndebuglog nine(mut : u8 / x)\ndebuglog x\nvar r: {f: [u8], g: (u8, u8)} = {f = [: u8 / 1, : u8 / 2], g = (: u8 / 3, : u8 / 4)}\ndebuglog nine(mut : u8 / r.f[(: index / 1)]!)\ndebuglog nine(mut : u8 / r.g.0)\ndebuglog r\nvar y: u8\ncall put(out : u8 / y)\ndebuglog y\ncall put(out : u8 / r.g.1)\ndebuglog r\n",
     "fun grow(mut xs: [int]): int\n  set xs = [7, 8, 9]\n  ret 10\nend fun\nfun key(mut xs: [int]): index\n  set xs = [1, 2, 3]\n  ret : index / 2\nend fun\nfun set9(mut x: u8): u8\n  set x = : u8 / 9\n  ret : u8 / 0\nend fun\nfun first(x: u8, y: u8): u8\n  ret x\nend fun\nvar xs: [int] = [1, 2]\nset xs[(: index / 0)]! = grow(mut xs)\ndebuglog xs\nvar ys: [int] = [1, 2]\nset ys[key(mut ys)]! = 5\ndebuglog ys\nvar zs: [int] = [1, 2]\nset zs[(: index / 1)]! += grow(mut zs)\ndebuglog zs\nvar a: u8 = : u8 / 1\ndebuglog first(a, set9(mut a))\ndebuglog a +! set9(mut a)\ndebuglog a\nret ok ()\n",
     "fun set7(mut x: u8): u8\n  set x = : u8 / 7\n  ret x@\nend fun\nfun g(mut x: u8): !u8\n  let y = set7(mut x) +! (: u8 / 250)\n  ret ok y\nend fun\nvar a: u8 = : u8 / 1\nlet r = g(mut a)\ndebuglog r\ndebuglog a\n",
     "fun bump(mut x: int): int\n  set x = x + 1\n  ret x@\nend fun\nvar a: int = 1\nlet y = bump(mut a) + bump(mut a)\ndebuglog y\ndebuglog a\nlet z: int = bump(mut a)\ndebuglog z\nvar hit: int = 0\nif bump(mut a) == 5\n  set hit = 1\nend if\ndebuglog hit\ndebuglog [bump(mut a), a@]\nlet w = bump(mut a) + a\ndebuglog w\n",
@@ -941,7 +944,7 @@ const RUN_CORPUS: &[&str] = &[
     "fun add(a: u8, b: u8): !u8\n  ret ok (a +! b)\nend fun\nfun addq(a: i8, b: i8): ?i8\n  ret some (a +? b)\nend fun\nfun div(a: i32, b: i32): !i32\n  ret ok (a /! b)\nend fun\ndebuglog add(: u8 / 100, : u8 / 155)\ndebuglog add(: u8 / 100, : u8 / 156)\ndebuglog addq(: i8 / -100, : i8 / -28)\ndebuglog addq(: i8 / -100, : i8 / -29)\ndebuglog div(: i32 / -7, : i32 / 2)\ndebuglog div(: i32 / 7, : i32 / -2)\ndebuglog div(: i32 / 7, : i32 / 0)\ndebuglog div(: i32 / -2147483648, : i32 / -1)\n",
     "fun at(l: [u8], i: index): ?u8\n  ret some l[i]?\nend fun\nfun sum(l: [u32]): int\n  var s: int = 0\n  for x in ref l\n    set s += x@\n  end for\n  ret s\nend fun\nfun fact(n: int): int\n  if n .< 2\n    ret 1\n  end if\n  ret n * fact(n - 1)\nend fun\nfun count(n: int): int\n  var i: int = 0\n  loop while i .< n\n    set i += 1\n    if i == 7\n      break\n    end if\n  end loop\n  ret i\nend fun\ndebuglog at([1, 2, 3], : index / 1)\ndebuglog at([1, 2, 3], : index / 3)\ndebuglog sum([1, 2, 4294967295])\ndebuglog fact(20)\ndebuglog count(3)\ndebuglog count(100)\n",
     "type E = enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
-    "fun seti(mut i: index): index\n  set i = : index / 1\n  ret : index / 0\nend fun\nvar xss: [[u32]] = [[: u32 / 1, : u32 / 2], [: u32 / 3, : u32 / 4]]\nvar i: index = : index / 0\nset xss[i]![seti(mut i)]! = : u32 / 99\ndebuglog xss\nvar j: index = : index / 0\nset xss[j]![seti(mut j)]! +!= : u32 / 50\ndebuglog xss\nvar k: index = : index / 0\ndebuglog xss[k]![seti(mut k)]!\nvar xs: [int] = [1000000000000000000000000000001, 2]\ndebuglog (: [int] / xs)[(: index / 1)]!\ndebuglog xs\nvar s: string = \"a-long-heap-string-0123456789-abcdefghij\"\ndebuglog (: string / s) == \"x\"\ndebuglog s\nlet t = (: string / s)@\ndebuglog t\ndebuglog s\n",
+    "fun seti(mut i: index): index\n  set i = : index / 1\n  ret : index / 0\nend fun\nvar xss: [[u32]] = [[: u32 / 1, : u32 / 2], [: u32 / 3, : u32 / 4]]\nvar i: index = : index / 0\nset xss[i]![seti(mut i)]! = : u32 / 99\ndebuglog xss\nvar j: index = : index / 0\nset xss[j]![seti(mut j)]! +!= : u32 / 50\ndebuglog xss\nvar k: index = : index / 0\ndebuglog xss[k]![seti(mut k)]!\nvar xs: [int] = [1000000000000000000000000000001, 2]\ndebuglog (: [int] / xs)[(: index / 1)]!\ndebuglog xs\nvar s: string = \"a-long-heap-string-0123456789-abcdefghij\"\nlet t = (: string / s)@\ndebuglog t\ndebuglog s\n",
     "fun f(mut x: u8, y: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun g(y: u8, mut x: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun h(mut xs: [u8], y: u8): u8\n  set xs = [y, y]\n  ret y\nend fun\nvar a: u8 = : u8 / 1\ndebuglog f(mut a, a)\ndebuglog a\nset a = : u8 / 1\ndebuglog g(a, mut a)\ndebuglog a\nset a = : u8 / 1\ndebuglog f(mut a, : u8 / a) +! f(mut a, a)\ndebuglog a\nvar xs: [u8] = [: u8 / 3, : u8 / 4]\ndebuglog h(mut xs, xs[(: index / 1)]!)\ndebuglog xs\n",
     "fun set9(mut x: u8): u8\n  set x = : u8 / 9\n  ret : u8 / 0\nend fun\nfun put(out x: u8)\n  set x = : u8 / 7\nend fun\nfun bump(mut i: index): u8\n  set i = : index / 1\n  ret : u8 / 0\nend fun\nfun pair(mut a: u8, mut b: u8)\n  set a = : u8 / 1\n  set b = : u8 / 2\nend fun\nvar xs: [u8] = [: u8 / 3, : u8 / 4, : u8 / 5]\ndebuglog set9(mut xs[(: index / 1)]!)\ndebuglog xs\ncall put(out xs[(: index / 2)]!)\ndebuglog xs\nvar p: (u8, (u8, bool)) = (: u8 / 1, (: u8 / 2, true))\ndebuglog set9(mut p.1.0)\ndebuglog p\ncall pair(mut p.0, mut xs[(: index / 0)]!)\ndebuglog (p, xs)\nvar xss: [[u8]] = [[: u8 / 1, : u8 / 2], [: u8 / 3, : u8 / 4]]\nvar i: index = : index / 0\ndebuglog set9(mut xss[i]![(: index / 1)]!) +! bump(mut i)\ndebuglog (xss, i)\nvar ys: [u8] = [: u8 / 1]\ndebuglog set9(mut ys[(: index / 5)]!)\n",
 ];
@@ -1028,7 +1031,8 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
                             decls += &fmt!("var {v}: {t}\n");
                         }
                         written.push(v.C());
-                        fmt!("{m} {v}")
+                        // A hint on what is written back says only its type.
+                        if rng.random_bool(0.3) { fmt!("{m} : {t} / {v}") } else { fmt!("{m} {v}") }
                     }
                 }
             }).collect();
@@ -1127,6 +1131,9 @@ fn shaped_calls(rng: &mut SeededRng) -> String {
     out += &fmt!("var wsp: ({t}, {t}) = ({c}, {b})\n");
     out += &fmt!("debuglog wsa(mut wsp.1, wsp.1)\ndebuglog wsp\n");
     out += &fmt!("var wsw: {t} = {c}\ndebuglog wsc(mut wsp.0, mut wsw)\ndebuglog (wsp, wsw)\n");
+    // Written back through a hint, to a variable and to parts.
+    out += &fmt!("debuglog wsc(mut : {t} / wsl[(: index / 0)]!, mut : {t} / wsw)\ndebuglog (wsl, wsw)\n");
+    out += &fmt!("debuglog wsa(mut : {t} / wsp.1, wsp.0)\ndebuglog wsp\n");
     // Sibling fields are distinct places: one written beside another, and
     // one held by an earlier argument while a later one writes the other.
     out += &fmt!("set wsp = ({b}, {c})\ndebuglog wsc(mut wsp.0, mut wsp.1)\ndebuglog wsp\n");
@@ -1277,6 +1284,9 @@ fn runs_agree() {
         *ends.entry(end.C()).or_default() += 1;
         let rust = rust_run(text);
         let finished = end == "ok" || end == "early";
+        // A corpus script is written to be run to its end: one the model
+        // stops in is a gap in the model, not a script to compare a prefix of.
+        assert!(finished || what != "corpus", "the model stops in a run corpus script ({end}):\n{text}");
         let (agree, out) = match &rust {
             RustRun::Ran(out, success) => {
                 let prefix = model.len() <= out.len()
@@ -1310,3 +1320,13 @@ fn runs_agree() {
     assert!(mismatches.is_empty(), "the Rust and the model run {} scripts differently", mismatches.len());
 }
 
+
+/// Print what the model's run of `FORMAL_FUN_RUN_OF`, a file, logs and how it
+/// ends, with the codes the Rust gives it, to find where the model stops.
+#[test]
+fn run_of() {
+    let Ok(path) = std::env::var("FORMAL_FUN_RUN_OF") else { return };
+    let (codes, script, _) = rust_side(&std::fs::read_to_string(path).X());
+    println!("rust:  {codes:?}");
+    println!("model: {}", ask_oracle(&[json!({ "run": script })])[0]);
+}

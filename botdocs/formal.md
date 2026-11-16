@@ -366,7 +366,11 @@ rarely do with their parameters: checked and optional arithmetic at its
 bounds, division, indexes in and out of range, `for`, `loop`, recursion,
 `match`, a binding `if`, `!` and `set` through an index, and `mut` and `out`
 arguments written back, an early return's included, from calls inside
-larger expressions, read later in them, and returned early from after. For this test worldgen
+larger expressions, read later in them, and returned early from after,
+under a hint or not. The model must run each corpus script to its end: one
+it stops in would compare only a prefix, which a gap in the model passes.
+`FORMAL_FUN_RUN_OF=<file>` with the `run_of` test prints what the model
+logs of a file and how it ends, to find where it stops. For this test worldgen
 writes `mut`, `out` and `ref` parameters, and the driver passes a `mut` or
 `out` argument as a variable, set or not, binds the call's value, and logs
 the variables after it; a thousand seeds write back through about 170
@@ -630,7 +634,9 @@ Four things are proved of it:
   same steps with those keys' values, as a `set` writes (`writeSteps`); the
   steps and keys are of the types `setPlan` gives them (`PathOk`), so the
   variable keeps its type, an index that is gone by then returning early as
-  its mode says. Writing back through a hint is not run yet.
+  its mode says. A hint on such an argument says only its type: it is
+  evaluated and written back as the place under it (`unhint`), which checks
+  without the hint at the same fuel (`unhint_check`).
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -776,10 +782,9 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Calls that write back through a hint.** A `mut` or `out` argument under
-  a type hint is not written back. A call with a recursive type argument
-  stops as well, until the check-once theorem takes one, and so does a call
-  of a function a script declares below it.
+- **Calls the model does not run.** A call with a recursive type argument
+  stops, until the check-once theorem takes one, and so does a call of a
+  function a script declares below it.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

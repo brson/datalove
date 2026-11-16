@@ -364,15 +364,22 @@ def writeSteps (op : Option BinOp) : Ty → Option Val → List Step → List Va
     | .error _, _ => throw .wrong
   | _, _, _, _, _ => throw .wrong
 
+/-- An argument with its hint taken off: a hint says what type it is and
+nothing of where it is, so `mut : T / x` writes back to `x`. Only one hint
+parses there. -/
+def unhint : Expr → Expr
+  | .hinted _ e => e
+  | e => e
+
 /-- Each `mut` and `out` argument's place set to what its parameter came to:
 a variable, or a part of one through its steps, with the keys' values the
 argument was evaluated with (`kvss`), as the pointer the Rust passes was
-taken then. One under a hint is not written back yet. -/
+taken then, under a hint or not. -/
 def writeBack (Γ : Ctx) : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (List Val) →
     List (Option Val) → EvalM VEnv
   | ρ, (_, e) :: args, (mode, _) :: params, kvs :: kvss, a :: after =>
     if mode == .mut || mode == .out then
-      match e, a with
+      match unhint e, a with
       | .var x, some v => writeBack Γ (setVar x v ρ) args params kvss after
       | .place x steps, some v => match Γ.lookup x, ρ.lookup x with
         | some (u, _), some old => do
@@ -556,15 +563,15 @@ def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → String → List 
 value, each with the keys' values of a `mut` or `out` one into a part of a
 variable, for writing back to (`writeBack`). Such a one is evaluated as
 `checkF` reaches the place's steps, through its form, subsumption and
-synthesis. -/
+synthesis, under a hint or not. -/
 def evalArgs (env : InferEnv) (call : CallFn) : Nat → Ctx → List (Option Mode × Expr) →
     List (Mode × Ty) → EvalT (List (Option Val × List Val))
   | 0, _, _, _ => throw .fuel
   | n + 1, Γ, (_, e) :: args, (mode, t) :: params => do
-    let a ← match n, e with
+    let a ← match n, unhint e with
       | d + 4, .place x steps =>
         if mode == .mut || mode == .out then
-          argAt env call (d + 1) (((Γ.forArg mode).enter e).enter e) mode x steps
+          argAt env call (d + 1) (((Γ.forArg mode).enter (.place x steps)).enter (.place x steps)) mode x steps
         else argByValue mode (evalC env call (d + 4) (Γ.forArg mode) e t)
       | m, .place _ _ =>
         if mode == .mut || mode == .out then throw .fuel

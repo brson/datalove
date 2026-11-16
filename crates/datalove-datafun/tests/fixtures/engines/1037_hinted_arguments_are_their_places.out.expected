@@ -1,0 +1,141 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn nine(p0):
+                    block0:
+                        v0 = const 9u8
+                        store p0, v0
+                        v1 = copy p0
+                        return v1
+                    
+                    fn put(p0):
+                    block0:
+                        v0 = const "a-long-heap-string-put-through-a-hint"
+                        drop.tracked p0
+                        store.tracked p0, v0
+                        return
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u8
+                        store.copy s0, v0
+                        v1 = call m0.u0(s0)
+                        v2 = const 1u8
+                        v3 = const 2u8
+                        v4 = list [v2, v3]
+                        store.move s1, v4
+                        v5 = const 1index
+                        v6 = listboundscheck s1[v5]
+                        branch v6, block2, block1
+                    block1:
+                        v7 = const "index out of bounds"
+                        v8 = error_from v7
+                        v9 = err v8
+                        drop s1
+                        return v9
+                    block2:
+                        v10 = listelementref s1[v5]
+                        v11 = call m0.u0(*v10)
+                        v12 = const "a-long-heap-string-0123456789"
+                        v13 = const 3u8
+                        v14 = const 4u8
+                        v15 = pack tuple/2 {v13, v14}
+                        v16 = pack struct {v12, v15}
+                        store.move s2, v16
+                        v17 = getfieldref s2.1
+                        v18 = getfieldref *v17.0
+                        v19 = call m0.u0(*v18)
+                        v20 = getfieldref s2.0
+                        drop.ref v20
+                        v21 = call m0.u1(*v20)
+                        drop.tracked s3
+                        v22 = call m0.u1(s3)
+                        v23 = const "x"
+                        v24 = eq s3, v23
+                        drop v23
+                        v25, v26 = add.checked v1, v11
+                        branch v26, block3, block4
+                    block3:
+                        v27 = const "arithmetic overflow"
+                        v28 = error_from v27
+                        v29 = err v28
+                        drop s1
+                        drop s2
+                        drop.tracked s3
+                        return v29
+                    block4:
+                        v30, v31 = add.checked v25, v19
+                        branch v31, block5, block6
+                    block5:
+                        v32 = const "arithmetic overflow"
+                        v33 = error_from v32
+                        v34 = err v33
+                        drop s1
+                        drop s2
+                        drop.tracked s3
+                        return v34
+                    block6:
+                        v35 = load.copy s0
+                        v36 = load.move s1
+                        v37 = load.move s2
+                        v38 = clone s3
+                        v39 = load.move.tracked s3
+                        v40 = pack tuple/7 {v30, v35, v36, v37, v38, v24, v39}
+                        v41 = ok v40
+                        return v41
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u2()
+                        unit_end v0
+                """,
+            ),
+            output: "ok (27, 9, [1, 9], {f = \"a-long-heap-string-put-through-a-hint\", g = (9, 4)}, \"a-long-heap-string-put-through-a-hint\", false, \"a-long-heap-string-put-through-a-hint\")",
+        ),
+    ],
+)

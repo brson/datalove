@@ -1082,10 +1082,11 @@ def PathOk (Γ : Ctx) (t : Ty) (steps : List Step) (u : Ty) (kvs : List Val) : P
 /-- What a `mut` or `out` argument into a part of a variable was evaluated
 with, for writing back to it: its variable's type, and its steps to a part
 that is of the parameter's type, unfolded. -/
-def ArgKeys (Γ : Ctx) (mode : Mode) (t : Ty) : Expr → List Val → Prop
-  | .place x steps, kvs => (mode == .mut || mode == .out) = true →
+def ArgKeys (Γ : Ctx) (mode : Mode) (t : Ty) (e : Expr) (kvs : List Val) : Prop :=
+  match unhint e with
+  | .place x steps => (mode == .mut || mode == .out) = true →
       ∃ u k u', Γ.lookup x = some (u, k) ∧ PathOk Γ u steps u' kvs ∧ u'.expose = t.expose
-  | _, _ => True
+  | _ => True
 
 /-- `ArgKeys` of each argument. -/
 def ArgsKeys (Γ : Ctx) : List (Option Mode × Expr) → List (Mode × Ty) → List (List Val) → Prop
@@ -1093,10 +1094,35 @@ def ArgsKeys (Γ : Ctx) : List (Option Mode × Expr) → List (Mode × Ty) → L
   | _, _, _ => True
 
 theorem ArgKeys.nil {Γ : Ctx} {mode : Mode} {t : Ty} {e : Expr}
-    (h : ∀ x steps, e = .place x steps → (mode == .mut || mode == .out) = false) : ArgKeys Γ mode t e [] := by
-  cases e
-  case place x steps => intro hm; simp [h x steps rfl] at hm
-  all_goals trivial
+    (h : ∀ x steps, unhint e = .place x steps → (mode == .mut || mode == .out) = false) : ArgKeys Γ mode t e [] := by
+  unfold ArgKeys
+  split
+  · rename_i x steps he
+    intro hm; simp [h x steps he] at hm
+  · trivial
+
+/-- An argument checked under a hint checks without it, at the same fuel:
+the hint is checked against the expected type first, and the context it
+enters is the one its argument would. -/
+theorem unhint_check {env : InferEnv} {n : Nat} {Γ : Ctx} {e e' : Expr} {t : Ty}
+    (h : Quiet (checkF env n Γ e t) ()) (he : unhint e = e')
+    (hf : ∀ m Γ', checkF env (m + 1) Γ' e' t = checkForm env m (Γ'.enter e') e' t) :
+    Quiet (checkF env n Γ e' t) () := by
+  cases e with
+  | hinted hh i =>
+    simp only [unhint] at he
+    subst he
+    rcases n with _ | m
+    · simp [checkF] at h
+    simp only [checkF] at h
+    obtain ⟨_, -, h⟩ := h.bind_inv
+    split at h
+    · obtain ⟨_, h, -⟩ := h.bind_inv
+      simp at h
+    rw [hf]
+    have : Γ.enter (.hinted hh i) = Γ.enter i := by simp [Ctx.enter, buildsFromParts]
+    rwa [← this]
+  | _ => simp only [unhint] at he; subst he; exact h
 
 /-- Writing back what `mut` and `out` parameters came to, each of its
 parameter's type, keeps every variable at its type: a variable's, or through
@@ -1117,11 +1143,13 @@ theorem writeBack_sound {env : InferEnv} : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) 
     simp only [writeBack]
     split
     · rename_i hmode
-      cases e
+      unfold ArgKeys at hk1
+      generalize hx : unhint e = e' at hk1 ⊢
+      cases e'
       case var x =>
         rcases a with _ | v
         · exact trivial
-        · obtain ⟨u, k, hl, hu⟩ := var_check he
+        · obtain ⟨u, k, hl, hu⟩ := var_check (unhint_check he hx (fun _ _ => by simp only [checkF]))
           have hw : HasType v u := roll_of hu (ha (some v, (mode, t)) (by simp) v rfl).expose
           exact writeBack_sound n Γ _ args ps kvss after hr hb (setVar_agree hρ hl hw) hk2 hrest
       case place x steps =>
@@ -2053,7 +2081,7 @@ theorem evalArgs_sound : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × E
   | 0, _, _, _, h, _ => by simp [argsF] at h
   | n + 1, Γ, (mk, e) :: args, (mode, t) :: params, h, hb => by
     simp only [argsF] at h
-    obtain ⟨_, hc, h⟩ := h.bind_inv
+    obtain ⟨⟨⟩, hc, h⟩ := h.bind_inv
     rw [evalArgs.eq_def]
     dsimp only
     have rest : ∀ a : Option Val × List Val, (∀ v, a.1 = some v → HasType v t) → ArgKeys Γ mode t e a.2 →
@@ -2075,18 +2103,21 @@ theorem evalArgs_sound : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × E
           ArgsKeys Γ ((mk, e) :: args) ((mode, t) :: params) (vs.map (·.2)))
           (x >>= fun a => evalArgs env call n Γ args params >>= fun vs => pure (a :: vs)) :=
       fun x hx => SoundT.bind' hx (fun a ⟨ho, hk⟩ => rest a ho hk)
-    have byValue : (∀ x steps, e = .place x steps → (mode == .mut || mode == .out) = false) →
+    have byValue : (∀ x steps, unhint e = .place x steps → (mode == .mut || mode == .out) = false) →
         SoundT Γ.vars Γ.ret (fun a : Option Val × List Val =>
           (∀ v, a.1 = some v → HasType v t) ∧ ArgKeys Γ mode t e a.2)
           (argByValue mode (evalC env call n (Γ.forArg mode) e t)) := fun hw =>
       SoundT.weaken (argByValue_sound (evalC_sound n _ e t hc hb)) (fun a ⟨h1, h2⟩ =>
         ⟨h1, h2 ▸ ArgKeys.nil hw⟩)
+    have hplace : ∀ {x steps}, unhint e = .place x steps →
+        Quiet (checkF env n (Γ.forArg mode) (.place x steps) t) () :=
+      fun hx => unhint_check hc hx (fun _ _ => by simp only [checkF])
     split
-    · rename_i d x steps _
+    · rename_i d x steps hx _
       split
       · rename_i hmode
         refine bindRest _ ?_
-        obtain ⟨u, k, u', hl, hst, hu⟩ := place_check hc
+        obtain ⟨u, k, u', hl, hst, hu⟩ := place_check (hplace hx)
         simp only [argAt]
         refine SoundT.get' (fun ρ hρ => ?_)
         obtain ⟨o, hv, hvt⟩ := hρ.lookup x u k hl
@@ -2095,20 +2126,20 @@ theorem evalArgs_sound : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × E
         | some v =>
           simp only [hv, hl]
           refine SoundT.bind' (evalPath_sound d _ u v steps u' hst (hvt v rfl) hb) (fun ⟨w, kvs⟩ ⟨hw, hp⟩ => ?_)
-          refine SoundT.pure' ⟨fun w' e => ?_, fun _ => ⟨u, k, u', hl, hp, hu⟩⟩
+          refine SoundT.pure' ⟨fun w' e => ?_, by unfold ArgKeys; rw [hx]; exact fun _ => ⟨u, k, u', hl, hp, hu⟩⟩
           split at e
           · cases e
           · cases e; exact roll_of hu.symm hw.expose
       · rename_i hmode
         exact bindRest _ (byValue (fun _ _ _ => by simpa using hmode))
-    · rename_i x steps hn
+    · rename_i x steps hn hx _
       split
-      · obtain ⟨d, rfl⟩ := place_check_fuel hc
+      · obtain ⟨d, rfl⟩ := place_check_fuel (hplace hx)
         exact absurd rfl (hn d)
       · rename_i hmode
         exact bindRest _ (byValue (fun _ _ _ => by simpa using hmode))
-    · rename_i hn2 _
-      exact bindRest _ (byValue (fun x steps he => absurd he (hn2 x steps)))
+    · exact bindRest _ (byValue (fun x steps he =>
+        (‹∀ (root : String) (steps : List Step), unhint e = .place root steps → False› x steps he).elim))
   | n + 1, Γ, [], _, _, _ => by simp only [evalArgs]; exact SoundT.pure' ⟨by simp, by simp, trivial⟩
   | n + 1, Γ, _ :: _, [], _, _ => by simp only [evalArgs]; exact SoundT.pure' ⟨by simp, by simp, trivial⟩
 

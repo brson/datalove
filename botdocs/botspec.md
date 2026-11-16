@@ -2510,6 +2510,8 @@ place as they left it.
 
 A type hint changes nothing about how its operand is read:
 `(: [int] / xs)[0]!` borrows `xs` as `xs[0]!` does, and is held the same.
+Nor where an argument is written back: `f(mut : u8 / p.x)` and
+`g(out : string / s)` write to `p.x` and `s` as they would without the hint.
 
 This is what Rust's borrow checker refuses for an expression, a reference
 being live from its operand to its use. Rust also reads a `Copy` operand
