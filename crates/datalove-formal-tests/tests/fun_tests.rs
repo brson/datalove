@@ -893,6 +893,7 @@ const RUN_CORPUS: &[&str] = &[
     "type E = enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
     "fun seti(mut i: index): index\n  set i = : index / 1\n  ret : index / 0\nend fun\nvar xss: [[u32]] = [[: u32 / 1, : u32 / 2], [: u32 / 3, : u32 / 4]]\nvar i: index = : index / 0\nset xss[i]![seti(mut i)]! = : u32 / 99\ndebuglog xss\nvar j: index = : index / 0\nset xss[j]![seti(mut j)]! +!= : u32 / 50\ndebuglog xss\nvar k: index = : index / 0\ndebuglog xss[k]![seti(mut k)]!\nvar xs: [int] = [1000000000000000000000000000001, 2]\ndebuglog (: [int] / xs)[(: index / 1)]!\ndebuglog xs\nvar s: string = \"a-long-heap-string-0123456789-abcdefghij\"\ndebuglog (: string / s) == \"x\"\ndebuglog s\nlet t = (: string / s)@\ndebuglog t\ndebuglog s\n",
     "fun f(mut x: u8, y: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun g(y: u8, mut x: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun h(mut xs: [u8], y: u8): u8\n  set xs = [y, y]\n  ret y\nend fun\nvar a: u8 = : u8 / 1\ndebuglog f(mut a, a)\ndebuglog a\nset a = : u8 / 1\ndebuglog g(a, mut a)\ndebuglog a\nset a = : u8 / 1\ndebuglog f(mut a, : u8 / a) +! f(mut a, a)\ndebuglog a\nvar xs: [u8] = [: u8 / 3, : u8 / 4]\ndebuglog h(mut xs, xs[(: index / 1)]!)\ndebuglog xs\n",
+    "fun set9(mut x: u8): u8\n  set x = : u8 / 9\n  ret : u8 / 0\nend fun\nfun put(out x: u8)\n  set x = : u8 / 7\nend fun\nfun bump(mut i: index): u8\n  set i = : index / 1\n  ret : u8 / 0\nend fun\nfun pair(mut a: u8, mut b: u8)\n  set a = : u8 / 1\n  set b = : u8 / 2\nend fun\nvar xs: [u8] = [: u8 / 3, : u8 / 4, : u8 / 5]\ndebuglog set9(mut xs[(: index / 1)]!)\ndebuglog xs\ncall put(out xs[(: index / 2)]!)\ndebuglog xs\nvar p: (u8, (u8, bool)) = (: u8 / 1, (: u8 / 2, true))\ndebuglog set9(mut p.1.0)\ndebuglog p\ncall pair(mut p.0, mut xs[(: index / 0)]!)\ndebuglog (p, xs)\nvar xss: [[u8]] = [[: u8 / 1, : u8 / 2], [: u8 / 3, : u8 / 4]]\nvar i: index = : index / 0\ndebuglog set9(mut xss[i]![(: index / 1)]!) +! bump(mut i)\ndebuglog (xss, i)\nvar ys: [u8] = [: u8 / 1]\ndebuglog set9(mut ys[(: index / 5)]!)\n",
 ];
 
 /// Literals of the types a driver can pass, each written with its type.
@@ -927,6 +928,9 @@ const ARG_LITERALS: &[(&str, &[&str])] = &[
 fn driver(rng: &mut SeededRng, text: &str) -> String {
     let mut out = String::new();
     let mut fresh = 0;
+    if !text.trim().is_empty() {
+        out += &shaped_calls(rng);
+    }
     for line in text.lines() {
         let Some(rest) = line.strip_prefix("fun ") else { continue };
         let Some(open) = rest.find('(') else { continue };
@@ -1047,6 +1051,32 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
             }
         }
     }
+    out
+}
+
+/// Callees that write their `mut` parameter and then read another, called
+/// with one variable, or a part of one, given to both, and with parts of one
+/// variable given to each, at a copy type picked by `rng`: what the callee
+/// reads is whether an `in` argument was read before the call, as the model
+/// reads it, or through a pointer to what it writes.
+fn shaped_calls(rng: &mut SeededRng) -> String {
+    let copies: Vec<&(&str, &[&str])> = ARG_LITERALS.iter().filter(|(t, _)| *t != "int").collect();
+    let (t, lits) = copies[rng.random_range(0..copies.len())];
+    let mut lit = || fmt!(": {t} / {}", lits[rng.random_range(0..lits.len())]);
+    let (a, b, c) = (lit(), lit(), lit());
+    let mut out = String::new();
+    out += &fmt!("fun wsa(mut x: {t}, y: {t}): {t}\n  set x = {a}\n  ret y\nend fun\n");
+    out += &fmt!("fun wsb(y: {t}, mut x: {t}): {t}\n  set x = {a}\n  ret y\nend fun\n");
+    out += &fmt!("fun wsc(mut x: {t}, mut y: {t}): {t}\n  set x = {a}\n  set y = x\n  ret x\nend fun\n");
+    out += &fmt!("var wsv: {t} = {b}\ndebuglog wsa(mut wsv, wsv)\ndebuglog wsv\n");
+    out += &fmt!("set wsv = {b}\ndebuglog wsb(wsv, mut wsv)\ndebuglog wsv\n");
+    out += &fmt!("set wsv = {c}\ndebuglog (wsv, wsa(mut wsv, wsv), wsv)\n");
+    out += &fmt!("var wsl: [{t}] = [{b}, {c}]\n");
+    out += &fmt!("debuglog wsa(mut wsl[(: index / 0)]!, wsl[(: index / 1)]!)\ndebuglog wsl\n");
+    out += &fmt!("debuglog wsb(wsl[(: index / 1)]!, mut wsl[(: index / 1)]!)\ndebuglog wsl\n");
+    out += &fmt!("var wsp: ({t}, {t}) = ({c}, {b})\n");
+    out += &fmt!("debuglog wsa(mut wsp.1, wsp.1)\ndebuglog wsp\n");
+    out += &fmt!("var wsw: {t} = {c}\ndebuglog wsc(mut wsp.0, mut wsw)\ndebuglog (wsp, wsw)\n");
     out
 }
 

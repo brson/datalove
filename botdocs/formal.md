@@ -624,8 +624,13 @@ Four things are proved of it:
   and say they still line up after (`SoundT`); what a parameter comes to is
   of its type, so writing it back keeps them so (`Fun.writeBack_sound`), a
   `mut` or `out` argument checking against its parameter's type, so that
-  the variable is of it. Writing back to a field or element is not run
-  yet.
+  the variable is of it. An argument into a field or element of a variable,
+  `mut xs[i]!` or `out p.f`, evaluates its keys with the arguments, as the
+  Rust takes its pointer then (`evalPath`), and is written back through the
+  same steps with those keys' values, as a `set` writes (`writeSteps`); the
+  steps and keys are of the types `setPlan` gives them (`PathOk`), so the
+  variable keeps its type, an index that is gone by then returning early as
+  its mode says. Writing back through a hint is not run yet.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -637,9 +642,11 @@ Four things are proved of it:
   at every step (`PassBy.params_agree`). `Unshared` is what O010 and
   lowering's early copy of a copy `in` argument give between them, the copy
   being a location of its own; without it they differ
-  (`PassBy.shared_differs`, `f(mut a, a)` by pointer twice). Values here are
-  never freed, so a `ref` argument moved under it, also O010, is outside
-  this.
+  (`PassBy.shared_differs`, `f(mut a, a)` by pointer twice). A location may
+  be a part of a variable, `mut xs[i]!`, as well as a variable: locations
+  here are one or apart, and O010, comparing arguments by their variable,
+  leaves no two that overlap where either is written. Values here are never
+  freed, so a `ref` argument moved under it, also O010, is outside this.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
@@ -758,11 +765,10 @@ In rough order of what to do next:
   solution of its constraints, since two orders do not step together as a
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
-- **Calls that write back to a part of a variable.** A `mut` or `out`
-  argument is written back only where it is a variable, not a field or an
-  element of one. A call with a recursive type argument stops as well,
-  until the check-once theorem takes one, and so does a call of a function a
-  script declares below it.
+- **Calls that write back through a hint.** A `mut` or `out` argument under
+  a type hint is not written back. A call with a recursive type argument
+  stops as well, until the check-once theorem takes one, and so does a call
+  of a function a script declares below it.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

@@ -45,45 +45,6 @@ def patValues (p : Pat) (v : Val) : EvalM (List (String × Val)) :=
   | .term _ x, .term _ w => pure [(x, w)]
   | _, _ => throw .wrong
 
-/-- A tuple or struct value with a field replaced. -/
-def putField (v : Val) (s : Sel) (w : Val) : EvalM Val :=
-  match v, s with
-  | .tuple vs, .pos i => if i < vs.length then pure (.tuple (vs.set i w)) else throw .wrong
-  | .struct fs, .name n => pure (.struct (replaceFirst n w fs))
-  | _, _ => throw .wrong
-where
-  replaceFirst (n : String) (w : Val) : List (String × Val) → List (String × Val)
-    | [] => []
-    | (m, u) :: fs => if m == n then (m, w) :: fs else (m, u) :: replaceFirst n w fs
-
-/-- A map's entries with the value at a key replaced, the first entry
-`indexVal` would read. -/
-def replaceKey (k w : Val) : List (Val × Val) → EvalM (List (Val × Val))
-  | [] => pure []
-  | (k', u) :: es => do
-    if ← keyEq k k' then pure ((k', w) :: es) else ((k', u) :: ·) <$> replaceKey k w es
-
-/-- A list, map or tensor of rank one or less with its element at a key
-replaced, which `indexVal` read. A tensor's slice is not written. -/
-def putIndex (v k w : Val) : EvalM Val :=
-  match v with
-  | .list vs => match numOf k with
-    | some i => pure (.list (vs.set i.toNat w))
-    | none => throw .wrong
-  | .map es => .map <$> replaceKey k w es
-  | .tensor shape vs => match shape with
-    | [] | [_] => match numOf k with
-      | some i => pure (.tensor shape (vs.set i.toNat w))
-      | none => throw .wrong
-    | _ => throw .unsupported
-  | _ => throw .wrong
-
-/-- A map with a value at a key, replaced or added. -/
-def insertKey (k w : Val) (es : List (Val × Val)) : EvalM (List (Val × Val)) := do
-  match ← findKey k es with
-  | some _ => replaceKey k w es
-  | none => pure (es ++ [(k, w)])
-
 /-- Elements with their positions, as `index` values, or `unsupported` for
 more than `index` counts, which no collection in memory holds. -/
 def indexed (vs : List Val) : EvalM (List (List Val)) :=
@@ -134,23 +95,6 @@ def execFor (body : VEnv → EvalM VEnv) (names : List String) : List (List Val)
     | .error (.cont ρ') => execFor body names rest (restore ρ ρ')
     | .error s => throw s
 
-/-- What a `set` target's steps need evaluated, by the types `setSteps`
-walks: the type the value is written at, and each key with its type, in
-order. None where the checker refuses the target, a compound `set` that
-inserts into a map among it. -/
-def setPlan (op : Option BinOp) : Ty → List Step → Option (Ty × List (Expr × Ty))
-  | t, [] => some (t, [])
-  | t, [.index k none] => match op, t.expose with
-    | none, .map kt vt => some (vt, [(k, kt)])
-    | _, _ => none
-  | t, .field s :: rest => match fieldType t s with
-    | .ok ft => setPlan op ft rest
-    | .error _ => none
-  | _, .index _ none :: _ => none
-  | t, .index k (some _) :: rest => match indexTypes t with
-    | .ok (et, kt) => (setPlan op et rest).map fun (vt, ks) => (vt, (k, kt) :: ks)
-    | .error _ => none
-
 /-- A `set`'s keys, in order. -/
 def evalKeys (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) : List (Expr × Ty) → EvalT (List Val)
   | [] => pure []
@@ -158,35 +102,6 @@ def evalKeys (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) : List (Expr 
     let v ← evalC env call n Γ k kt
     let vs ← evalKeys env call n Γ ks
     pure (v :: vs)
-
-/-- What a variable that held `old`, of type `t`, holds once a `set` writes
-`r` through its steps, with its keys' values `kvs`: a compound one's
-operator applied to what is there. -/
-def writeSteps (op : Option BinOp) : Ty → Option Val → List Step → List Val → Val → EvalM Val
-  | t, old, [], _, r => match op with
-    | none => pure r
-    | some op => match old with
-      | some o => binOp op t o r
-      | none => throw .uninit
-  | _, old, [.index _ none], [kv], r => match old with
-    | some (.map es) => .map <$> insertKey kv r es
-    | some _ => throw .wrong
-    | none => throw .uninit
-  | t, old, .field s :: rest, kvs, r => match fieldType t s, old with
-    | .ok ft, some v => do
-      let part ← fieldVal v s
-      let w ← writeSteps op ft (some part) rest kvs r
-      putField v s w
-    | .ok _, none => throw .uninit
-    | .error _, _ => throw .wrong
-  | t, old, .index _ (some m) :: rest, kv :: kvs, r => match indexTypes t, old with
-    | .ok (et, _), some v => do
-      let part ← indexVal m v kv
-      let w ← writeSteps op et (some part) rest kvs r
-      putIndex v kv w
-    | .ok _, none => throw .uninit
-    | .error _, _ => throw .wrong
-  | _, _, _, _, _ => throw .wrong
 
 /-- `set x … = e`, as `checkSet` types it: the value, then the keys, left to
 right, and only then the place, as the variable is once they have run, which

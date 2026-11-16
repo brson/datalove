@@ -24,8 +24,12 @@ fields, indexes and calls, reading the variables in scope as it goes
 (`EvalT`). A call goes to a `CallFn` the evaluator is given (`FunCall.lean`
 runs the function's body), and writes back to its `mut` and `out` arguments'
 variables, so a variable read after it in the same expression reads what it
-came to. One with type arguments that are not ground is
-`Stop.unsupported`, and so is writing back to a part of a variable. `@`
+came to. A `mut` or `out` argument into a field or element of a variable
+evaluates its keys with the arguments (`evalPath`), as the Rust takes its
+pointer then, and the parameter's value is written back through the same
+steps with those keys' values (`writeBack`, `writeSteps`). One with type
+arguments that are not ground is `Stop.unsupported`, and so is writing back
+through a hint. `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison, and whether two map keys are one,
 are answered where the values' contents are modelled (`valEq?`): numbers,
@@ -275,23 +279,115 @@ def setVar (x : String) (v : Val) : VEnv → VEnv
   | [] => []
   | (y, o) :: ρ => if y == x then (y, some v) :: ρ else (y, o) :: setVar x v ρ
 
-/-- The variable an argument names, which a `mut` or `out` argument is
-written back to. One with steps is not written back yet. -/
-def argVar : Expr → Option String
-  | .var x => some x
-  | _ => none
+/-- A tuple or struct value with a field replaced. -/
+def putField (v : Val) (s : Sel) (w : Val) : EvalM Val :=
+  match v, s with
+  | .tuple vs, .pos i => if i < vs.length then pure (.tuple (vs.set i w)) else throw .wrong
+  | .struct fs, .name n => pure (.struct (replaceFirst n w fs))
+  | _, _ => throw .wrong
+where
+  replaceFirst (n : String) (w : Val) : List (String × Val) → List (String × Val)
+    | [] => []
+    | (m, u) :: fs => if m == n then (m, w) :: fs else (m, u) :: replaceFirst n w fs
 
-/-- Each `mut` and `out` argument's variable set to what its parameter came
-to. -/
-def writeBack : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (Option Val) → EvalM VEnv
-  | ρ, (_, e) :: args, (mode, _) :: params, a :: after =>
+/-- A map's entries with the value at a key replaced, the first entry
+`indexVal` would read. -/
+def replaceKey (k w : Val) : List (Val × Val) → EvalM (List (Val × Val))
+  | [] => pure []
+  | (k', u) :: es => do
+    if ← keyEq k k' then pure ((k', w) :: es) else ((k', u) :: ·) <$> replaceKey k w es
+
+/-- A list, map or tensor of rank one or less with its element at a key
+replaced, which `indexVal` read. A tensor's slice is not written. -/
+def putIndex (v k w : Val) : EvalM Val :=
+  match v with
+  | .list vs => match numOf k with
+    | some i => pure (.list (vs.set i.toNat w))
+    | none => throw .wrong
+  | .map es => .map <$> replaceKey k w es
+  | .tensor shape vs => match shape with
+    | [] | [_] => match numOf k with
+      | some i => pure (.tensor shape (vs.set i.toNat w))
+      | none => throw .wrong
+    | _ => throw .unsupported
+  | _ => throw .wrong
+
+/-- A map with a value at a key, replaced or added. -/
+def insertKey (k w : Val) (es : List (Val × Val)) : EvalM (List (Val × Val)) := do
+  match ← findKey k es with
+  | some _ => replaceKey k w es
+  | none => pure (es ++ [(k, w)])
+
+/-- What a `set` target's steps need evaluated, by the types `setSteps`
+walks: the type the value is written at, and each key with its type, in
+order. None where the checker refuses the target, a compound `set` that
+inserts into a map among it. -/
+def setPlan (op : Option BinOp) : Ty → List Step → Option (Ty × List (Expr × Ty))
+  | t, [] => some (t, [])
+  | t, [.index k none] => match op, t.expose with
+    | none, .map kt vt => some (vt, [(k, kt)])
+    | _, _ => none
+  | t, .field s :: rest => match fieldType t s with
+    | .ok ft => setPlan op ft rest
+    | .error _ => none
+  | _, .index _ none :: _ => none
+  | t, .index k (some _) :: rest => match indexTypes t with
+    | .ok (et, kt) => (setPlan op et rest).map fun (vt, ks) => (vt, (k, kt) :: ks)
+    | .error _ => none
+
+/-- What a variable that held `old`, of type `t`, holds once a `set` writes
+`r` through its steps, with its keys' values `kvs`: a compound one's
+operator applied to what is there. -/
+def writeSteps (op : Option BinOp) : Ty → Option Val → List Step → List Val → Val → EvalM Val
+  | t, old, [], _, r => match op with
+    | none => pure r
+    | some op => match old with
+      | some o => binOp op t o r
+      | none => throw .uninit
+  | _, old, [.index _ none], [kv], r => match old with
+    | some (.map es) => .map <$> insertKey kv r es
+    | some _ => throw .wrong
+    | none => throw .uninit
+  | t, old, .field s :: rest, kvs, r => match fieldType t s, old with
+    | .ok ft, some v => do
+      let part ← fieldVal v s
+      let w ← writeSteps op ft (some part) rest kvs r
+      putField v s w
+    | .ok _, none => throw .uninit
+    | .error _, _ => throw .wrong
+  | t, old, .index _ (some m) :: rest, kv :: kvs, r => match indexTypes t, old with
+    | .ok (et, _), some v => do
+      let part ← indexVal m v kv
+      let w ← writeSteps op et (some part) rest kvs r
+      putIndex v kv w
+    | .ok _, none => throw .uninit
+    | .error _, _ => throw .wrong
+  | _, _, _, _, _ => throw .wrong
+
+/-- Each `mut` and `out` argument's place set to what its parameter came to:
+a variable, or a part of one through its steps, with the keys' values the
+argument was evaluated with (`kvss`), as the pointer the Rust passes was
+taken then. One under a hint is not written back yet. -/
+def writeBack (Γ : Ctx) : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (List Val) →
+    List (Option Val) → EvalM VEnv
+  | ρ, (_, e) :: args, (mode, _) :: params, kvs :: kvss, a :: after =>
     if mode == .mut || mode == .out then
-      match argVar e, a with
-      | some x, some v => writeBack (setVar x v ρ) args params after
-      | some _, none => throw .uninit
-      | none, _ => throw .unsupported
-    else writeBack ρ args params after
-  | ρ, _, _, _ => pure ρ
+      match e, a with
+      | .var x, some v => writeBack Γ (setVar x v ρ) args params kvss after
+      | .place x steps, some v => match Γ.lookup x, ρ.lookup x with
+        | some (u, _), some old => do
+          let w ← writeSteps none u old steps kvs v
+          writeBack Γ (setVar x w ρ) args params kvss after
+        | _, _ => throw .wrong
+      | _, none => throw .uninit
+      | _, _ => throw .unsupported
+    else writeBack Γ ρ args params kvss after
+  | ρ, _, _, _, _ => pure ρ
+
+/-- An argument read by value, none for an `out` one, with no keys. -/
+def argByValue (mode : Mode) (v : EvalT Val) : EvalT (Option Val × List Val) := do
+  let o ← if mode == .out then pure none else some <$> v
+  pure (o, [])
 
 /-- An early return, with the variables as they are, so that a call can
 write back what its parameters came to. -/
@@ -451,21 +547,70 @@ def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → String → List 
       else do
         let ps := sig.params.map fun (m, t) => (m, t.inst θ)
         let vals ← evalArgs env call n Γ args ps
-        let (r, after) ← here (call f θ vals)
-        set (← here (writeBack (← get) args ps after))
+        let (r, after) ← here (call f θ (vals.map (·.1)))
+        set (← here (writeBack Γ (← get) args ps (vals.map (·.2)) after))
         pure r
     | _, _ => throw .wrong
 
 /-- A call's arguments, as `argsF` checks them, an `out` one passing no
-value. -/
+value, each with the keys' values of a `mut` or `out` one into a part of a
+variable, for writing back to (`writeBack`). Such a one is evaluated as
+`checkF` reaches the place's steps, through its form, subsumption and
+synthesis. -/
 def evalArgs (env : InferEnv) (call : CallFn) : Nat → Ctx → List (Option Mode × Expr) →
-    List (Mode × Ty) → EvalT (List (Option Val))
+    List (Mode × Ty) → EvalT (List (Option Val × List Val))
   | 0, _, _, _ => throw .fuel
   | n + 1, Γ, (_, e) :: args, (mode, t) :: params => do
-    let v ← if mode == .out then pure none else some <$> evalC env call n (Γ.forArg mode) e t
+    let a ← match n, e with
+      | d + 4, .place x steps =>
+        if mode == .mut || mode == .out then
+          argAt env call (d + 1) (((Γ.forArg mode).enter e).enter e) mode x steps
+        else argByValue mode (evalC env call (d + 4) (Γ.forArg mode) e t)
+      | m, .place _ _ =>
+        if mode == .mut || mode == .out then throw .fuel
+        else argByValue mode (evalC env call m (Γ.forArg mode) e t)
+      | m, _ => argByValue mode (evalC env call m (Γ.forArg mode) e t)
     let vs ← evalArgs env call n Γ args params
-    pure (v :: vs)
+    pure (a :: vs)
   | _ + 1, _, _, _ => pure []
+
+/-- A `mut` or `out` argument into a part of variable `x` through `steps`:
+what is there, none for an `out` one, and the keys' values. -/
+def argAt (env : InferEnv) (call : CallFn) : Nat → Ctx → Mode → String → List Step →
+    EvalT (Option Val × List Val)
+  | 0, _, _, _, _ => throw .fuel
+  | d + 1, Γ, mode, x, steps => do
+    match (← get).lookup x, Γ.lookup x with
+    | some (some v), some (u, _) => do
+      let (w, kvs) ← evalPath env call d Γ u v steps
+      pure (if mode == .out then none else some w, kvs)
+    | some none, _ => throw .uninit
+    | _, _ => throw .wrong
+
+/-- A place's steps from a value of type `t`, as `evalSteps` takes them,
+with the values of their keys, in order. -/
+def evalPath (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val → List Step → EvalT (Val × List Val)
+  | 0, _, _, _, _ => throw .fuel
+  | _ + 1, _, _, v, [] => pure (v, [])
+  | n + 1, Γ, t, v, [st] => evalPathStep env call n Γ t v st
+  | n + 1, Γ, t, v, st :: rest => do
+    let u ← here (typeOf (stepF env n Γ.through t st))
+    let (w, k) ← evalPathStep env call n Γ.through t v st
+    let (r, ks) ← evalPath env call n Γ u w rest
+    pure (r, k ++ ks)
+
+/-- A step from a value of type `t`, as `evalStep` takes it, with its key's
+value. -/
+def evalPathStep (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val → Step → EvalT (Val × List Val)
+  | 0, _, _, _, _ => throw .fuel
+  | _ + 1, _, _, v, .field s => do pure (← here (fieldVal v s), [])
+  | _ + 1, _, _, _, .index _ none => throw .wrong
+  | n + 1, Γ, t, v, .index k (some m) => do
+    let (_, kt) ← match indexTypes t with
+      | .ok p => pure p
+      | .error _ => throw .wrong
+    let kv ← evalC env call n Γ k kt
+    pure (← here (indexVal m v kv), [kv])
 
 /-- A place's steps from a value of type `t`, as `stepsF` types them. -/
 def evalSteps (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val → List Step → EvalT Val
