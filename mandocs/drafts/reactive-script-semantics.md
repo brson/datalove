@@ -512,12 +512,6 @@ until no more units need to rerun.
 
 ## But what about edits that change what a unit does?
 
-<!--
-_But_ the first rules assume an edit keeps the unit's accesses.
-_Therefore_ an edit retracts the old code and applies the new,
-and changes to accesses can break and fix later units.
--->
-
 The first rules look up what the triggering unit does,
 and assume an edit doesn't change that.
 It can,
@@ -707,11 +701,6 @@ and the fixed unit applies what it does.
 
 ## But what if a rerun unit has other bindings that must be restored?
 
-<!--
-_But_ every rerun reruns a whole unit, with all of its accesses.
-_Therefore_ every rerun is a modification, and the rules repeat until nothing changes.
--->
-
 The tables work one binding at a time,
 but a rerun runs a whole unit.
 Whatever else it reads has to be as it found it,
@@ -790,10 +779,6 @@ until nothing more needs to rerun.
 
 
 ## A complete set of rules for recompiles and reruns for moves and mutations
-
-<!--
-_Therefore_ we propose an algorithm and suggest it is complete.
--->
 
 A session is a list of units, run in order.
 A unit provides bindings of its own,
@@ -954,13 +939,6 @@ are used and apply the same rules as `let` and `var`.
 
 ## Validating this design with a literate test suite
 
-<!--
-
-_But_ no proof, how do we know this is correct?
-_Therefore_ all these examples and more are tests.
-
--->
-
 The examples in this document are test cases.
 Their code is test case input.
 The corresponding tables are the expected outcome.
@@ -1056,14 +1034,6 @@ The text around them is less scrutinized, mostly written by LLMs.
 
 ## Comparing to the literature
 
-<!--
-_But_ we've entirely ignored the FRP literature,
-_Therefore_ let's review some papers.
-
-Prefer this last because I want to experiment on my own,
-then do the upstream research and refine based on the literature.
--->
-
 This work has precedent in reactive notebooks,
 dependence analysis in compilers and build systems,
 and functional reactive programing.
@@ -1115,11 +1085,6 @@ The rules developed here appear to pass all their cases and more.
 
 
 ## A live example of the Datalove scripting engine
-
-<!--
-_Therefore_ we implemented this.
-Here's a cool demo. Use original motivating example.
--->
 
 This is the script from the intro,
 each cell a script unit.
