@@ -36,15 +36,15 @@ to rerun that always produces the same result as a fresh run of all cells.
 - [How does editing a unit affect preceding units?](#user-content-how-does-editing-a-unit-affect-preceding-units)
 - [But what about edits that change what a unit does?](#user-content-but-what-about-edits-that-change-what-a-unit-does)
 - [But what if a rerun unit has other bindings that must be restored?](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored)
-- [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
 
 **Part 3. Results and Discussion**
 
+- [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
 - [Functions and modules are bindings too](#user-content-functions-and-modules-are-bindings-too)
 - [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
 - [Comparing to the literature](#user-content-comparing-to-the-literature)
 - [A live example of the Datalove scripting engine](#user-content-a-live-example-of-the-datalove-scripting-engine)
-
+- [Conclusions](#user-content-conclusions)
 
 
 
@@ -93,7 +93,7 @@ sorts each payee into a category,
 totals the categories,
 and lists the ones that went over budget.
 
-The transactions live in a data file, `local/home/transactions.dlt`:
+The transactions live in a data file, `local/data/transactions.dlt`:
 
 ```datalove
 [
@@ -122,7 +122,7 @@ require module sys/std/map
 require module sys/std/string
 
 // unit 2
-require data local/home/transactions: [
+require data local/data/transactions: [
   {
     day: u32,
     payee: string,
@@ -295,7 +295,7 @@ Which ones depends on how each unit accessed the bindings of the units before it
 read them, moved them, overwrote them or updated them.
 In Datalove the type checker knows these facts.
 The rest of this post builds the rerun rules from those accesses.
-It ends with this script running live in the Datalove engine,
+It ends with an interactive replay of this script running in the Datalove engine,
 making these same edits.
 
 
