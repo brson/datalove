@@ -1058,7 +1058,10 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// fixtures relies on either.
     ///
     /// Arguments that are not places cannot alias: a nested call is evaluated
-    /// to a value before this call runs.
+    /// to a value before this call runs. Nor can a copy given to an `in`
+    /// parameter, which lowering reads into a value of its own before the
+    /// call where another argument names its variable `mut` or `out`, so
+    /// `f(mut a, a)` hands the callee `a` as it was.
     fn check_argument_aliasing(&mut self, args: &[ExprFun<'db>], callee_modes: &[ParamMode]) {
         let is_borrow_conflict = |mode: Option<ParamMode>| {
             matches!(mode, Some(ParamMode::Mut) | Some(ParamMode::Out))
@@ -1079,7 +1082,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 let ref_then_moved = modes.0 == Some(ParamMode::Ref)
                     && modes.1 == Some(ParamMode::In)
                     && !self.expr_type(*later).is_copy();
-                if !is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) && !ref_then_moved {
+                // A copy given to an `in` parameter is read before the call,
+                // into a value of its own, so the callee writing the other
+                // argument cannot change it.
+                let copied_in = (modes.0 == Some(ParamMode::In) && self.expr_type(*earlier).is_copy())
+                    || (modes.1 == Some(ParamMode::In) && self.expr_type(*later).is_copy());
+                if copied_in || (!is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) && !ref_then_moved) {
                     continue;
                 }
                 let name = self.bindings[later_root.0 as usize].name.C();

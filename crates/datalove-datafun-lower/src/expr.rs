@@ -168,6 +168,15 @@ fn lower_operand_here<'db>(
     }
 }
 
+/// The variable a place names, through any hints: what the ownership
+/// analysis compares arguments by.
+fn place_root_name<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<&'db str> {
+    match peel_hints(ctx, expr).kind() {
+        ExprFunKind::Place(place) => Some(place.root.text(ctx.db).as_ref()),
+        _ => None,
+    }
+}
+
 /// Whether evaluating `expr` may write to a variable: whether it holds a call
 /// with a `mut` or `out` argument, which writes back to it.
 pub fn writes_back<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> bool {
@@ -713,7 +722,18 @@ fn lower_expression_here<'db>(
             let mut out_drops = Vec::new();
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let later_writes = call_args[i + 1..].iter().any(|a| writes_back(ctx, expr.at(*a)));
+                // A copy `in` argument is read now if a later argument may
+                // write back to its variable, or if the callee is handed that
+                // variable `mut` or `out` too: passed by pointer, it would see
+                // what the callee writes.
+                let later_writes = call_args[i + 1..].iter().any(|a| writes_back(ctx, expr.at(*a)))
+                    || (mode == ParamMode::In && place_root_name(ctx, expr.at(*arg)).is_some_and(|root| {
+                        call_args.iter().enumerate().any(|(k, other)| {
+                            k != i
+                                && matches!(param_modes.get(k), Some(ParamMode::Mut | ParamMode::Out))
+                                && place_root_name(ctx, expr.at(*other)) == Some(root)
+                        })
+                    }));
                 let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i), &mut out_drops, later_writes)?;
                 // Track in-mode args as pending intermediate, a binding handed
                 // over as well as a value: a later argument's `?` returns

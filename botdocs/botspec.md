@@ -66,7 +66,7 @@ Appendix B rather than described.
 - [11. Ownership Analysis](#user-content-11-ownership-analysis)
   - [11.1 Errors](#user-content-111-errors)
   - [11.2 Mutable Arguments](#user-content-112-mutable-arguments)
-  - [11.3 Argument Aliasing](#user-content-113-argument-aliasing)
+  - [11.3 How Arguments and Operands Are Read](#user-content-113-how-arguments-and-operands-are-read)
   - [11.4 Loop Restrictions](#user-content-114-loop-restrictions)
   - [11.5 The Collection a `for` Walks](#user-content-115-the-collection-a-for-walks)
   - [11.6 Branch Consistency](#user-content-116-branch-consistency)
@@ -2326,7 +2326,7 @@ from Datafun through literals and data files.
 | O007 | MoveInLoop | Moving outer-scoped linear value in loop |
 | O008 | InconsistentBranchMove | Branches disagree on whether a value is held: moved, or `set` again, in one but not another |
 | O009 | OutParamPartialWrite | Writing fields of `out` param individually |
-| O010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out`, or a `ref` one is then moved |
+| O010 | AliasedMutableArgument | Two arguments alias, one `mut`/`out` and the other not a copy `in`, or a `ref` one is then moved |
 | O011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |
 | O012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
 | O013 | UseAfterMoveInEarlierUnit | Using a binding an earlier script unit gave away |
@@ -2360,62 +2360,119 @@ call bump(mut compute())    // error: the write would be discarded
 An `in` parameter is not assignable either, and a `ref` parameter reports the
 more specific O004.
 
-### 11.3 Argument Aliasing
+### 11.3 How Arguments and Operands Are Read
 
-Every parameter is passed by reference, so two arguments naming the same
-binding hand the callee two references to one object. That is an error when
-either is `mut` or `out`:
+The meaning of a call is copy-in, copy-out, evaluated left to right:
+
+1. The arguments are evaluated in order. Each reads its variable where it is
+   written, as the variables are after the arguments before it have run.
+2. The callee runs on those values. Its `mut` and `out` parameters are its
+   own until it returns, and an `in` or `ref` one never changes.
+3. Once it returns, each `mut` and `out` parameter's value is written back
+   to its argument's place, also on an early return (`ret`, `?`, `!`).
+
+The formal model runs calls exactly this way (`Fun.evalCall`).
+
+The compiled code passes every parameter by pointer instead, and the callee
+reads and writes the caller's variables through them while it runs. The two
+agree when no location a callee writes is reachable through another of its
+parameters, or through an operand still waiting to be read. Lowering and
+the ownership checker together guarantee that:
+
+- **A copy read early.** A copy value that would otherwise be read through a
+  pointer after something could have changed it is read into a value of its
+  own where it is written. This makes the pointer and copy-in results the
+  same.
+- **Everything else held.** A value that is not copied early is held, and
+  changing or moving its variable while it is held is refused: O010 within
+  one call's arguments, O017 across an expression.
+
+`formal/Datalove/Proofs/PassBy.lean` proves the core of this. A callee run by
+pointer ends with the same store as by copy-in, copy-out, and reads the same
+at every step, whenever no parameter's location is a writable parameter's
+(`ptr_eq_copy`). `shared_differs` shows the two differ for `f(mut a, a)`
+passed by pointer twice. The differential run tests check the compiled
+code against the model on generated and hand-written programs.
+
+#### Arguments of one call (O010)
+
+Two arguments of one call naming the same variable are compared by the
+modes of their parameters:
+
+| Earlier, then later | `in`, copy | `in`, not a copy | `ref` | `mut` / `out` |
+|---|---|---|---|---|
+| **`in`, copy** | ok | ok | ok | ok: copied first |
+| **`in`, not a copy** | use after move (O001) | use after move (O001) | use after move (O001) | O010 |
+| **`ref`** | ok | O010: moved under the `ref` | ok | O010 |
+| **`mut` / `out`** | ok: copied first | O010 | O010 | O010 |
+
+The cell "ok: copied first" is a copy `in` argument beside its variable
+passed `mut` or `out`. A bare variable as such an argument would otherwise
+be passed as a pointer to the variable itself, so lowering reads it into a
+value of its own before the call. Any other copy `in` argument, such as
+`xs[0]!`, `p.x` or `a +! 1`, is computed into a value already. Either way
+the callee gets the variable as it was before the call, whatever it writes
+through the other parameter:
 
 ```datalove
-require module sys/std/string
+fun f(mut x: u8, y: u8): u8
+    set x = : u8 / 9
+    ret y
+end fun
 
+var a: u8 = : u8 / 1
+let r = f(mut a, a)                // r = 1, then a = 9
+call list.push(mut xs, xs[0]!)     // xs: [u8]: pushes the first element
+```
+
+Every other case that writes or moves is refused:
+
+```datalove
 fun grow(mut self: string, ref other: string)
     call string.push_str(mut self, ref other)
 end fun
 
 var s: string = "hi"
-call grow(mut s, ref s)    // error (O010): aliased mutable argument
-```
-
-A `ref` argument followed by the same binding given away to an `in`
-parameter is an error too, since the callee would read what it had taken:
-
-```datalove
-debuglog f(ref s, s)       // error (O010): s: string is not a copy
+call grow(mut s, ref s)    // error (O010): the callee would read what it grows
+call take(mut s, s)        // error (O010): s: string is not a copy
+debuglog f(ref s, s)       // error (O010): s is moved under the `ref`
 debuglog f(ref s, s@)      // ok: a clone is given away
 ```
 
-Two `ref` arguments are permitted, as are two reads of a copy value:
+A non-copy element given to an `in` parameter, `f(mut xs, xs[0]!)` with
+`xs: [string]`, never gets this far. Taking a non-copy element by value is
+F072 whatever the call, so it is written `xs[0]!@`, a clone that is no
+longer `xs`.
 
-```datalove
-let equal = compare(ref x, ref x)    // ok: both ref
-let n = mul_checked(b, b)            // ok: both consume a copy type
-```
+Generic values (`T`) count as not a copy, which is safe but refuses more.
+Arguments are compared by the variable their place starts at. Distinct
+fields (`f(mut p.x, ref p.y)`) and distinct indexes (`f(mut a[i]?,
+ref a[j]?)`) are refused, even where they do not overlap in fact.
 
-Arguments are compared by the binding their place is rooted at. Distinct
-fields (`f(mut p.x, ref p.y)`) and distinct indexes (`f(mut a[i]?, ref a[j]?)`)
-share a root and are rejected, even where they do not overlap in fact.
+#### Operands across an expression (O017)
 
-### 11.3a Operands Held by Reference
-
-An expression's operands are evaluated left to right. A copy operand, or a
-copy argument to an `in` parameter, is read where it is written, as a
-tuple's element is, so what runs after it cannot change what it read:
+The same rule holds between an operand and what runs after it in the same
+expression. A copy operand, a copy `in` argument and a copy `set` key are
+read where they are written when something after them may write back to a
+variable, through a call's `mut` or `out` argument:
 
 ```datalove
 var a: u8 = : u8 / 1
-let x = a +! set9(mut a)          // 1 + 0: `a` was read first
-let y = first(a, set9(mut a))     // 9 is written, but `first` gets 1
+let x = a +! set9(mut a)               // 1 + 0: `a` was read first
+let y = first(a, set9(mut a))          // first gets 1; then a = 9
+set xss[i]![seti(mut i)]! = v          // the outer key is i as written
 ```
 
-Some operands are read through a reference once the rest of the expression
-has run: an argument passed `ref`, `mut` or `out`, until its call is made;
-an operator's operand that is not a copy, while the other is evaluated; an
-index's base, while its key is; a `set`'s key looked up with `!` or `?`
-that is not a copy, while the later keys are; and a compound `set`'s value
-that is not a copy, while the keys are. Taking the variable such an operand
-reads `mut` or `out`, or moving it, before then is an error, since it would
-change what the reference reads, or free it:
+These operands are instead read through a pointer once the rest of the
+expression has run, so they are held, and taking their variable `mut` or
+`out`, or moving it, before then is an error (O017):
+
+- an argument passed `ref`, `mut` or `out`, until its call is made;
+- an operator's operand that is not a copy, while the other is evaluated;
+- an index's base, while its key is;
+- a `set`'s key looked up with `!` or `?` that is not a copy, while the
+  later keys are;
+- a compound `set`'s value that is not a copy, while the keys are.
 
 ```datalove
 call add(mut a, inc(mut a))            // error (O017)
@@ -2423,23 +2480,21 @@ let b = n + inc(mut n)                 // error (O017): n: int is not a copy
 call set77(mut xs[0]!, grow(mut xs))   // error (O017): grow may move the buffer
 let c = xs[grow(mut xs)]!              // error (O017)
 set xs[k(mut xs)]! += xs[1]!           // error (O017): the value is read after the key
-set xs[0]! = grow(mut xs)              // ok: the value runs before the place is reached
 set ms[k]![eat(k)] = v                 // error (O017): k: string is still read
-set xss[i]![seti(mut i)]! = v          // ok: i is a copy, read before seti runs
+set xs[0]! = grow(mut xs)              // ok: the value runs before the place is reached
 ```
 
-A type hint changes nothing about how its operand is read: `(: [int] / xs)[0]!`
-borrows `xs` as `xs[0]!` does, and `list.push(mut xs, : int / xs[0]!)` is O010 as the unhinted
-call is.
-
 A `set` runs its value, then its keys, left to right, and only then reaches
-its place, so either may change the place's variable: the write goes to
-the place as they left it.
+its place, so either may change the place's variable: the write goes to the
+place as they left it.
+
+A type hint changes nothing about how its operand is read:
+`(: [int] / xs)[0]!` borrows `xs` as `xs[0]!` does, and is held the same.
 
 This is what Rust's borrow checker refuses for an expression, a reference
-being live from its operand to its use. Two arguments of one call are O010
-above; a call's arguments one after another (`f(mut a) + f(mut a)`) borrow
-in turn, and are allowed.
+being live from its operand to its use. Rust also reads a `Copy` operand
+into a temporary where it is written. A call's arguments one after another
+(`f(mut a) + f(mut a)`) borrow in turn, and are allowed.
 
 ### 11.4 Loop Restrictions
 

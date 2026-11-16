@@ -128,8 +128,9 @@ codes! {
         InconsistentBranchMove = 8,
         /// Writing fields of an `out` parameter one at a time.
         OutParamPartialWrite = 9,
-        /// Two arguments share a place root, one of them `mut` or `out`, or a
-        /// `ref` one followed by one given away to an `in` parameter.
+        /// Two arguments share a place root, one of them `mut` or `out` and the
+        /// other not a copy given to an `in` parameter, or a `ref` one followed
+        /// by one given away to an `in` parameter.
         AliasedMutableArgument = 10,
         /// An immutable binding passed as `mut` or `out`.
         CannotMutateImmutable = 11,

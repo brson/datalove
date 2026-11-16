@@ -626,6 +626,20 @@ Four things are proved of it:
   `mut` or `out` argument checking against its parameter's type, so that
   the variable is of it. Writing back to a field or element is not run
   yet.
+- **Passing by pointer is copying in and out where nothing written is
+  shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
+  copy-in, copy-out is the meaning of a call; the Rust passes every
+  parameter by pointer. Of a callee abstracted to steps that each set a
+  parameter to a function of some of them, writing only its writable
+  (`mut`, `out`) ones, run by pointer into the caller's store or on copies
+  written back at the end: where no other parameter's location is a writable
+  one's (`Unshared`), the store ends the same and the callee reads the same
+  at every step (`PassBy.params_agree`). `Unshared` is what O010 and
+  lowering's early copy of a copy `in` argument give between them, the copy
+  being a location of its own; without it they differ
+  (`PassBy.shared_differs`, `f(mut a, a)` by pointer twice). Values here are
+  never freed, so a `ref` argument moved under it, also O010, is outside
+  this.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by

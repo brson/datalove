@@ -1,0 +1,38 @@
+----------
+module local/test/main
+----------
+
+// A copy given to an `in` parameter beside the same variable passed `mut`
+// is read before the call, so the callee sees it as it was, whatever it
+// writes through the other: `f(mut a, a)` gives 1 and leaves `a` 9.
+fun f(mut x: u32, y: u32): u32
+    set x = 9
+    ret y
+end fun
+
+fun g(y: u32, mut x: u32): u32
+    set x = 9
+    ret y
+end fun
+
+fun test(): (u32, u32, u32, u32)
+    var a: u32 = 1
+    let r1: u32 = f(mut a, a)
+    let a1: u32 = a
+    set a = 1
+    let r2: u32 = g(a, mut a)
+    ret (r1, a1, r2, a)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.test
+
+----------
+scriptunit-expr
+----------
+
+test()

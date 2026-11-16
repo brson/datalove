@@ -892,6 +892,7 @@ const RUN_CORPUS: &[&str] = &[
     "fun at(l: [u8], i: index): ?u8\n  ret some l[i]?\nend fun\nfun sum(l: [u32]): int\n  var s: int = 0\n  for x in ref l\n    set s += x@\n  end for\n  ret s\nend fun\nfun fact(n: int): int\n  if n .< 2\n    ret 1\n  end if\n  ret n * fact(n - 1)\nend fun\nfun count(n: int): int\n  var i: int = 0\n  loop while i .< n\n    set i += 1\n    if i == 7\n      break\n    end if\n  end loop\n  ret i\nend fun\ndebuglog at([1, 2, 3], : index / 1)\ndebuglog at([1, 2, 3], : index / 3)\ndebuglog sum([1, 2, 4294967295])\ndebuglog fact(20)\ndebuglog count(3)\ndebuglog count(100)\n",
     "type E: enum { atom A, term B u8, term C (u8, bool) }\nfun f(e: E): u8\n  match e\n  case atom A\n    ret : u8 / 1\n  case term B x\n    ret x\n  case term C p\n    if p.1\n      ret p.0\n    end if\n    ret : u8 / 0\n  end match\nend fun\nfun g(o: ?u8): u8\n  if o |v|\n    ret v\n  else\n    ret : u8 / 9\n  end if\nend fun\nfun h(r: !u8): !u8\n  let v = r!\n  ret ok (v *! (: u8 / 2))\nend fun\nlet t: [(u8, bool)] = [(1, true), (2, false)]\ndebuglog f(enum { atom A })\ndebuglog f(enum { term B 5 })\ndebuglog f(enum { term C (7, true) })\ndebuglog f(enum { term C (7, false) })\ndebuglog g(some 3)\ndebuglog g(none)\ndebuglog h(ok 100)\ndebuglog h(ok 200)\ndebuglog t\ndebuglog t[1]!\nvar m: [i16] = [1, 2, 3]\nset m[0]! = : i16 / -5\nset m[2]! +!= : i16 / 10\ndebuglog m\ndebuglog 1\nlet z = h(ok 200)!\ndebuglog 2\n",
     "fun seti(mut i: index): index\n  set i = : index / 1\n  ret : index / 0\nend fun\nvar xss: [[u32]] = [[: u32 / 1, : u32 / 2], [: u32 / 3, : u32 / 4]]\nvar i: index = : index / 0\nset xss[i]![seti(mut i)]! = : u32 / 99\ndebuglog xss\nvar j: index = : index / 0\nset xss[j]![seti(mut j)]! +!= : u32 / 50\ndebuglog xss\nvar k: index = : index / 0\ndebuglog xss[k]![seti(mut k)]!\nvar xs: [int] = [1000000000000000000000000000001, 2]\ndebuglog (: [int] / xs)[(: index / 1)]!\ndebuglog xs\nvar s: string = \"a-long-heap-string-0123456789-abcdefghij\"\ndebuglog (: string / s) == \"x\"\ndebuglog s\nlet t = (: string / s)@\ndebuglog t\ndebuglog s\n",
+    "fun f(mut x: u8, y: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun g(y: u8, mut x: u8): u8\n  set x = : u8 / 9\n  ret y\nend fun\nfun h(mut xs: [u8], y: u8): u8\n  set xs = [y, y]\n  ret y\nend fun\nvar a: u8 = : u8 / 1\ndebuglog f(mut a, a)\ndebuglog a\nset a = : u8 / 1\ndebuglog g(a, mut a)\ndebuglog a\nset a = : u8 / 1\ndebuglog f(mut a, : u8 / a) +! f(mut a, a)\ndebuglog a\nvar xs: [u8] = [: u8 / 3, : u8 / 4]\ndebuglog h(mut xs, xs[(: index / 1)]!)\ndebuglog xs\n",
 ];
 
 /// Literals of the types a driver can pass, each written with its type.
@@ -918,7 +919,8 @@ const ARG_LITERALS: &[(&str, &[&str])] = &[
 ///
 /// A call whose one argument written back is `mut` is also run where the
 /// variable is read before and after it in the same expression, by a tuple
-/// and by `==`, hinted too, and twice in one; and where the variable is an
+/// and by `==`, hinted too, twice in one, and beside itself given to an `in`
+/// parameter; and where the variable is an
 /// `index`, as (or as giving) the inner key of a `set` that reads the variable
 /// as its outer key, plain and compound. What each sees of the variable is
 /// the evaluation order.
@@ -1007,6 +1009,17 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
         let (c1, c2) = (call_with(rng, &v), call_with(rng, &v));
         out += &fmt!("debuglog ({v}@, (: {t} / {v})@, {c1}, {v}@)\ndebuglog {v}\n");
         out += &fmt!("debuglog ({c1}, {c2})\ndebuglog {v}\n");
+        // The variable also given to each `in` parameter of its type, which
+        // reads it as it was before the call where it is a copy; an `int`
+        // is not, and is O010.
+        if t != "int" && parsed.iter().enumerate().any(|(i, (mode, (pt, _)))| i != m && mode.is_empty() && *pt == t) {
+            let args: Vec<String> = parsed.iter().enumerate().map(|(i, (mode, (pt, lits)))| match *mode {
+                _ if i == m => fmt!("mut {v}"),
+                _ if *pt == t => v.C(),
+                _ => fmt!(": {pt} / {}", lit_of(rng, lits)),
+            }).collect();
+            out += &fmt!("debuglog {name}({})\ndebuglog {v}\n", args.join(", "));
+        }
         if ret == Some(t) {
             let c3 = call_with(rng, &v);
             out += &fmt!("debuglog {v} == {c1}\ndebuglog (: {t} / {v}) == {c2}\ndebuglog {c3} == {v}\ndebuglog {v}\n");
