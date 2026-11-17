@@ -426,12 +426,10 @@ let a = 100
 // unit 2
 var b = 10
 // unit 3
-set b = b + 1
-// unit 4
-let c = a + b
+set b = a + b
 ```
 
-Fresh-run result: `c == 111`.
+Fresh-run result: `b == 110`.
 
 Edit unit 1:
 
@@ -441,14 +439,12 @@ let a = 1000
 // unit 2
 var b = 10
 // unit 3
-set b = b + 1
-// unit 4
-let c = a + b
+set b = a + b
 ```
 
-Fresh-run result: `c == 1011`.
-Unit 1, 2, 3, 4 rerun, 2 because 3 required it transitively.
-Without the backward rerun: `b == 1012`.
+Fresh-run result: `c == 1010`.
+Unit 1, 2, 3 rerun, 2 because 3 required it transitively.
+Without the backward rerun: `b == 1020`.
 
 ---
 
