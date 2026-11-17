@@ -1112,10 +1112,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         };
 
         for (j, later) in args.iter().enumerate() {
-            let Some(later_root) = self.expr_to_place_root(*later) else {
+            // Each argument is compared as the place it reads, the later one
+            // as the earlier, so that a field of a hinted place,
+            // `(: T / p).a`, is `p` in either order.
+            let Some(later_path) = self.place_path(*later) else {
                 continue;
             };
-            let later_path = self.place_path(*later).expect("a place has a path");
             for (i, earlier) in args.iter().enumerate().take(j) {
                 if !self.place_path(*earlier).is_some_and(|p| p.overlaps(&later_path)) {
                     continue;
@@ -1146,7 +1148,10 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 if !is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) && !ref_then_moved {
                     continue;
                 }
-                let name = self.bindings[later_root.0 as usize].name.C();
+                let name = match &later_path.root {
+                    Walked::Binding(id) => self.bindings[id.0 as usize].name.C(),
+                    Walked::Earlier(name) => name.C(),
+                };
                 let expr_key = later.key();
                 if is_borrow_conflict(modes.0) || is_borrow_conflict(modes.1) {
                     self.errors.push(AnalysisError::AliasedMutableArgument { expr_key, name });

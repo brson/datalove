@@ -1,0 +1,36 @@
+----------
+module local/test/main
+----------
+
+// A field of a hinted place, `(: R / r).s`, is `r` to O010 in either order:
+// after `mut r` it was not compared, and the callee read through `b` what it
+// had written through `a`.
+type R = {x: u8, s: string}
+
+fun f(mut a: R, ref b: string): string
+    set a = {x = 0, s = "x"}
+    ret b@
+end fun
+
+fun g(ref b: string, mut a: R): string
+    set a = {x = 0, s = "x"}
+    ret b@
+end fun
+
+fun later(): string
+    var r: R = {x = 1, s = "a-long-heap-string-0123456789"}
+    ret f(mut r, ref (: R / r).s)
+end fun
+
+fun earlier(): string
+    var r: R = {x = 1, s = "a-long-heap-string-0123456789"}
+    ret g(ref (: R / r).s, mut r)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.later
+debuglog later()

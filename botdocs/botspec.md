@@ -2473,6 +2473,9 @@ call f(mut r.1, ref r.1.0)             // error (O010): r.1 holds r.1.0
 call f(mut xs[0]!, ref xs[1]!)         // error (O010): one list's elements
 ```
 
+A field of what is a place only under a hint, `(: T / p).a`, is taken as
+the whole of `p`.
+
 As in Rust, distinct indexes are refused: whether `i` and `j` differ is not
 known, and a callee that grows the list moves every element. O017 tells
 places apart the same way, so `first(ref p.0, set9(mut p.1))` is fine and
