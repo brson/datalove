@@ -9,10 +9,11 @@ script (`runScript`) logs, at each top-level `debuglog`, a value of the type
 the checker gives it, and ends, or returns early with a value of the
 script's type `!()`, or stops at what is not run yet, at a variable read
 before it is set, or where a loop or calls ran as long as they were given.
-It joins the theorems for expressions, statements and calls: each function
-goes into the table as checked (`ProgOk`), by the check-once theorem
-(`Fun.body_checks`), its consts' values of their types since F088 keeps a
-top-level const's type free of type parameters.
+It joins the theorems for expressions, statements and calls. The consts
+are evaluated first, each to a value of its type (`constPass_sound`), and
+every function is in the table from the start, as checked (`funTable_ok`),
+by the check-once theorem (`Fun.body_checks`), its consts' values of their
+types since F088 keeps a top-level const's type free of type parameters.
 -/
 
 namespace Datalove.Fun
@@ -90,25 +91,6 @@ keeps a top-level const's. -/
 def ConstsFree (vars : List (String × Ty × Kind)) : Prop :=
   ∀ p ∈ vars, p.2.2 = .const_ → p.2.1.containsVar = false
 
-theorem Agree.filter_name (x : String) : ∀ {vars : List (String × Ty × Kind)} {ρ : VEnv}, Agree vars ρ →
-    Agree (vars.filter (·.1 != x)) (ρ.filter (·.1 != x))
-  | _, _, .nil => .nil
-  | _, _, @Agree.cons y _ _ _ _ _ ho h => by
-    simp only [List.filter_cons]
-    split
-    · exact .cons ho (Agree.filter_name x h)
-    · exact Agree.filter_name x h
-
-theorem constVals_agree : ∀ {vars : List (String × Ty × Kind)} {ρ : VEnv}, Agree vars ρ →
-    Agree (constsOf vars) (constVals vars ρ)
-  | _, _, .nil => .nil
-  | _, _, @Agree.cons x t k _ _ _ ho h => by
-    simp only [constsOf, constVals]
-    have hr := Agree.filter_name x (constVals_agree h)
-    split
-    · exact .cons ho hr
-    · exact hr
-
 theorem constsOf_mem : ∀ {vars : List (String × Ty × Kind)} {p : String × Ty × Kind}, p ∈ constsOf vars →
     p ∈ vars ∧ p.2.2 = .const_
   | [], _, h => by simp [constsOf] at h
@@ -123,18 +105,43 @@ theorem constsOf_mem : ∀ {vars : List (String × Ty × Kind)} {p : String × T
     · obtain ⟨h1, h2⟩ := constsOf_mem (List.mem_filter.mp h).1
       exact ⟨List.mem_cons_of_mem _ h1, h2⟩
 
+/-- The consts evaluated hold values of their types. -/
+def StoreOk (store : CStore) : Prop := ∀ p ∈ store, ∀ v, p.2.2 = some v → HasType v p.2.1
+
+theorem StoreOk.drop {store : CStore} (h : StoreOk store) (n : Nat) : StoreOk (store.drop n) :=
+  fun p hp => h p (List.mem_of_mem_drop hp)
+
+/-- Variables whose consts' values come from the consts evaluated agree with
+them. -/
+theorem constEnv_agree {store : CStore} (hs : StoreOk store) :
+    ∀ vars : List (String × Ty × Kind), Agree vars (constEnv vars store)
+  | [] => .nil
+  | (x, t, k) :: vars => by
+    refine .cons (fun v hv => ?_) (constEnv_agree hs vars)
+    split at hv
+    · cases hf : store.find? (fun (y, u, _) => y == x && u == t) with
+      | none => simp [hf] at hv
+      | some p =>
+        simp only [hf, Option.bind_some] at hv
+        have hm := List.mem_of_find?_eq_some hf
+        have hp := List.find?_some hf
+        obtain ⟨y, u, o⟩ := p
+        simp only [Bool.and_eq_true, beq_iff_eq] at hp
+        obtain ⟨-, rfl⟩ := hp
+        exact hs _ hm v hv
+    · simp at hv
+
 /-- The consts a function sees, with type arguments substituted, are as they
-were, and their values agree. -/
-theorem consts_agree {vars : List (String × Ty × Kind)} {ρ : VEnv} (h : Agree vars ρ) (hc : ConstsFree vars)
-    (θ : List (String × Ty)) :
-    Agree ((constsOf vars).map fun (x, t, k) => (x, t.inst θ, k)) (constVals vars ρ) := by
-  have : ((constsOf vars).map fun (x, t, k) => (x, t.inst θ, k)) = constsOf vars := by
+were, so their values agree. -/
+theorem constEnv_inst {consts : List (String × Ty × Kind)} (hfree : ∀ p ∈ consts, p.2.1.containsVar = false)
+    {store : CStore} (hs : StoreOk store) (θ : List (String × Ty)) :
+    Agree (consts.map fun (x, t, k) => (x, t.inst θ, k)) (constEnv consts store) := by
+  have : (consts.map fun (x, t, k) => (x, t.inst θ, k)) = consts := by
     refine (List.map_congr_left (g := id) (fun p hp => ?_)).trans (List.map_id _)
-    obtain ⟨hm, hk⟩ := constsOf_mem hp
     obtain ⟨x, t, k⟩ := p
-    simp [Ty.inst_novar θ t (hc _ hm hk)]
+    simp [Ty.inst_novar θ t (hfree _ hp)]
   rw [this]
-  exact constVals_agree h
+  exact constEnv_agree hs consts
 
 theorem foldl_kinds (k : Kind) : ∀ (Δ : List (String × Ty)) (vars : List (String × Ty × Kind)) p,
     p ∈ Δ.foldl (fun vs (x, t) => (x, t, k) :: vs) vars → p ∈ vars ∨ p.2.2 = k
@@ -258,51 +265,148 @@ theorem StopOkS.top {Γ : Ctx} {B : Prop} {s : Stop} (h : StopOkS Γ B s) (hl : 
   | cont ρ => exact absurd h.1 (by simp [hl])
   | _ => exact h
 
-theorem lookup_append_some {α β} [BEq α] {a : α} {b : β} : ∀ {l1 l2 : List (α × β)},
-    (l1 ++ l2).lookup a = some b → l1.lookup a = some b ∨ l2.lookup a = some b
-  | [], _, h => .inr h
-  | (x, y) :: l1, l2, h => by
-    simp only [List.cons_append, List.lookup] at h ⊢
-    split at h
-    · exact .inl h
-    · exact lookup_append_some h
+/-- A function as declared is one `runCall` runs as checked, whatever its
+consts' values: as `ProgOk` asks of its table entry, with its consts' types
+free of type parameters. -/
+def FunDefOk (env : InferEnv) (sigs : List (String × Sig)) (fd : FunDef) : Prop :=
+  (∀ p ∈ fd.consts, p.2.1.containsVar = false) ∧
+  ∀ sig, sigs.lookup fd.name = some sig → fd.params.length = sig.params.length ∧
+    ∀ θ, groundArgs θ = true →
+      (∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true) →
+      SQuiet (checkBlockF env fuel ((funCtx sigs fd.aliases fd.consts fd.tps fd.params sig).inst θ) fd.body
+        >>= fun _ => reportIf (match sig.ret.inst θ with
+          | .ty _ => completes fd.body
+          | .void => false) "F063") ()
 
-theorem ProgOk.append {env : InferEnv} {sigs : List (String × Sig)} {funs extra : List (String × FunInfo)}
-    (h1 : ProgOk env sigs funs) (h2 : ProgOk env sigs extra) : ProgOk env sigs (funs ++ extra) := by
-  intro f sig fi hs hl
-  rcases lookup_append_some hl with hl | hl
-  · exact h1 f sig fi hs hl
-  · exact h2 f sig fi hs hl
+/-- The table of functions as declared, their consts' values from consts
+evaluated, is as `ProgOk` asks. -/
+theorem funTable_ok {env : InferEnv} {sigs : List (String × Sig)} {defs : List FunDef} {store : CStore}
+    (hd : ∀ fd ∈ defs, FunDefOk env sigs fd) (hs : StoreOk store) : ProgOk env sigs (funTable defs store) := by
+  intro f sig fi hsig hl
+  have hm := lookup_mem hl
+  simp only [funTable, List.mem_map] at hm
+  obtain ⟨fd, hfd, he⟩ := hm
+  simp only [FunDef.entry, Prod.mk.injEq] at he
+  obtain ⟨rfl, rfl⟩ := he
+  obtain ⟨hfree, hok⟩ := hd fd hfd
+  obtain ⟨hlen, hbody⟩ := hok sig hsig
+  exact ⟨hlen, fun θ hg hbd => ⟨hbody θ hg hbd, constEnv_inst hfree (hs.drop _) θ⟩⟩
 
-/-- A function declaration that checks goes into the table as checked. -/
-theorem funEntry_ok (ss0 : List Stmt) {Γ : Ctx} {ρ : VEnv} (hρ : Agree Γ.vars ρ) (hc : ConstsFree Γ.vars)
-    {f : FunDecl} (hf : SQuiet (checkFun (resolveNames ss0).1 Γ.aliases (constsOf Γ.vars) f) ()) :
-    ProgOk inferEnv (resolveNames ss0).1 (funEntry (resolveNames ss0).1 Γ ρ f).toList := by
-  intro f' sig fi hs hfi
+/-- A function declaration that checks is one as checked. -/
+theorem funDef_ok (ss0 : List Stmt) {Γ : Ctx} (hc : ConstsFree Γ.vars) {seen : Nat} {f : FunDecl}
+    (hf : SQuiet (checkFun (resolveNames ss0).1 Γ.aliases (constsOf Γ.vars) f) ()) :
+    ∀ fd ∈ (funDef (resolveNames ss0).1 Γ seen f).toList, FunDefOk inferEnv (resolveNames ss0).1 fd := by
+  intro fd hfd
   obtain ⟨name, tps, params, ret, body⟩ := f
-  simp only [funEntry] at hfi
+  simp only [funDef] at hfd
   cases hsn : (resolveNames ss0).1.lookup name with
-  | none => simp [hsn] at hfi
+  | none => simp [hsn] at hfd
   | some sig0 =>
-    simp only [hsn] at hfi
-    split at hfi
+    simp only [hsn] at hfd
+    split at hfd
     · rename_i hcond
       simp only [Bool.and_eq_true, beq_iff_eq] at hcond
       obtain ⟨⟨htp, hlen⟩, tf⟩ := hcond
-      simp only [Option.toList_some, List.lookup] at hfi
-      split at hfi
-      · rename_i he
-        simp only [beq_iff_eq] at he
-        subst he
-        simp only [Option.some.injEq] at hfi
-        subst hfi
+      simp only [Option.toList_some, List.mem_singleton] at hfd
+      subst hfd
+      refine ⟨fun p hp => ?_, fun sig hs => ?_⟩
+      · obtain ⟨hm, hk⟩ := constsOf_mem hp
+        exact hc p hm hk
+      · simp only at hs
         rw [hsn] at hs
         cases hs
         exact ⟨by simpa using hlen, fun θ hg hbd =>
-          ⟨body_checks ss0 Γ.aliases (constsOf Γ.vars) f' tps params ret body _ hsn htp tf hf θ hg hbd,
-            consts_agree hρ hc θ⟩⟩
-      · simp at hfi
-    · simp at hfi
+          body_checks ss0 Γ.aliases (constsOf Γ.vars) name tps params ret body _ hsn htp tf hf θ hg hbd⟩
+    · simp at hfd
+
+/-- Every function of a script that checks is declared as checked. -/
+theorem funDefs_ok (ss0 : List Stmt) : ∀ (ss : List Stmt) (Γ : Ctx) (seen : Nat),
+    SQuiet (checkTop (resolveNames ss0).1 Γ ss) () → ConstsFree Γ.vars →
+    ∀ fd ∈ funDefs (resolveNames ss0).1 Γ seen ss, FunDefOk inferEnv (resolveNames ss0).1 fd
+  | [], _, _, _, _ => by simp [funDefs]
+  | s :: ss, Γ, seen, h, hc => by
+    cases s
+    case fun_ f =>
+      simp only [checkTop] at h
+      obtain ⟨⟨⟩, hf, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
+      intro fd hfd
+      simp only [funDefs, List.mem_append] at hfd
+      rcases hfd with hfd | hfd
+      · exact funDef_ok ss0 hc hf fd hfd
+      · exact funDefs_ok ss0 ss Γ seen h hc fd hfd
+    all_goals
+      simp only [checkTop] at h
+      obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
+      have hrun := congrArg Prod.fst hs
+      simp only [funDefs]
+      rw [hrun]
+      exact funDefs_ok ss0 ss Γ' _ h (checkStmtF_consts hs hc)
+
+/-- A const binds its name in front of the variables. -/
+theorem const_vars {env : InferEnv} {n : Nat} {Γ Γ' : Ctx} {x : String} {hint : Option Hint} {e : Expr}
+    (h : SQuiet (checkStmtF env (n + 1) Γ (.const_ x hint e)) Γ') : ∃ t, Γ'.vars = (x, t, .const_) :: Γ.vars := by
+  simp only [checkStmtF] at h
+  obtain ⟨Γ1, hb1, h⟩ := SQuiet.bind_inv (fun _ => by repeat' stmt_step) h
+  obtain ⟨_, -, h⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
+  rw [SQuiet.pure_iff] at h; subst h
+  obtain ⟨Δ, t, hp, rfl⟩ := bindChecked_shape hb1
+  simp only [patBindings, pure, Except.pure, Except.ok.injEq] at hp
+  subst hp
+  exact ⟨t, by simp [Ctx.bindAllAs, List.foldl, Ctx.bind]⟩
+
+/-- A script's consts, evaluated in order from consts of their types, are
+of their types, or stop as a script may. -/
+theorem constPass_sound (ss0 : List Stmt) (k d : Nat) (defs : List FunDef)
+    (hd : ∀ fd ∈ defs, FunDefOk inferEnv (resolveNames ss0).1 fd) :
+    ∀ (ss : List Stmt) (Γ : Ctx) (store : CStore),
+    SQuiet (checkTop (resolveNames ss0).1 Γ ss) () → Γ.Runs (resolveNames ss0).1 → Γ.inLoop = false →
+    Γ.ret = .ty (.result unitTy) → ConstsFree Γ.vars → StoreOk store →
+    match constPass (resolveNames ss0).1 defs k d Γ store ss with
+    | .ok store' => StoreOk store'
+    | .error s => StopOk (.ty (.result unitTy)) s.unreturn
+  | [], _, store, _, _, _, _, _, hs => by simp only [constPass]; exact hs
+  | s :: ss, Γ, store, h, hb, hl, hr, hc, hst => by
+    have hcall := runCall_ok inferEnv _ _ (funTable_ok hd hst) k d
+    cases s
+    case fun_ f =>
+      simp only [checkTop] at h
+      obtain ⟨⟨⟩, -, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
+      simp only [constPass]
+      exact constPass_sound ss0 k d defs hd ss Γ store h hb hl hr hc hst
+    case const_ x hint e =>
+      simp only [checkTop] at h
+      obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
+      obtain ⟨hS, g⟩ := execStmt_sound inferEnv _ _ hcall fuel k Γ _ _ Γ' hs hb (constEnv_agree hst Γ.vars)
+      have hrun := congrArg Prod.fst hs
+      have hs' : SQuiet (checkStmtF inferEnv ((fuel - 1) + 1) Γ (.const_ x hint e)) Γ' := hs
+      obtain ⟨t, hv⟩ := const_vars hs'
+      simp only [constPass]
+      rw [hrun]
+      dsimp only
+      rcases hres : execStmt inferEnv (runCall inferEnv (resolveNames ss0).1 (funTable defs store) k d) fuel k Γ
+          (constEnv Γ.vars store) (.const_ x hint e) with s' | ρ'
+      · rw [hres] at hS
+        exact StopOkS.top hS hl hr
+      · rw [hres] at hS
+        have ha := hS.1
+        rw [hv] at ha
+        cases ha with
+        | cons ho ha =>
+          simp only [hv, bind, Except.bind]
+          exact constPass_sound ss0 k d defs hd ss Γ' _ h (g.runs hb) (g.2.1.trans hl) (g.1.trans hr)
+            (checkStmtF_consts hs hc) (fun p hp => by
+              rcases List.mem_cons.mp hp with rfl | hp
+              · exact ho
+              · exact hst p hp)
+    all_goals
+      simp only [checkTop] at h
+      obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
+      obtain ⟨-, g⟩ := execStmt_sound inferEnv _ _ hcall fuel k Γ _ _ Γ' hs hb (constEnv_agree hst Γ.vars)
+      have hrun := congrArg Prod.fst hs
+      simp only [constPass]
+      rw [hrun]
+      exact constPass_sound ss0 k d defs hd ss Γ' store h (g.runs hb) (g.2.1.trans hl) (g.1.trans hr)
+        (checkStmtF_consts hs hc) hst
 
 /-- A script's statements from a context its run agrees with run soundly. -/
 theorem runTop_sound (ss0 : List Stmt) (k d : Nat) :
@@ -318,9 +422,9 @@ theorem runTop_sound (ss0 : List Stmt) (k d : Nat) :
     cases s
     case fun_ f =>
       simp only [checkTop] at h
-      obtain ⟨⟨⟩, hf, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
+      obtain ⟨⟨⟩, -, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
       simp only [runTop]
-      exact runTop_sound ss0 k d ss Γ ρ _ log h hb hl hr hρ hc (hp.append (funEntry_ok ss0 hρ hc hf)) hlog
+      exact runTop_sound ss0 k d ss Γ ρ funs log h hb hl hr hρ hc hp hlog
     case debuglog e =>
       simp only [checkTop] at h
       obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
@@ -373,8 +477,19 @@ early with a value of its type `!()`, or stops at what is not run yet, at a
 variable read before it is set, or where a loop or calls ran as long as they
 were given. -/
 theorem runScript_sound (ss : List Stmt) (h : checkScript ss = #[]) (k d : Nat) :
-    TopOk (runScript k d ss).result ∧ ∀ p ∈ (runScript k d ss).log, HasType p.2 p.1 :=
-  runTop_sound ss k d ss _ [] [] [] (checkScript_quiet h) ⟨rfl, rfl⟩ rfl rfl .nil
-    (fun _ h => by simp at h) (fun _ _ _ _ h => by simp at h) (fun _ h => by simp at h)
+    TopOk (runScript k d ss).result ∧ ∀ p ∈ (runScript k d ss).log, HasType p.2 p.1 := by
+  have hq := checkScript_quiet h
+  have hd := funDefs_ok ss ss _ 0 hq (fun _ h => by simp at h)
+  have hcp := constPass_sound ss k d _ hd ss _ [] hq ⟨rfl, rfl⟩ rfl rfl (fun _ h => by simp at h)
+    (fun _ h => by simp at h)
+  simp only [runScript]
+  split
+  · rename_i store hres
+    rw [hres] at hcp
+    exact runTop_sound ss k d ss _ [] _ [] hq ⟨rfl, rfl⟩ rfl rfl .nil (fun _ h => by simp at h)
+      (funTable_ok hd hcp) (fun _ h => by simp at h)
+  · rename_i s hres
+    rw [hres] at hcp
+    exact ⟨hcp, by simp⟩
 
 end Datalove.Fun

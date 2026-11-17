@@ -367,7 +367,8 @@ bounds, division, indexes in and out of range, `for`, `loop`, recursion,
 `match`, a binding `if`, `!` and `set` through an index, and `mut` and `out`
 arguments written back, an early return's included, from calls inside
 larger expressions, read later in them, and returned early from after,
-under a hint or not, and strings, escaped, compared and as map keys. The
+under a hint or not, strings, escaped, compared and as map keys, and calls
+of functions declared below, from the top level, a body and a const. The
 Rust must take each corpus script and the model run it to its end: one
 refused would compare nothing, and one the model stops in only a prefix,
 which a gap in the model passes.
@@ -665,11 +666,17 @@ Four things are proved of it:
   value of the type the checker gives it, and the script ends, or returns
   early with a value of its type `!()`, or stops at what is not run yet, at a
   variable read before it is set, or where a loop or calls ran as long as
-  they were given. It puts the theorems above together: each function goes
-  into the table calls run as its declaration is reached, with the values of
-  the consts it sees, and is as `ProgOk` asks, by the check-once theorem and
-  since F088 keeps a top-level const's type free of type parameters. A call
-  of a function declared below it is not run yet. A function goes into the
+  they were given. It puts the theorems above together. As the Rust does,
+  the script's top-level consts are evaluated first, in order (`constPass`),
+  and every function is in the table calls run from the start, wherever it
+  is declared, with the values of the consts declared above it, the latest
+  of each name and type (`constEnv`). Each evaluated const holds a value of
+  its type (`StoreOk`), so each function is as `ProgOk` asks, by the
+  check-once theorem and since F088 keeps a top-level const's type free of
+  type parameters (`funTable_ok`). A const's expression reads only consts
+  above it, through the functions it calls too, as F089 sees to; the model
+  does not need that for soundness, since a const it read before it was
+  evaluated would read as unset, a stop a script may end with. A function goes into the
   table only where its signature's type parameters are its declaration's, its
   parameters as many as its signature's, and its body declares no type alias;
   `resolveNames` and the parser make that so, which is not yet proved, so the
@@ -786,8 +793,7 @@ In rough order of what to do next:
   generic and its instance do; it is better left until the canonical form
   the issue proposes settles what a recursive type's spelling is.
 - **Calls the model does not run.** A call with a recursive type argument
-  stops, until the check-once theorem takes one, and so does a call of a
-  function a script declares below it.
+  stops, until the check-once theorem takes one.
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.

@@ -11,9 +11,9 @@ parameters bound to the arguments' values and the consts in scope to
 theirs. A `ret e` is what the call gives, a `ret` or a body that ends gives
 the unit, and with it what each parameter came to, for the caller to write
 back a `mut` or `out` argument from (`paramsAfter`). Calls nest at most as
-deep as they are given (`Stop.diverge`). A function not in the table, as one
-a script declares below the call is not yet, is not run
-(`Stop.unsupported`).
+deep as they are given (`Stop.diverge`). A function not in the table, one
+whose declaration does not match its signature as `resolveNames` gives it,
+is not run (`Stop.unsupported`).
 
 It takes `funCtx` and `Ctx.inst` from the proofs, so that the context a body
 runs in is by definition the one it was checked in.
@@ -63,8 +63,7 @@ def runCall (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String 
       | .error (.returned (some v) ρ') => pure (v, paramsAfter fi.params (restore ρ ρ'))
       | .error (.returned none ρ') => pure (unitVal, paramsAfter fi.params (restore ρ ρ'))
       | .error s => throw s
-    -- A function a script declares below where it is called is not in the
-    -- table yet.
+    -- A function whose declaration does not match its signature.
     | some _, none => throw .unsupported
     | none, _ => throw .wrong
 

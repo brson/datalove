@@ -24,6 +24,7 @@ home here.
   - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
+  - [A top-level const declared twice is read as the last one everywhere](#user-content-a-top-level-const-declared-twice-is-read-as-the-last-one-everywhere)
   - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
   - [A non-copy part of a temporary can only be borrowed](#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
   - [A `let` with no type that fails to typecheck leaves its name undefined](#user-content-a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
@@ -214,6 +215,31 @@ yet, so nothing calls `edit_module` but the tests.
 ## The language and its checks
 
 Missing features, and the checker refusing what it should accept or accepting what it should refuse.
+
+### A top-level const declared twice is read as the last one everywhere
+
+**Reproduced.** A function reads the const its declaration sees by name only,
+so a later const of the same name replaces it, even in a call made before the
+later const is reached; one of another type crashes the runtime.
+
+```datalove
+const k: int = 1
+fun f(): int
+  ret k@
+end fun
+debuglog f()       // 2, where Section 8.2 says 1: `f` sees the `k` above it
+const k: int = 2
+debuglog f()       // 2, likewise
+```
+
+With `const k: string = "s"` as the second, a script that runs prints nothing
+and panics with "attempted to free invalid large allocation". The Lean model
+reads the `k` above the function (`Fun.constEnv`), and so prints 1. The run
+tests do not find it, since worldgen never declares a const twice.
+
+Fixing it means either refusing a second top-level const of a name, which
+the spec does not say, or resolving a const read to the declaration in scope,
+as the checker does, rather than by name; which is a language decision.
 
 ### The loop check asks where a binding ended up, not whether its move repeats
 

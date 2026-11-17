@@ -934,6 +934,10 @@ fn dump() {
 /// reaches only after them; and copy arguments and operands read where
 /// written.
 const RUN_CORPUS: &[&str] = &[
+    // Calls of functions declared below: from the top level, from a body,
+    // and from a const, which reads only consts above it; a function reads
+    // the consts above it, evaluated before anything runs.
+    "debuglog twice(3)\nconst K: int = 5\nconst L: int = sq(K@)\nfun twice(x: int): int\n  ret add(x@, x) + K@\nend fun\nfun add(a: int, b: int): int\n  ret a + b\nend fun\nfun sq(x: int): int\n  ret x * x\nend fun\ndebuglog L\nfun late(): int\n  ret L@ + twice(1)\nend fun\ndebuglog late()\n",
     // Strings by their text: escapes read, printed escaped again, compared,
     // and looked up as a map's keys.
     "fun same(a: string, b: string): bool\n  ret a == b\nend fun\nfun look(ref m: %{string -> u8}, k: string): ?u8\n  ret some m[k]?\nend fun\nlet s = \"q\\\"b\\\\s\\nn\\rr\\tt\\0z\\u{e9}\\u{1F600}\"\ndebuglog s\ndebuglog s == \"q\\\"b\\\\s\\nn\\rr\\tt\\0z\\u{E9}\\u{1f600}\"\ndebuglog same(s, \"q\")\ndebuglog (\"\", \"\\u{41}\" == \"A\", \"a\" != \"a\")\nlet m: %{string -> u8} = %{\"a\" -> 1, \"b\\n\" -> 2}\ndebuglog look(ref m, \"b\\n\")\ndebuglog look(ref m, \"c\")\nvar t: {s: string, o: ?string} = {s = \"x\", o = some \"y\"}\nset t.s = \"z\"\ndebuglog t\ndebuglog t.o == some \"y\"\n",
