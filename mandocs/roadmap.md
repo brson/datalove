@@ -48,11 +48,12 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## On deck
 
-- split @ into clone/coerce
-- work stacks for runtime traversals
+- split @ into clone/coerce?
+- work stacks for runtime traversals / dtors
 - interactive math ergonomics
 - rational numbers
 - saturating and wrapping math ops
+- date-time types
 
 
 ## Punted
