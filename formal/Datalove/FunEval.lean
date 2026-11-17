@@ -27,8 +27,10 @@ variables, so a variable read after it in the same expression reads what it
 came to. A `mut` or `out` argument into a field or element of a variable
 evaluates its keys with the arguments (`evalPath`), as the Rust takes its
 pointer then, and the parameter's value is written back through the same
-steps with those keys' values (`writeBack`, `writeSteps`). A hinted one
-is written back to the place under the hint (`unhint`). One with type
+steps with those keys' values (`writeBack`, `writeSteps`). A hinted one,
+or a field or index of a hinted place, is the place its hints are on
+(`placeOf`), and is evaluated as `checkF` reaches it, through the hints, each
+key at the fuel it is checked at (`placeC`). One with type
 arguments that are not ground is `Stop.unsupported`. `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison, and whether two map keys are one,
@@ -365,24 +367,19 @@ def writeSteps (op : Option BinOp) : Ty → Option Val → List Step → List Va
     | .error _, _ => throw .wrong
   | _, _, _, _, _ => throw .wrong
 
-/-- An argument with its hint taken off: a hint says what type it is and
-nothing of where it is, so `mut : T / x` writes back to `x`. Only one hint
-parses there. -/
-def unhint : Expr → Expr
-  | .hinted _ e => e
-  | e => e
-
 /-- Each `mut` and `out` argument's place set to what its parameter came to:
 a variable, or a part of one through its steps, with the keys' values the
 argument was evaluated with (`kvss`), as the pointer the Rust passes was
-taken then, under a hint or not. -/
+taken then. A hint says what type a place is and nothing of where it is, so
+`mut : T / x` writes back to `x`, and `mut (: R / r).a` to `r.a`
+(`placeOf`). -/
 def writeBack (Γ : Ctx) : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (List Val) →
     List (Option Val) → EvalM VEnv
   | ρ, (_, e) :: args, (mode, _) :: params, kvs :: kvss, a :: after =>
     if mode == .mut || mode == .out then
-      match unhint e, a with
-      | .var x, some v => writeBack Γ (setVar x v ρ) args params kvss after
-      | .place x steps, some v => match Γ.lookup x, ρ.lookup x with
+      match placeOf e, a with
+      | some (x, []), some v => writeBack Γ (setVar x v ρ) args params kvss after
+      | some (x, steps), some v => match Γ.lookup x, ρ.lookup x with
         | some (u, _), some old => do
           let w ← writeSteps none u old steps kvs v
           writeBack Γ (setVar x w ρ) args params kvss after
@@ -396,6 +393,15 @@ def writeBack (Γ : Ctx) : VEnv → List (Option Mode × Expr) → List (Mode ×
 def argByValue (mode : Mode) (v : EvalT Val) : EvalT (Option Val × List Val) := do
   let o ← if mode == .out then pure none else some <$> v
   pure (o, [])
+
+/-- A `mut` or `out` argument read from its place: none for an `out` one,
+whatever its place holds, and a `mut` one's place has to hold something. -/
+def placeArg (mode : Mode) (m : EvalT (Option Val × List Val)) : EvalT (Option Val × List Val) := do
+  let (o, kvs) ← m
+  if mode == .out then pure (none, kvs)
+  else match o with
+    | some v => pure (some v, kvs)
+    | none => throw .uninit
 
 /-- An early return, with the variables as they are, so that a call can
 write back what its parameters came to. -/
@@ -563,37 +569,75 @@ def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → String → List 
 /-- A call's arguments, as `argsF` checks them, an `out` one passing no
 value, each with the keys' values of a `mut` or `out` one into a part of a
 variable, for writing back to (`writeBack`). Such a one is evaluated as
-`checkF` reaches the place's steps, through its form, subsumption and
-synthesis, under a hint or not. -/
+`checkF` reaches its place (`placeC`). -/
 def evalArgs (env : InferEnv) (call : CallFn) : Nat → Ctx → List (Option Mode × Expr) →
     List (Mode × Ty) → EvalT (List (Option Val × List Val))
   | 0, _, _, _ => throw .fuel
   | n + 1, Γ, (_, e) :: args, (mode, t) :: params => do
-    let a ← match n, unhint e with
-      | d + 4, .place x steps =>
-        if mode == .mut || mode == .out then
-          argAt env call (d + 1) (((Γ.forArg mode).enter (.place x steps)).enter (.place x steps)) mode x steps
-        else argByValue mode (evalC env call (d + 4) (Γ.forArg mode) e t)
-      | m, .place _ _ =>
-        if mode == .mut || mode == .out then throw .fuel
-        else argByValue mode (evalC env call m (Γ.forArg mode) e t)
-      | m, _ => argByValue mode (evalC env call m (Γ.forArg mode) e t)
+    let a ← match placeOf e with
+      | some _ =>
+        if mode == .mut || mode == .out then placeArg mode (placeC env call n (Γ.forArg mode) e t)
+        else argByValue mode (evalC env call n (Γ.forArg mode) e t)
+      | none => argByValue mode (evalC env call n (Γ.forArg mode) e t)
     let vs ← evalArgs env call n Γ args params
     pure (a :: vs)
   | _ + 1, _, _, _ => pure []
 
-/-- A `mut` or `out` argument into a part of variable `x` through `steps`:
-what is there, none for an `out` one, and the keys' values. -/
-def argAt (env : InferEnv) (call : CallFn) : Nat → Ctx → Mode → String → List Step →
-    EvalT (Option Val × List Val)
-  | 0, _, _, _, _ => throw .fuel
-  | d + 1, Γ, mode, x, steps => do
-    match (← get).lookup x, Γ.lookup x with
-    | some (some v), some (u, _) => do
-      let (w, kvs) ← evalPath env call d Γ u v steps
-      pure (if mode == .out then none else some w, kvs)
-    | some none, _ => throw .uninit
-    | _, _ => throw .wrong
+/-- A `mut` or `out` argument's place, as `checkF` checks it against
+`expected`: what it holds, none for a variable with no value yet, and its
+keys' values (`placeS`). -/
+def placeC (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Ty → EvalT (Option Val × List Val)
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, .hinted h inner, expected => placeForm env call n (Γ.enter (.hinted h inner)) inner expected
+  | n + 1, Γ, e, expected => placeForm env call n (Γ.enter e) e expected
+
+/-- A place, as `checkForm` checks it: by subsumption. -/
+def placeForm (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Ty → EvalT (Option Val × List Val)
+  | 0, _, _, _ => throw .fuel
+  | n + 1, Γ, e, _ => placeSub env call n Γ e
+
+/-- A place, as `subsumeF` synthesizes it. -/
+def placeSub (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT (Option Val × List Val)
+  | 0, _, _ => throw .fuel
+  | n + 1, Γ, e => placeS env call n Γ e
+
+/-- A place, as `synthF` types it: a variable, its steps from one, a hint on
+a place, or a field or index of one, each key evaluated at the fuel it is
+checked at. -/
+def placeS (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT (Option Val × List Val)
+  | 0, _, _ => throw .fuel
+  | n + 1, Γ₀, e =>
+    let Γ := Γ₀.enter e
+    match e with
+    | .var x => do match (← get).lookup x with
+      | some o => pure (o, [])
+      | none => throw .wrong
+    | .place x steps => do match (← get).lookup x, Γ.lookup x with
+      | some (some v), some (u, _) => do
+        let (w, kvs) ← evalPath env call n Γ u v steps
+        pure (some w, kvs)
+      | some none, _ => throw .uninit
+      | _, _ => throw .wrong
+    | .hinted h inner => do
+      let t ← match Γ.hint h with
+        | .ok t => pure t
+        | .error _ => throw .wrong
+      placeForm env call n Γ inner t
+    | .proj b s => do
+      match ← placeS env call n (Γ.under b) b with
+      | (some v, kvs) => pure (some (← here (fieldVal v s)), kvs)
+      | (none, _) => throw .uninit
+    | .index b k (some m) => do
+      let bt ← here (typeOf (synthF env n (Γ.under b) b))
+      let (_, kt) ← match indexTypes bt with
+        | .ok p => pure p
+        | .error _ => throw .wrong
+      let (o, kvs) ← placeS env call n (Γ.under b) b
+      let kv ← evalC env call n Γ k kt
+      match o with
+      | some v => pure (some (← here (indexVal m v kv)), kvs ++ [kv])
+      | none => throw .uninit
+    | _ => throw .wrong
 
 /-- A place's steps from a value of type `t`, as `evalSteps` takes them,
 with the values of their keys, in order. -/

@@ -518,36 +518,6 @@ theorem setVar_agree {vars : List (String × Ty × Kind)} {ρ : VEnv} (h : Agree
       simp only [h1, Bool.false_eq_true, ↓reduceIte] at hl ⊢
       exact .cons ho (ih hl)
 
-/-- A variable checked against a type is of that type, unfolded. -/
-theorem var_check {env : InferEnv} : ∀ {n : Nat} {Γ : Ctx} {x : String} {t : Ty},
-    Quiet (checkF env n Γ (.var x) t) () → ∃ u k, Γ.lookup x = some (u, k) ∧ u.expose = t.expose
-  | 0, _, _, _, h => by simp [checkF] at h
-  | n + 1, Γ, x, t, h => by
-    simp only [checkF] at h
-    rcases n with _ | n
-    · simp [checkForm] at h
-    simp only [checkForm] at h
-    rcases n with _ | n
-    · simp [subsumeF] at h
-    simp only [subsumeF] at h
-    obtain ⟨u, hu, h⟩ := h.bind_inv
-    split at h
-    · simp at h
-    rename_i hm
-    rcases n with _ | n
-    · simp [synthF] at hu
-    simp only [synthF] at hu
-    cases hl : ((Γ.enter (.var x)).enter (.var x)).lookup x with
-    | none => simp [hl] at hu
-    | some p =>
-      obtain ⟨u', k⟩ := p
-      simp only [hl] at hu
-      split at hu
-      · simp at hu
-      rw [Quiet.pure_iff] at hu; subst hu
-      exact ⟨u', k, hl, Ty.meet_iff.mp (by simpa using hm)⟩
-
-
 /-- A context evaluation runs in: no type parameter's bound, and the
 program's functions. -/
 def Ctx.Runs (sigs : List (String × Sig)) (Γ : Ctx) : Prop := Γ.bounds = [] ∧ Γ.sigs = sigs
@@ -1086,10 +1056,10 @@ def PathOk (Γ : Ctx) (t : Ty) (steps : List Step) (u : Ty) (kvs : List Val) : P
 with, for writing back to it: its variable's type, and its steps to a part
 that is of the parameter's type, unfolded. -/
 def ArgKeys (Γ : Ctx) (mode : Mode) (t : Ty) (e : Expr) (kvs : List Val) : Prop :=
-  match unhint e with
-  | .place x steps => (mode == .mut || mode == .out) = true →
+  match placeOf e with
+  | some (x, steps) => (mode == .mut || mode == .out) = true →
       ∃ u k u', Γ.lookup x = some (u, k) ∧ PathOk Γ u steps u' kvs ∧ u'.expose = t.expose
-  | _ => True
+  | none => True
 
 /-- `ArgKeys` of each argument. -/
 def ArgsKeys (Γ : Ctx) : List (Option Mode × Expr) → List (Mode × Ty) → List (List Val) → Prop
@@ -1097,35 +1067,15 @@ def ArgsKeys (Γ : Ctx) : List (Option Mode × Expr) → List (Mode × Ty) → L
   | _, _, _ => True
 
 theorem ArgKeys.nil {Γ : Ctx} {mode : Mode} {t : Ty} {e : Expr}
-    (h : ∀ x steps, unhint e = .place x steps → (mode == .mut || mode == .out) = false) : ArgKeys Γ mode t e [] := by
+    (h : placeOf e = none ∨ (mode == .mut || mode == .out) = false) : ArgKeys Γ mode t e [] := by
   unfold ArgKeys
   split
   · rename_i x steps he
-    intro hm; simp [h x steps he] at hm
+    intro hm
+    rcases h with h | h
+    · simp [h] at he
+    · simp [h] at hm
   · trivial
-
-/-- An argument checked under a hint checks without it, at the same fuel:
-the hint is checked against the expected type first, and the context it
-enters is the one its argument would. -/
-theorem unhint_check {env : InferEnv} {n : Nat} {Γ : Ctx} {e e' : Expr} {t : Ty}
-    (h : Quiet (checkF env n Γ e t) ()) (he : unhint e = e')
-    (hf : ∀ m Γ', checkF env (m + 1) Γ' e' t = checkForm env m (Γ'.enter e') e' t) :
-    Quiet (checkF env n Γ e' t) () := by
-  cases e with
-  | hinted hh i =>
-    simp only [unhint] at he
-    subst he
-    rcases n with _ | m
-    · simp [checkF] at h
-    simp only [checkF] at h
-    obtain ⟨_, -, h⟩ := h.bind_inv
-    split at h
-    · obtain ⟨_, h, -⟩ := h.bind_inv
-      simp at h
-    rw [hf]
-    have : Γ.enter (.hinted hh i) = Γ.enter i := by simp [Ctx.enter, buildsFromParts]
-    rwa [← this]
-  | _ => simp only [unhint] at he; subst he; exact h
 
 /-- Writing back what `mut` and `out` parameters came to, each of its
 parameter's type, keeps every variable at its type: a variable's, or through
@@ -1139,7 +1089,7 @@ theorem writeBack_sound {env : InferEnv} : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) 
   | 0, _, _, _, _, _, _, h, _, _, _, _ => by simp [argsF] at h
   | n + 1, Γ, ρ, (mk, e) :: args, (mode, t) :: ps, kvs :: kvss, a :: after, h, hb, hρ, hk, ha => by
     simp only [argsF] at h
-    obtain ⟨⟨⟩, he, hr⟩ := h.bind_inv
+    obtain ⟨⟨⟩, -, hr⟩ := h.bind_inv
     have hrest : ∀ q ∈ after.zip ps, ∀ v, q.1 = some v → HasType v q.2.2 :=
       fun q hq => ha q (by simp [hq])
     obtain ⟨hk1, hk2⟩ := hk
@@ -1147,65 +1097,128 @@ theorem writeBack_sound {env : InferEnv} : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) 
     split
     · rename_i hmode
       unfold ArgKeys at hk1
-      generalize hx : unhint e = e' at hk1 ⊢
-      cases e'
-      case var x =>
-        rcases a with _ | v
+      generalize hx : placeOf e = p at hk1 ⊢
+      rcases p with _ | ⟨x, _ | ⟨st, rest⟩⟩
+      · rcases a with _ | v <;> first | exact trivial | exact Sound.unsupported
+      · rcases a with _ | v
         · exact trivial
-        · obtain ⟨u, k, hl, hu⟩ := var_check (unhint_check he hx (fun _ _ => by simp only [checkF]))
+        · obtain ⟨u, k, u', hl, ⟨keys, hp, -, -⟩, hu⟩ := hk1 hmode
+          simp only [setPlan, Option.some.injEq, Prod.mk.injEq] at hp
+          obtain ⟨rfl, -⟩ := hp
           have hw : HasType v u := roll_of hu (ha (some v, (mode, t)) (by simp) v rfl).expose
           exact writeBack_sound n Γ _ args ps kvss after hr hb (setVar_agree hρ hl hw) hk2 hrest
-      case place x steps =>
-        rcases a with _ | v
+      · rcases a with _ | v
         · exact trivial
         · obtain ⟨u, k, u', hl, ⟨keys, hp, hkf, hm⟩, hu⟩ := hk1 hmode
           obtain ⟨o, ho, hot⟩ := hρ.lookup x u k hl
           have hv : HasType v u' := roll_of hu (ha (some v, (mode, t)) (by simp) v rfl).expose
           simp only [hl, ho]
-          refine Sound.bind' (writeSteps_sound hb u u' keys o steps kvs hp hkf hv hot
+          refine Sound.bind' (writeSteps_sound hb u u' keys o (st :: rest) kvs hp hkf hv hot
             (fun _ e => by cases e) hm) (fun w hw => ?_)
           exact writeBack_sound n Γ _ args ps kvss after hr hb (setVar_agree hρ hl hw) hk2 hrest
-      all_goals (rcases a with _ | v <;> first | exact trivial | exact Sound.unsupported)
     · exact writeBack_sound n Γ ρ args ps kvss after hr hb hρ hk2 hrest
   | _ + 1, _, ρ, [], _, _, _, _, _, hρ, _, _ => by simp only [writeBack]; exact hρ
   | _ + 1, _, ρ, _ :: _, [], _, _, _, _, hρ, _, _ => by simp only [writeBack]; exact hρ
   | _ + 1, _, ρ, _ :: _, _ :: _, [], _, _, _, hρ, _, _ => by simp only [writeBack]; exact hρ
   | _ + 1, _, ρ, _ :: _, _ :: _, _ :: _, [], _, _, hρ, _, _ => by simp only [writeBack]; exact hρ
 
-/-- A place checked against a type, at fuel enough to reach its steps: its
-variable, and its steps from it, quiet, to a type that is the expected one
-unfolded. -/
-theorem place_check {env : InferEnv} {n : Nat} {Γ : Ctx} {x : String} {steps : List Step} {t : Ty}
-    (h : Quiet (checkF env (n + 4) Γ (.place x steps) t) ()) :
-    ∃ u k u', ((Γ.enter (.place x steps)).enter (.place x steps)).lookup x = some (u, k) ∧
-      Quiet (stepsF env n ((Γ.enter (.place x steps)).enter (.place x steps)) u steps) u' ∧
-      u'.expose = t.expose := by
-  simp only [checkF, checkForm, subsumeF] at h
-  obtain ⟨u', hu, h⟩ := h.bind_inv
-  split at h
-  · simp at h
-  rename_i hm
-  simp only [synthF] at hu
-  cases hl : ((Γ.enter (.place x steps)).enter (.place x steps)).lookup x with
-  | none => simp [hl] at hu
-  | some p =>
-    obtain ⟨u, k⟩ := p
-    simp only [hl] at hu
-    split at hu
-    · simp at hu
-    exact ⟨u, k, u', rfl, hu, Ty.meet_iff.mp (by simpa using hm)⟩
+/-- Steps that take a part as an index with neither `?` nor `!` only where a
+`set` may: none, as a place being read has. -/
+def NoBare (steps : List Step) : Prop := ∀ e, Step.index e none ∉ steps
 
-/-- A place checks only at fuel enough to reach its steps. -/
-theorem place_check_fuel {env : InferEnv} {n : Nat} {Γ : Ctx} {x : String} {steps : List Step} {t : Ty}
-    (h : Quiet (checkF env n Γ (.place x steps) t) ()) : ∃ d, n = d + 4 := by
-  rcases n with _ | _ | _ | _ | d
-  · simp [checkF] at h
-  · simp [checkF, checkForm] at h
-  · simp [checkF, checkForm, subsumeF] at h
-  · simp only [checkF, checkForm, subsumeF] at h
-    obtain ⟨_, hu, _⟩ := h.bind_inv
-    simp [synthF] at hu
-  · exact ⟨d, rfl⟩
+theorem stepsF_nobare {env : InferEnv} : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (steps : List Step) (u : Ty),
+    Quiet (stepsF env n Γ t steps) u → NoBare steps
+  | 0, _, _, _, _, h => by simp [stepsF] at h
+  | _ + 1, _, _, [], _, _ => by simp [NoBare]
+  | n + 1, Γ, t, [st], u, h => by
+    simp only [stepsF] at h
+    intro e he
+    simp only [List.mem_singleton] at he
+    subst he
+    rcases n with _ | n <;> simp [stepF] at h
+  | n + 1, Γ, t, st :: st' :: rest, u, h => by
+    simp only [stepsF] at h
+    obtain ⟨w, hw, h⟩ := h.bind_inv
+    intro e he
+    rcases List.mem_cons.mp he with rfl | he
+    · rcases n with _ | n <;> simp [stepF] at hw
+    · exact stepsF_nobare n Γ w (st' :: rest) u h e he
+
+theorem fieldType_expose {t t' : Ty} (h : t.expose = t'.expose) (s : Sel) : fieldType t s = fieldType t' s := by
+  unfold fieldType; rw [h]
+
+theorem indexTypes_expose {t t' : Ty} (h : t.expose = t'.expose) : indexTypes t = indexTypes t' := by
+  unfold indexTypes; rw [h]
+
+theorem setPlan_snoc : ∀ (t : Ty) (ss : List Step) (w : Ty) (ks : List (Expr × Ty)) (st : Step) (u : Ty)
+    (ks2 : List (Expr × Ty)), NoBare ss → setPlan none t ss = some (w, ks) →
+    setPlan none w [st] = some (u, ks2) → setPlan none t (ss ++ [st]) = some (u, ks ++ ks2)
+  | t, [], w, ks, st, u, ks2, _, h1, h2 => by
+    simp only [setPlan, Option.some.injEq, Prod.mk.injEq] at h1
+    obtain ⟨rfl, rfl⟩ := h1
+    simpa using h2
+  | t, .field s :: rest, w, ks, st, u, ks2, hn, h1, h2 => by
+    simp only [setPlan] at h1
+    split at h1
+    · rename_i ft hf
+      have := setPlan_snoc ft rest w ks st u ks2 (fun e he => hn e (by simp [he])) h1 h2
+      simp only [List.cons_append, setPlan, hf]
+      exact this
+    · simp at h1
+  | t, .index k none :: rest, _, _, _, _, _, hn, _, _ => absurd (by simp) (hn k)
+  | t, .index k (some m) :: rest, w, ks, st, u, ks2, hn, h1, h2 => by
+    simp only [setPlan] at h1
+    split at h1
+    · rename_i et kt hi
+      cases hr : setPlan none et rest with
+      | none => simp [hr] at h1
+      | some q =>
+        obtain ⟨w', ks'⟩ := q
+        simp only [hr, Option.map_some, Option.some.injEq, Prod.mk.injEq] at h1
+        obtain ⟨rfl, rfl⟩ := h1
+        have := setPlan_snoc et rest w' ks' st u ks2 (fun e he => hn e (by simp [he])) hr h2
+        simp only [List.cons_append, setPlan, hi, this, Option.map_some, List.cons_append]
+    · simp at h1
+
+theorem PathOk.snoc {Γ : Ctx} {t w u : Ty} {ss : List Step} {st : Step} {k1 k2 : List Val}
+    (hn : NoBare ss) (h1 : PathOk Γ t ss w k1) (h2 : PathOk Γ w [st] u k2) :
+    PathOk Γ t (ss ++ [st]) u (k1 ++ k2) := by
+  obtain ⟨keys1, hp1, ⟨hl1, hk1⟩, hm1⟩ := h1
+  obtain ⟨keys2, hp2, ⟨hl2, hk2⟩, hm2⟩ := h2
+  refine ⟨keys1 ++ keys2, setPlan_snoc t ss w keys1 st u keys2 hn hp1 hp2, ⟨by simp [hl1, hl2], ?_⟩, ?_⟩
+  · intro p hp
+    rw [List.zip_append hl1] at hp
+    rcases List.mem_append.mp hp with hp | hp
+    · exact hk1 p hp
+    · exact hk2 p hp
+  · intro k m hkm
+    rcases List.mem_append.mp hkm with hkm | hkm
+    · exact hm1 k m hkm
+    · exact hm2 k m hkm
+
+theorem PathOk.ret {Γ Γ' : Ctx} (hr : Γ.ret = Γ'.ret) {t u : Ty} {steps : List Step} {kvs : List Val}
+    (h : PathOk Γ t steps u kvs) : PathOk Γ' t steps u kvs := by
+  obtain ⟨keys, hp, hk, hm⟩ := h
+  refine ⟨keys, hp, hk, fun k m hkm => ?_⟩
+  have := hm k m hkm
+  cases m <;> simpa only [Ctx.fitsMode, Ctx.returnsOption, Ctx.returnsResult, hr] using this
+
+/-- What a `mut` or `out` argument's place holds, if it holds anything yet,
+of type `t`, and its keys' values, through `steps` from variable `x`. -/
+def PlaceOk (Γ : Ctx) (x : String) (steps : List Step) (t : Ty) (p : Option Val × List Val) : Prop :=
+  (∀ v, p.1 = some v → HasType v t) ∧ NoBare steps ∧
+    ∃ u k u', Γ.lookup x = some (u, k) ∧ PathOk Γ u steps u' p.2 ∧ u'.expose = t.expose
+
+theorem PlaceOk.congr {Γ Γ' : Ctx} (hv : Γ.vars = Γ'.vars) (hr : Γ.ret = Γ'.ret) {x : String}
+    {steps : List Step} {t : Ty} {p : Option Val × List Val} (h : PlaceOk Γ x steps t p) :
+    PlaceOk Γ' x steps t p := by
+  obtain ⟨hv', hn, u, k, u', hl, hp, hu⟩ := h
+  exact ⟨hv', hn, u, k, u', by simpa [Ctx.lookup, hv] using hl, hp.ret hr, hu⟩
+
+theorem PlaceOk.retype {Γ : Ctx} {x : String} {steps : List Step} {t t' : Ty} {p : Option Val × List Val}
+    (he : t.expose = t'.expose) (h : PlaceOk Γ x steps t p) : PlaceOk Γ x steps t' p := by
+  obtain ⟨hv, hn, u, k, u', hl, hp, hu⟩ := h
+  exact ⟨fun v e => roll_of he.symm (hv v e).expose, hn, u, k, u', hl, hp, hu.trans he⟩
 
 theorem PathOk.cons {Γ : Ctx} {t w u : Ty} {st : Step} {rest : List Step} {k ks : List Val}
     (hst : ∀ e, st ≠ .index e none) (h1 : PathOk Γ.through t [st] w k) (h2 : PathOk Γ w rest u ks) :
@@ -1892,6 +1905,195 @@ theorem evalPathStep_sound : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : S
         SoundT.pure' ⟨hx, [(k, kt)], by simp [setPlan, hi], ⟨rfl, by simpa using hkv⟩,
           fun k' m' hkm => by simp at hkm; obtain ⟨rfl, rfl⟩ := hkm; simpa using hfit⟩))
 
+/-- **A `mut` or `out` argument's place, as `synthF` types it, is what the
+walker reads**: its value, if its variable has one, of its type, and its keys'
+values, through the steps it folds to (`placeOf`), from its variable. -/
+theorem placeS_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (x : String) (steps : List Step),
+    Quiet (synthF env n Γ e) t → placeOf e = some (x, steps) → Γ.Runs sigs →
+    SoundT Γ.vars Γ.ret (PlaceOk Γ x steps t) (placeS env call n Γ e)
+  | 0, _, _, _, _, _, h, _, _ => by simp [synthF] at h
+  | n + 1, Γ, e, t, x, steps, h, hp, hb => by
+    cases e
+    case var y =>
+      simp only [placeOf, Option.some.injEq, Prod.mk.injEq] at hp
+      obtain ⟨rfl, rfl⟩ := hp
+      simp only [synthF] at h
+      cases hl : (Γ.enter (.var y)).lookup y with
+      | none => simp [hl] at h
+      | some q =>
+        obtain ⟨u, k⟩ := q
+        simp only [hl] at h
+        split at h
+        · simp at h
+        rw [Quiet.pure_iff] at h; subst h
+        simp only [placeS]
+        refine SoundT.get' (fun ρ hρ => ?_)
+        obtain ⟨o, hv, hvt⟩ := hρ.lookup y u k hl
+        simp only [hv]
+        exact SoundT.pure' ⟨hvt, by simp [NoBare], u, k, u, hl,
+          ⟨[], by simp [setPlan], ⟨rfl, by simp⟩, by simp⟩, rfl⟩
+    case place y ss =>
+      simp only [placeOf, Option.some.injEq, Prod.mk.injEq] at hp
+      obtain ⟨rfl, rfl⟩ := hp
+      simp only [synthF] at h
+      cases hl : (Γ.enter (.place y ss)).lookup y with
+      | none => simp [hl] at h
+      | some q =>
+        obtain ⟨u, k⟩ := q
+        simp only [hl] at h
+        split at h
+        · simp at h
+        simp only [placeS]
+        refine SoundT.get' (fun ρ hρ => ?_)
+        obtain ⟨o, hv, hvt⟩ := hρ.lookup y u k hl
+        cases o with
+        | none => simp only [hv]; exact SoundT.uninit
+        | some v =>
+          simp only [hv, hl]
+          refine SoundT.bind' (evalPath_sound n _ u v ss t h (hvt v rfl) hb) (fun ⟨w, kvs⟩ ⟨hw, hpath⟩ => ?_)
+          exact SoundT.pure' ⟨fun w' e => by cases e; exact hw, stepsF_nobare n _ u ss t h,
+            u, k, t, hl, hpath, rfl⟩
+    case hinted hh inner =>
+      simp only [placeOf] at hp
+      simp only [synthF] at h
+      obtain ⟨u, hu, h⟩ := h.bind_inv
+      obtain ⟨_, hc, h⟩ := h.bind_inv
+      rw [Quiet.pure_iff] at h; subst h
+      rw [Quiet.liftE_iff] at hu
+      simp only [placeS, hu]
+      exact SoundT.bind' (P := (· = u)) (SoundT.pure' rfl)
+        (fun _ e => e ▸ placeForm_sound n _ inner u x steps hc hp hb)
+    case proj b sel =>
+      simp only [placeOf] at hp
+      cases hq : placeOf b with
+      | none => simp [hq] at hp
+      | some q =>
+        obtain ⟨y, ss⟩ := q
+        simp only [hq, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hp
+        obtain ⟨rfl, rfl⟩ := hp
+        simp only [synthF] at h
+        obtain ⟨bt, hbt, h⟩ := h.bind_inv
+        obtain ⟨ft, hf, h⟩ := h.bind_inv
+        split at h
+        · simp at h
+        rw [Quiet.pure_iff] at h; subst h
+        rw [Quiet.liftE_iff] at hf
+        have hs := placeS_sound n _ b bt y ss hbt hq (Ctx.Runs.under (Γ := Γ.enter _) hb b)
+        simp only [Ctx.under_vars, Ctx.under_ret] at hs
+        simp only [placeS]
+        refine SoundT.bind' hs (fun ⟨o, kvs⟩ hpo => ?_)
+        have hpo := hpo.congr (Γ' := Γ) (by simp [Ctx.enter]) (by simp [Ctx.enter])
+        obtain ⟨hov, hn, u, k, u', hl, hpath, hu⟩ := hpo
+        cases o with
+        | none => exact SoundT.uninit
+        | some v =>
+          refine SoundT.bind' (SoundT.here (fieldVal_sound (hov v rfl) hf)) (fun w hw => ?_)
+          refine SoundT.pure' ⟨fun w' e => by cases e; exact hw, ?_, u, k, ft, hl, ?_, rfl⟩
+          · intro e he
+            rcases List.mem_append.mp he with he | he
+            · exact hn e he
+            · simp at he
+          · have h1 : PathOk Γ u' [.field sel] ft [] :=
+              ⟨[], by simp [setPlan, fieldType_expose hu, hf], ⟨rfl, by simp⟩, by simp⟩
+            simpa using hpath.snoc hn h1
+    case index b key mode =>
+      cases mode with
+      | none => simp [synthF] at h
+      | some m =>
+        simp only [placeOf] at hp
+        cases hq : placeOf b with
+        | none => simp [hq] at hp
+        | some q =>
+          obtain ⟨y, ss⟩ := q
+          simp only [hq, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hp
+          obtain ⟨rfl, rfl⟩ := hp
+          simp only [synthF] at h
+          obtain ⟨bt, hbt, h⟩ := h.bind_inv
+          obtain ⟨⟨et, kt⟩, hi, h⟩ := h.bind_inv
+          obtain ⟨_, hk, h⟩ := h.bind_inv
+          rw [Quiet.liftE_iff] at hi
+          rw [Quiet.recover_iff] at hk
+          split at h
+          · simp at h
+          split at h
+          · simp at h
+          split at h
+          · simp at h
+          rename_i hfit
+          rw [Quiet.pure_iff] at h; subst h
+          have hs := placeS_sound n _ b bt y ss hbt hq (Ctx.Runs.under (Γ := Γ.enter _) hb b)
+          simp only [Ctx.under_vars, Ctx.under_ret] at hs
+          simp only [placeS, typeOf_quiet hbt]
+          refine SoundT.bind' (P := (bt = ·)) (SoundT.here rfl) (fun _ e => ?_)
+          subst e
+          simp only [hi]
+          refine SoundT.bind' (P := ((et, kt) = ·)) (SoundT.pure' rfl) (fun _ e => ?_)
+          subst e
+          refine SoundT.bind' hs (fun ⟨o, kvs⟩ hpo => ?_)
+          have hpo := hpo.congr (Γ' := Γ) (by simp [Ctx.enter]) (by simp [Ctx.enter])
+          obtain ⟨hov, hn, u, k, u', hl, hpath, hu⟩ := hpo
+          refine SoundT.bind' (evalC_sound n _ key kt hk hb) (fun kv hkv => ?_)
+          cases o with
+          | none => exact SoundT.uninit
+          | some v =>
+            refine SoundT.bind' (SoundT.here (indexVal_sound (hov v rfl) hi hkv
+              (missing_ok (by simpa using hfit)))) (fun w hw => ?_)
+            refine SoundT.pure' ⟨fun w' e => by cases e; exact hw, ?_, u, k, et, hl, ?_, rfl⟩
+            · intro e he
+              rcases List.mem_append.mp he with he | he
+              · exact hn e he
+              · simp at he
+            · have h1 : PathOk Γ u' [.index key (some m)] et [kv] :=
+                ⟨[(key, kt)], by simp [setPlan, indexTypes_expose hu, hi], ⟨rfl, by simpa using hkv⟩,
+                  fun k' m' hkm => by simp at hkm; obtain ⟨rfl, rfl⟩ := hkm; simpa using hfit⟩
+              exact hpath.snoc hn h1
+    all_goals simp [placeOf] at hp
+
+/-- A place, as `checkForm` checks it, is what the walker reads. -/
+theorem placeForm_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (x : String) (steps : List Step),
+    Quiet (checkForm env n Γ e t) () → placeOf e = some (x, steps) → Γ.Runs sigs →
+    SoundT Γ.vars Γ.ret (PlaceOk Γ x steps t) (placeForm env call n Γ e t)
+  | 0, _, _, _, _, _, h, _, _ => by simp [checkForm] at h
+  | n + 1, Γ, e, t, x, steps, h, hp, hb => by
+    have hs : Quiet (subsumeF env n Γ e t) () := by
+      cases e <;> first | (simp [placeOf] at hp; done) | (simp only [checkForm] at h; exact h)
+    simp only [placeForm]
+    exact placeSub_sound n Γ e t x steps hs hp hb
+
+/-- A place, as `subsumeF` synthesizes it, is what the walker reads. -/
+theorem placeSub_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (x : String) (steps : List Step),
+    Quiet (subsumeF env n Γ e t) () → placeOf e = some (x, steps) → Γ.Runs sigs →
+    SoundT Γ.vars Γ.ret (PlaceOk Γ x steps t) (placeSub env call n Γ e)
+  | 0, _, _, _, _, _, h, _, _ => by simp [subsumeF] at h
+  | n + 1, Γ, e, t, x, steps, h, hp, hb => by
+    simp only [subsumeF] at h
+    obtain ⟨u, hu, h⟩ := h.bind_inv
+    split at h
+    · simp at h
+    rename_i hm
+    simp only [placeSub]
+    exact SoundT.weaken (placeS_sound n Γ e u x steps hu hp hb)
+      (fun _ hpo => hpo.retype (Ty.meet_iff.mp (by simpa using hm)))
+
+/-- A place, as `checkF` checks it, is what the walker reads. -/
+theorem placeC_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (x : String) (steps : List Step),
+    Quiet (checkF env n Γ e t) () → placeOf e = some (x, steps) → Γ.Runs sigs →
+    SoundT Γ.vars Γ.ret (PlaceOk Γ x steps t) (placeC env call n Γ e t)
+  | 0, _, _, _, _, _, h, _, _ => by simp [checkF] at h
+  | n + 1, Γ, e, t, x, steps, h, hp, hb => by
+    cases e
+    case hinted hh inner =>
+      simp only [checkF] at h
+      obtain ⟨_, -, h⟩ := h.bind_inv
+      split at h
+      · obtain ⟨_, h, -⟩ := h.bind_inv
+        simp at h
+      simp only [placeC]
+      exact placeForm_sound n _ inner t x steps h (by simpa [placeOf] using hp) hb
+    all_goals first
+      | (simp [placeOf] at hp; done)
+      | (simp only [checkF] at h; simp only [placeC]; exact placeForm_sound n _ _ t x steps h hp hb)
+
 theorem evalSub_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (subsumeF env n Γ e t) () →
     Γ.Runs sigs → SoundT Γ.vars Γ.ret (HasType · t) (evalSub env call n Γ e)
   | 0, _, _, _, h, _ => by simp [subsumeF] at h
@@ -2077,6 +2279,20 @@ theorem argByValue_sound {V : List (String × Ty × Kind)} {R : Ret} {mode : Mod
   · exact SoundT.bind' (SoundT.map' (Q := fun o : Option Val => ∀ w, o = some w → HasType w t) h
       (fun w hw w' e => by cases e; exact hw)) (fun o ho => SoundT.pure' ⟨ho, rfl⟩)
 
+theorem placeArg_sound {V : List (String × Ty × Kind)} {R : Ret} {mode : Mode} {t : Ty}
+    {m : EvalT (Option Val × List Val)} {P : Option Val × List Val → Prop} {Q : List Val → Prop}
+    (h : SoundT V R P m) (hq : ∀ o kvs, P (o, kvs) → (∀ v, o = some v → HasType v t) ∧ Q kvs) :
+    SoundT V R (fun a : Option Val × List Val => (∀ w, a.1 = some w → HasType w t) ∧ Q a.2)
+      (placeArg mode m) := by
+  simp only [placeArg]
+  refine SoundT.bind' h (fun ⟨o, kvs⟩ hp => ?_)
+  obtain ⟨ho, hk⟩ := hq o kvs hp
+  split
+  · exact SoundT.pure' ⟨(fun w e => by cases e), hk⟩
+  · cases o with
+    | none => exact SoundT.uninit
+    | some v => exact SoundT.pure' ⟨(fun w e => by cases e; exact ho v rfl), hk⟩
+
 /-- A call's checked arguments evaluate to values of their parameters'
 types, none for an `out` one, with what a `mut` or `out` one into a part of a
 variable is written back by (`ArgsKeys`). -/
@@ -2110,43 +2326,25 @@ theorem evalArgs_sound : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × E
           ArgsKeys Γ ((mk, e) :: args) ((mode, t) :: params) (vs.map (·.2)))
           (x >>= fun a => evalArgs env call n Γ args params >>= fun vs => pure (a :: vs)) :=
       fun x hx => SoundT.bind' hx (fun a ⟨ho, hk⟩ => rest a ho hk)
-    have byValue : (∀ x steps, unhint e = .place x steps → (mode == .mut || mode == .out) = false) →
+    have byValue : (placeOf e = none ∨ (mode == .mut || mode == .out) = false) →
         SoundT Γ.vars Γ.ret (fun a : Option Val × List Val =>
           (∀ v, a.1 = some v → HasType v t) ∧ ArgKeys Γ mode t e a.2)
           (argByValue mode (evalC env call n (Γ.forArg mode) e t)) := fun hw =>
       SoundT.weaken (argByValue_sound (evalC_sound n _ e t hc hb)) (fun a ⟨h1, h2⟩ =>
         ⟨h1, h2 ▸ ArgKeys.nil hw⟩)
-    have hplace : ∀ {x steps}, unhint e = .place x steps →
-        Quiet (checkF env n (Γ.forArg mode) (.place x steps) t) () :=
-      fun hx => unhint_check hc hx (fun _ _ => by simp only [checkF])
     split
-    · rename_i d x steps hx _
+    · rename_i q hq
       split
       · rename_i hmode
         refine bindRest _ ?_
-        obtain ⟨u, k, u', hl, hst, hu⟩ := place_check (hplace hx)
-        simp only [argAt]
-        refine SoundT.get' (fun ρ hρ => ?_)
-        obtain ⟨o, hv, hvt⟩ := hρ.lookup x u k hl
-        cases o with
-        | none => simp only [hv]; exact SoundT.uninit
-        | some v =>
-          simp only [hv, hl]
-          refine SoundT.bind' (evalPath_sound d _ u v steps u' hst (hvt v rfl) hb) (fun ⟨w, kvs⟩ ⟨hw, hp⟩ => ?_)
-          refine SoundT.pure' ⟨fun w' e => ?_, by unfold ArgKeys; rw [hx]; exact fun _ => ⟨u, k, u', hl, hp, hu⟩⟩
-          split at e
-          · cases e
-          · cases e; exact roll_of hu.symm hw.expose
+        obtain ⟨x, steps⟩ := q
+        refine placeArg_sound (placeC_sound n _ e t x steps hc hq hb) (fun o kvs hpo => ?_)
+        obtain ⟨ho, -, u, k, u', hl, hpath, hu⟩ := hpo
+        exact ⟨ho, by unfold ArgKeys; rw [hq]; exact fun _ => ⟨u, k, u', hl, hpath, hu⟩⟩
       · rename_i hmode
-        exact bindRest _ (byValue (fun _ _ _ => by simpa using hmode))
-    · rename_i x steps hn hx _
-      split
-      · obtain ⟨d, rfl⟩ := place_check_fuel (hplace hx)
-        exact absurd rfl (hn d)
-      · rename_i hmode
-        exact bindRest _ (byValue (fun _ _ _ => by simpa using hmode))
-    · exact bindRest _ (byValue (fun x steps he =>
-        (‹∀ (root : String) (steps : List Step), unhint e = .place root steps → False› x steps he).elim))
+        exact bindRest _ (byValue (.inr (by simpa using hmode)))
+    · rename_i hq
+      exact bindRest _ (byValue (.inl hq))
   | n + 1, Γ, [], _, _, _ => by simp only [evalArgs]; exact SoundT.pure' ⟨by simp, by simp, trivial⟩
   | n + 1, Γ, _ :: _, [], _, _ => by simp only [evalArgs]; exact SoundT.pure' ⟨by simp, by simp, trivial⟩
 

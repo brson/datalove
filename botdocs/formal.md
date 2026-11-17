@@ -638,9 +638,11 @@ Four things are proved of it:
   same steps with those keys' values, as a `set` writes (`writeSteps`); the
   steps and keys are of the types `setPlan` gives them (`PathOk`), so the
   variable keeps its type, an index that is gone by then returning early as
-  its mode says. A hint on such an argument says only its type: it is
-  evaluated and written back as the place under it (`unhint`), which checks
-  without the hint at the same fuel (`unhint_check`).
+  its mode says. A hint on such an argument, or on a place along the way to
+  it, `mut (: R / r).a`, says only its type: it is written back to the place
+  its hints are on (`placeOf`), and evaluated as `checkF` reaches it, through
+  the hints, each key at the fuel it is checked at (`placeC`, sound by
+  `Fun.placeC_sound`), so no check has to be had again at another fuel.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
