@@ -95,6 +95,10 @@ pub struct TypeContext<'db> {
     pub(crate) checking_inline: Option<FunKey<'db>>,
     /// The function whose body is being checked, if any.
     pub(crate) enclosing_fun: Option<FunKey<'db>>,
+    /// The consts the function body being checked has declared, in any of
+    /// its blocks, or outside any function those the module or script unit
+    /// has; see F112.
+    pub(crate) fun_consts: bct::lookup::LookupSet<InternedText<'db>>,
     /// Each call from an `inline` function to an `inline` function, caller
     /// first, in the order they were checked; see `report_inline_cycles`.
     pub(crate) inline_calls: Vec<(FunKey<'db>, FunKey<'db>)>,
@@ -266,6 +270,7 @@ impl<'db> TypeContext<'db> {
             in_function_body: false,
             checking_inline: None,
             enclosing_fun: None,
+            fun_consts: Default::default(),
             inline_calls: Vec::new(),
             spans,
             current_module_id: module_id,
@@ -1484,17 +1489,6 @@ impl<'db> TypeContext<'db> {
         match statement {
             Statement::Const(stmt) => {
                 self.below.values.remove(&stmt.name);
-                if self.const_deps.get_mut().consts.iter().any(|top| top.name == stmt.name) {
-                    let name = stmt.name.as_str(self.db);
-                    let error = self.error_worded(
-                        ErrorSite::Expr(self.expr(stmt.value).key()),
-                        FCode::ConstDeclaredTwice,
-                        fmt!("const `{name}` is declared twice"),
-                        "a const is declared once in a module or script unit",
-                        Some(fmt!("in a session a later unit may declare `{name}` again")),
-                    );
-                    self.add_error(error);
-                }
                 let is_data = matches!(self.expr(stmt.value).kind(), ExprFunKind::DataFile(_));
                 let deps = self.const_deps.get_mut();
                 deps.current = Some(deps.consts.len() as u32);
@@ -1524,6 +1518,30 @@ impl<'db> TypeContext<'db> {
             Statement::Import(stmt) => self.reach_import(stmt),
             _ => {}
         }
+    }
+
+    /// F112: a second const of a name in one function body, module or
+    /// script unit, in whichever of its blocks.
+    pub(crate) fn report_const_declared_twice(&mut self, stmt: &StmtConst<'db>) {
+        let name = stmt.name.as_str(self.db);
+        let (label, note) = match self.enclosing_fun {
+            Some(_) => (
+                "a const is declared once in a function",
+                fmt!("this holds across the function's blocks, so give each `{name}` a name of its own"),
+            ),
+            None => (
+                "a const is declared once in a module or script unit",
+                fmt!("this holds across its blocks; in a session a later unit may declare `{name}` again"),
+            ),
+        };
+        let error = self.error_worded(
+            ErrorSite::Expr(self.expr(stmt.value).key()),
+            FCode::ConstDeclaredTwice,
+            fmt!("const `{name}` is declared twice"),
+            label,
+            Some(note),
+        );
+        self.add_error(error);
     }
 
     fn reach_import(&mut self, stmt: &StmtImport<'db>) {

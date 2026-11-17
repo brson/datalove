@@ -360,6 +360,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             let saved_in_function_body = ctx.in_function_body;
             let saved_checking_inline = ctx.checking_inline;
             let saved_enclosing_fun = ctx.enclosing_fun;
+            let saved_fun_consts = std::mem::take(&mut ctx.fun_consts);
             ctx.variables.retain_unordered(|_, binding| binding.is_const);
             ctx.in_function_body = true;
             let key = stmt.head().key();
@@ -424,6 +425,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             ctx.in_function_body = saved_in_function_body;
             ctx.checking_inline = saved_checking_inline;
             ctx.enclosing_fun = saved_enclosing_fun;
+            ctx.fun_consts = saved_fun_consts;
             ctx.type_aliases = saved_type_aliases;
             ctx.type_param_bounds = saved_type_param_bounds;
             ctx.expected_return_type = saved_return_type;
@@ -650,6 +652,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
         }
 
         Statement::Const(stmt) => {
+            // A function body, module or script unit declares a const of a
+            // name once, in whichever of its blocks: function-level consts are
+            // inlined by name, so a second would take the first's value.
+            if !ctx.fun_consts.insert(stmt.name) {
+                ctx.report_const_declared_twice(stmt);
+            }
             // Const bindings are typechecked like let bindings, except that the
             // value may only name other consts. The const evaluation happens
             // during lowering.

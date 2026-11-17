@@ -606,7 +606,7 @@ codes! {
         /// A name an earlier script unit binds, which typechecked and did not
         /// compile.
         BoundByUnitThatFailed = 111,
-        /// A const declared twice in one module or script unit.
+        /// A const declared twice in one module, script unit or function body.
         ConstDeclaredTwice = 112,
     }
     retired = [11, 60, 65, 75];

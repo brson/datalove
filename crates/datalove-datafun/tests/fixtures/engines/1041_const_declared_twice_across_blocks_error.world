@@ -1,0 +1,47 @@
+----------
+scriptunit-fragment
+----------
+
+// A function body, or a script unit, declares a const of a name once, in
+// whichever of its blocks (F112): in an inner block that the outer `k` is in
+// scope in, in sibling blocks, and in a block above the outer one. A function
+// may still declare a const of a name the unit has.
+const k: int = 5
+
+fun inner(): int
+    const j: int = 1
+    if true
+        const j: int = 2
+        debuglog j@
+    end if
+    ret j@
+end fun
+
+fun siblings(b: bool): int
+    if b
+        const j: int = 1
+        ret j@
+    else
+        const j: int = 2
+        ret j@
+    end if
+end fun
+
+fun above(): int
+    if true
+        const j: int = 2
+        debuglog j@
+    end if
+    const j: int = 1
+    ret j@
+end fun
+
+fun shadows(): int
+    const k: int = 7
+    ret k@
+end fun
+
+if true
+    const k: int = 2
+    debuglog k@
+end if
