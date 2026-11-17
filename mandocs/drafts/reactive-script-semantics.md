@@ -381,7 +381,7 @@ let c = a + 1
 ```
 
 Fresh-run result: `c == 101`.
-Unit 1,3 rerun. Unit 2 unchanged.
+Unit 1, 3 rerun. Unit 2 unchanged.
 
 
 ## Backward reruns
@@ -413,7 +413,7 @@ let c = a + b
 ```
 
 Fresh-run result: `c == 1101`.
-Unit 1,2,4 rerun. Unit 3 unchanged.
+Unit 1, 2, 4 rerun. Unit 3 unchanged.
 Without the backward rerun: `c == 2101`.
 <!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
 
@@ -447,7 +447,7 @@ let c = a + b
 ```
 
 Fresh-run result: `c == 1011`.
-Unit 1,2,3,4 rerun, 2 because 3 required it transitively.
+Unit 1, 2, 3, 4 rerun, 2 because 3 required it transitively.
 Without the backward rerun: `b == 1012`.
 
 ---
