@@ -362,10 +362,12 @@ These are refinements, could be optional:
 // unit 1
 let a = 10
 // unit 2
-let b = a + 1
+let b = 1
+// unit 3
+let c = a + b
 ```
 
-Fresh-run result: `b == 11`.
+Fresh-run result: `c == 11`.
 
 Edit unit 1:
 
@@ -373,39 +375,45 @@ Edit unit 1:
 // edit unit 1
 let a = 100
 // unit 2
-let b = a + 1
+let b = 1
+// unit 3
+let c = a + 1
 ```
 
 Fresh-run result: `c == 101`.
-Unit 1,2 rerun.
+Unit 1,3 rerun. Unit 2 unchanged.
 
 
 ## Backward reruns
 
 ```datalove
 // unit 1
-let a = 100
+var a = 100
 // unit 2
 set a = a + 10
 // unit 3
-let b = a + 1
+let b = 1
+// unit 4
+let c = a + b
 ```
 
-Fresh-run result: `b == 111`.
+Fresh-run result: `c == 111`.
 
 Edit unit 2:
 
 ```datalove
 // unit 1
-let a = 100
+var a = 100
 // unit 2
 set a = a + 1000
 // unit 3
-let b = a + 1
+let b = 1
+// unit 4
+let c = a + b
 ```
 
 Fresh-run result: `c == 1101`.
-Unit 1,2,3 rerun.
+Unit 1,2,4 rerun. Unit 2 unchanged.
 Without the backward rerun: `c == 2101`.
 <!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
 
@@ -418,25 +426,29 @@ let a = 100
 // unit 2
 var b = 10
 // unit 3
-set b = a + b
+set b = a + 1
+// unit 4
+let c = a + b
 ```
 
-Fresh-run result: `b == 110`.
+Fresh-run result: `c == 111`.
 
 Edit unit 1:
 
 ```datalove
-// unit 1
-let a = 10
+// edit unit 1
+let a = 1000
 // unit 2
-var b = 1
+var b = 10
 // unit 3
-set b = a + b
+set b = a + 1
+// unit 4
+let c = a + b
 ```
 
-Fresh-run result: `b == 11`.
+Fresh-run result: `b == 1011`.
 Unit 1,2,3 rerun, 2 because 3 required it.
-Without the backward rerun: `b == 120`.
+Without the backward rerun: `b == 1012`.
 
 ---
 
