@@ -388,33 +388,29 @@ Unit 1, 3 rerun. Unit 2 unchanged.
 
 ```datalove
 // unit 1
-var a = 100
+let a = 1000
 // unit 2
-set a = a + 10
+var b = 100
 // unit 3
-let b = 1
-// unit 4
-let c = a + b
+set b = a + b + 1
 ```
 
-Fresh-run result: `c == 111`.
+Fresh-run result: `b == 1101`.
 
-Edit unit 2:
+Edit unit 3:
 
 ```datalove
 // unit 1
-var a = 100
-// edit unit 2
-set a = a + 1000
-// unit 3
-let b = 10
-// unit 4
-let c = a + b
+let a = 1000
+// unit 2
+var b = 100
+// edit unit 3
+set b = a + b + 10
 ```
 
-Fresh-run result: `c == 1101`.
-Unit 1, 2, 4 rerun. Unit 3 unchanged.
-Without the backward rerun: `c == 2101`.
+Fresh-run result: `b == 1110`.
+Unit 2, 3 rerun, unit 2 because 3 updated 2. Unit 1 unchanged.
+Without the backward rerun: `b == 2111`.
 <!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
 
 
@@ -422,29 +418,29 @@ Without the backward rerun: `c == 2101`.
 
 ```datalove
 // unit 1
-let a = 100
+let a = 10
 // unit 2
-var b = 10
+var b = 1
 // unit 3
 set b = a + b
 ```
 
-Fresh-run result: `b == 110`.
+Fresh-run result: `b == 11`.
 
 Edit unit 1:
 
 ```datalove
 // edit unit 1
-let a = 1000
+let a = 100
 // unit 2
-var b = 10
+var b = 1
 // unit 3
 set b = a + b
 ```
 
-Fresh-run result: `c == 1010`.
+Fresh-run result: `b == 101`.
 Unit 1, 2, 3 rerun, 2 because 3 required it transitively.
-Without the backward rerun: `b == 1020`.
+Without the backward rerun: `b == 112`.
 
 ---
 
