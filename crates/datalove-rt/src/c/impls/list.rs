@@ -578,21 +578,49 @@ pub unsafe fn list_fill_impl(
 /// Every path that adds elements comes through here first, so that a list's
 /// size can't pass its capacity, and its capacity can't pass what an index
 /// counts. A list that would outgrow the index is an error, not a wrap.
+///
+/// Inlined into its callers, which have room already or a list with no buffer
+/// yet far more often than one to grow. A first buffer is allocated here, without
+/// what growing needs: of Storage's tree, whose every leaf is filled once into
+/// an empty list, the out-of-line call for it was a seventh of the run.
+#[inline]
 unsafe fn reserve(
     rt: &mut RtLocal,
     list_ptr: *mut List,
     element_ty: rtdt::TyDescRef,
     additional: rtdt::IndexRepr,
 ) -> RtStatus {
-    let list = unsafe { ListMut::new(list_ptr, element_ty) };
+    let mut list = unsafe { ListMut::new(list_ptr, element_ty) };
     let Some(required) = list.size().checked_add(additional) else {
         return RtStatus::Error;
     };
     if required <= list.capacity() {
         return RtStatus::Ok;
     }
+    if list.capacity() == 0 {
+        let capacity = calculate_new_capacity(0, required);
+        let data = unsafe { rt.alloc.alloc(element_ty.size(), element_ty.align(), capacity) };
+        if data.is_null() {
+            return RtStatus::Error;
+        }
+        list.set_data(data);
+        list.set_capacity(capacity);
+        return RtStatus::Ok;
+    }
 
-    let new_capacity = calculate_new_capacity(list.capacity(), required);
+    unsafe { grow(rt, list_ptr, element_ty, required) }
+}
+
+/// Grow a list that has a buffer to hold at least `required` elements.
+#[inline(never)]
+unsafe fn grow(
+    rt: &mut RtLocal,
+    list_ptr: *mut List,
+    element_ty: rtdt::TyDescRef,
+    required: rtdt::IndexRepr,
+) -> RtStatus {
+    let capacity = unsafe { ListMut::new(list_ptr, element_ty) }.capacity();
+    let new_capacity = calculate_new_capacity(capacity, required);
     unsafe { grow_buffer(rt, list_ptr, element_ty, new_capacity) }
 }
 
