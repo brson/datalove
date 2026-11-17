@@ -35,7 +35,7 @@ use std::sync::Arc;
 use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, StmtFun, TopLevel};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_compiler::lower::{
-    lower_script_fragment_raw, lower_script_expr, lower_script_functions,
+    consts_above, lower_script_fragment_raw, lower_script_expr, lower_script_functions,
 };
 use datalove_datafun_compiler::const_eval::{
     ctfe_diagnostic, evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, too_many_instantiations,
@@ -2083,6 +2083,7 @@ impl<'db> ScriptCompiler<'db> {
             self.env.data(self.db),
             script_ctx,
             script_consts,
+            &script_consts_over(&self.unit_records[..index]),
             defer_missing_consts,
             only,
         ) {
@@ -2291,7 +2292,8 @@ impl<'db> ScriptCompiler<'db> {
         let mut consts = LookupMap::default();
         let mut errors = Vec::new();
 
-        for statement in statements {
+        let earlier_consts = script_consts_over(&self.unit_records[..index]);
+        for (at, statement) in statements.iter().enumerate() {
             let Statement::Fun(func_stmt) = statement else { continue };
             let func_name = func_stmt.name().text(self.db);
             // A function's const parameters have a value per instantiation
@@ -2302,8 +2304,9 @@ impl<'db> ScriptCompiler<'db> {
                 .collect();
             // Every script-level const has a value here: one that failed
             // stopped the unit before its functions' consts.
+            let scope = consts_above(self.db, statements, at, script_level_consts, &earlier_consts);
             let (body_consts, failures) = evaluate_body_consts(
-                &mut env, func_stmt, script_level_consts.C(), const_params, BTreeSet::new());
+                &mut env, func_stmt, scope, const_params, BTreeSet::new());
             for (name, ir_type, value) in body_consts {
                 // Stored under a qualified name: func_name::const_name.
                 consts.insert(format!("{}::{}", func_name, name), (ir_type, value));
@@ -2539,10 +2542,17 @@ impl<'db> ScriptCompiler<'db> {
                     else {
                         return (LookupMap::default(), Vec::new());
                     };
-                    // A script function's consts may name the script's.
+                    // A script function's consts may name the script's, those
+                    // above the function.
+                    let at = script_stmts.iter()
+                        .position(|stmt| matches!(stmt, Statement::Fun(f) if f.name().text(self.db) == &name))
+                        .expect("a local callee is one of the unit's functions");
+                    let scope = consts_above(
+                        self.db, script_stmts, at, &consts.script_consts,
+                        &script_consts_over(&self.unit_records[..index]));
                     self.instantiation_consts_from(
                         script_stmts, &self.unit_spans(index), &name, typecheck.expr_types, typecheck.call_targets,
-                        consts.script_consts.C(), indices, values,
+                        scope, indices, values,
                         &lowered_funcs.functions, &lowered_funcs.func_name_to_id, &earlier_functions,
                     )
                 }

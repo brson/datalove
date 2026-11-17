@@ -1392,8 +1392,9 @@ const of a name once, in whichever of its blocks; a second is an error
 (F112), even in a block the first is not in scope in, so a name always means
 the one const. A function may declare a const of a name its module or unit
 has. A later unit of a session may declare an earlier unit's const again, of
-any type: from there on the name is the new const, while a function of an
-earlier unit still reads the one above it.
+any type: from there on the name is the new const, while a function written
+above it, in an earlier unit or above it in its own, still reads the one above
+the function.
 
 A const that cannot be evaluated is an error at its initializer, and a const
 or a function that names it is left at that: what it would have said follows

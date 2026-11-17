@@ -683,6 +683,19 @@ impl<'db> LowerCtx<'db> {
         self.const_bindings.insert(name, (ir_type, value));
     }
 
+    /// Put `binding` in place of the const binding of `name`, or none, and
+    /// return what was there.
+    pub fn replace_const(
+        &mut self,
+        name: &str,
+        binding: Option<(IrType, Arc<ConstValue>)>,
+    ) -> Option<(IrType, Arc<ConstValue>)> {
+        match binding {
+            Some(binding) => self.const_bindings.insert(name.S(), binding),
+            None => self.const_bindings.remove(name),
+        }
+    }
+
     /// The value of the data file a `require data` const names.
     pub fn data_file_value(&self, file: &datalove_datafun_ast::ast::ExprDataFile<'db>, ty: &IrType) -> Arc<ConstValue> {
         let source = *self.data_files.get(&file.path(self.db))

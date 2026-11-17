@@ -205,6 +205,10 @@ pub struct ScriptFunctionsLowered {
 /// and from earlier ones. They are seeded the way `lower_function_for_module`
 /// seeds a module's consts, so a reference emits a fresh `Const`.
 ///
+/// `earlier_consts` are the earlier units' alone. A function sees the consts
+/// written above it, so where this unit declares a const of a name below a
+/// function, the function reads the earlier units' const of the name instead.
+///
 /// `defer_missing_consts` says what to do with a body that names a const with
 /// no value yet: record the function in `deferred` and carry on, or fail. The
 /// caller lowers it once the const has a value.
@@ -224,6 +228,7 @@ pub fn lower_script_functions<'db>(
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     script_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
+    earlier_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
     defer_missing_consts: bool,
     only: Option<&[String]>,
 ) -> Result<ScriptFunctionsLowered, LowerError> {
@@ -251,8 +256,10 @@ pub fn lower_script_functions<'db>(
     let mut lowered_units: Vec<IrCodeUnit> = Vec::new();
     let mut deferred: Vec<String> = Vec::new();
 
+    let below = consts_declared_below(db, stmts);
+
     // Lower only the function statements.
-    for stmt in stmts {
+    for (stmt, below) in stmts.iter().zip(&below) {
         if let Statement::Fun(fun_stmt) = stmt {
             // Look up pre-computed analysis.
             let analysis = func_analyses.get(&fun_stmt.key())
@@ -270,6 +277,9 @@ pub fn lower_script_functions<'db>(
 
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());
+            let shadowed: Vec<_> = below.iter()
+                .map(|name| (name, ctx.replace_const(name, earlier_consts.get(name).cloned())))
+                .collect();
 
             // Look up resolved types for this function.
             let func_name_str = fun_stmt.name().text(db);
@@ -287,6 +297,9 @@ pub fn lower_script_functions<'db>(
             // Restore parent state, whatever the body did, so the next function
             // starts from the unit's state rather than this body's.
             ctx.swap_body_state(saved);
+            for (name, binding) in shadowed {
+                ctx.replace_const(name, binding);
+            }
 
             match lowered {
                 Ok(unit) => lowered_units.push(unit),
@@ -299,6 +312,43 @@ pub fn lower_script_functions<'db>(
     }
 
     Ok(ScriptFunctionsLowered { functions: lowered_units, func_name_to_id, deferred })
+}
+
+/// The names of the consts a unit declares below each of its statements.
+///
+/// A function sees the consts written above it, so these are the names whose
+/// const it reads from the earlier units instead.
+fn consts_declared_below<'db>(db: &'db dyn salsa::Database, stmts: &[Statement<'db>]) -> Vec<Vec<String>> {
+    let mut below: Vec<Vec<String>> = vec![Vec::new(); stmts.len()];
+    let mut names: Vec<String> = Vec::new();
+    for (i, stmt) in stmts.iter().enumerate().rev() {
+        below[i] = names.C();
+        if let Statement::Const(const_stmt) = stmt {
+            names.push(const_stmt.name.text(db).S());
+        }
+    }
+    below
+}
+
+/// The script-level consts the statement at `at` sees: `unit_consts`, but for
+/// the names the unit declares below it, whose const is the earlier units'.
+pub fn consts_above<'db>(
+    db: &'db dyn salsa::Database,
+    stmts: &[Statement<'db>],
+    at: usize,
+    unit_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
+    earlier_consts: &LookupMap<String, (IrType, Arc<ConstValue>)>,
+) -> LookupMap<String, (IrType, Arc<ConstValue>)> {
+    let mut consts = unit_consts.C();
+    for stmt in &stmts[at + 1..] {
+        let Statement::Const(const_stmt) = stmt else { continue };
+        let name = const_stmt.name.text(db);
+        match earlier_consts.get(name) {
+            Some(binding) => { consts.insert(name.S(), binding.C()); }
+            None => { consts.remove(name); }
+        }
+    }
+    consts
 }
 
 /// Lower a script expression unit.

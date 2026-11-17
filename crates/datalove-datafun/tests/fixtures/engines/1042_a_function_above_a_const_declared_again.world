@@ -1,0 +1,40 @@
+----------
+scriptunit-fragment
+----------
+
+const k: int = 1
+
+----------
+scriptunit-fragment
+----------
+
+// A function sees the consts written above it. One written above this
+// unit's `k` reads the earlier unit's, before and after this unit's is
+// reached: in its body, in a const of its body, and in a const of a copy
+// made for a const parameter. One written below reads this unit's.
+debuglog k@
+fun above(): int
+    ret k@
+end fun
+fun above_const(): int
+    const c: int = k@ + 10
+    ret c@
+end fun
+fun above_copy(const n: int): int
+    const c: int = k@ + n@
+    ret c@
+end fun
+const a: int = 20
+debuglog above()
+debuglog above_const()
+debuglog above_copy(a)
+const k: string = "a-long-heap-string-0123456789"
+fun below(): string
+    ret k@
+end fun
+const b: int = 30
+debuglog k@
+debuglog above()
+debuglog above_const()
+debuglog above_copy(b)
+debuglog below()

@@ -1,0 +1,137 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        unit_end_drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = clone unit1.v0
+                        debuglog v0
+                        drop v0
+                        v1 = const 20int
+                        v2 = call u0()
+                        debuglog v2
+                        drop v2
+                        v3 = call u1()
+                        debuglog v3
+                        drop v3
+                        v4 = call u4()
+                        debuglog v4
+                        drop v4
+                        v5 = const "a-long-heap-string-0123456789"
+                        v6 = const 30int
+                        v7 = clone v5
+                        debuglog v7
+                        drop v7
+                        v8 = call u0()
+                        debuglog v8
+                        drop v8
+                        v9 = call u1()
+                        debuglog v9
+                        drop v9
+                        v10 = call u5()
+                        debuglog v10
+                        drop v10
+                        v11 = call u3()
+                        debuglog v11
+                        drop v11
+                        unit_end_drop v1
+                        unit_end_drop v5
+                        unit_end_drop v6
+                        unit_end
+                    
+                    fn above():
+                    block0:
+                        v0 = staticref 1int
+                        v1 = clone *v0
+                        return v1
+                    
+                    fn above_const():
+                    block0:
+                        v0 = staticref 1int
+                        v1 = clone *v0
+                        v2 = const 10int
+                        v3 = staticref 11int
+                        drop v1
+                        drop v2
+                        v4 = clone *v3
+                        return v4
+                    
+                    fn above_copy(p0):
+                    block0:
+                        v0 = staticref 1int
+                        v1 = clone *v0
+                        v2 = clone p0
+                        v3 = add v1, v2
+                        drop v1
+                        drop v2
+                        v4 = clone v3
+                        drop v3
+                        return v4
+                    
+                    fn below():
+                    block0:
+                        v0 = staticref "a-long-heap-string-0123456789"
+                        v1 = clone *v0
+                        return v1
+                    
+                    fn above_copy__ct4():
+                    block0:
+                        v5 = staticref 20int
+                        v0 = staticref 1int
+                        v1 = clone *v0
+                        v2 = clone *v5
+                        v3 = staticref 21int
+                        drop v1
+                        drop v2
+                        v4 = clone *v3
+                        return v4
+                    
+                    fn above_copy__ct5():
+                    block0:
+                        v5 = staticref 30int
+                        v0 = staticref 1int
+                        v1 = clone *v0
+                        v2 = clone *v5
+                        v3 = staticref 31int
+                        drop v1
+                        drop v2
+                        v4 = clone *v3
+                        return v4
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n1\n11\n21\n\"a-long-heap-string-0123456789\"\n1\n11\n31\n\"a-long-heap-string-0123456789\"\n"),
+        ),
+    ],
+)
