@@ -228,14 +228,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     None
                 };
 
-                // Pass lowered functions to avoid re-lowering them.
-                let lowered_funcs_arg = if lowered_functions.is_empty() {
-                    None
-                } else {
-                    Some((lowered_functions, func_name_to_id))
-                };
+                let lowered_funcs_arg = (lowered_functions, func_name_to_id);
 
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.C(), body, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.C(), body, script_analysis, lowered_funcs_arg) {
                     Ok(ir_code_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: LookupMap<String, Arc<datalove_datafun_ir::ConstValue>> = resolved_consts

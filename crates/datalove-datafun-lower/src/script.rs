@@ -12,7 +12,7 @@
 
 use rmx::prelude::*;
 use std::sync::Arc;
-use bct::lookup::{LookupMap, LookupSet};
+use bct::lookup::LookupMap;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
@@ -62,16 +62,11 @@ fn is_self_assignment_script<'db>(
 /// Lower a script fragment unit.
 /// Lower a script fragment to IR.
 ///
-/// Caller must first call `analyze_script_fragment_tracked` to get ownership analysis,
-/// then call `analyze_script_functions` to get `func_analyses`.
+/// Caller must first call `analyze_script_fragment_tracked` to get ownership analysis.
 ///
-/// If `func_param_types` and `func_return_types` are provided, use those resolved types
-/// for function parameters and return type instead of deriving from AST type hints.
-/// This is needed for type alias support.
-///
-/// If `lowered_functions` is provided, those functions are reused instead of being
-/// re-lowered. The tuple contains the lowered functions and a map from function
-/// name to FuncId.
+/// `lowered_functions` are the unit's functions, every one of them, lowered by
+/// `lower_script_functions`, with a map from function name to FuncId. Each
+/// function sees the consts written above it, which is settled there.
 ///
 /// Const bindings are lowered as let bindings. The const inlining pass runs
 /// separately to replace them with literal values.
@@ -83,11 +78,8 @@ pub fn lower_script_fragment_raw<'db>(
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     body: &'db ast::Body<'db>,
-    func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
-    func_param_types: Option<&LookupMap<String, Vec<Type<'db>>>>,
-    func_return_types: Option<&LookupMap<String, Type<'db>>>,
-    lowered_functions: Option<(Vec<IrCodeUnit>, LookupMap<String, FuncId>)>,
+    lowered_functions: (Vec<IrCodeUnit>, LookupMap<String, FuncId>),
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
     ctx.arena = Some(&body.arena);
@@ -102,36 +94,15 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.body.next_binding_id = script_analysis.externals;
     ctx.unit_end_drops = script_analysis.unit_end;
 
-    // Track which functions have already been lowered (to skip in statement handling).
-    let already_lowered_funcs: LookupSet<String>;
-
-    // Handle lowered functions if provided.
-    if let Some((functions, func_name_to_id)) = lowered_functions {
-        // Use lowered functions directly.
-        ctx.functions = functions;
-
-        // Register each function with its existing FuncId so call resolution works.
-        for (name, func_id) in func_name_to_id.iter_unordered() {
-            ctx.register_func_with_id(name, 0, *func_id);
-        }
-
-        already_lowered_funcs = func_name_to_id.keys_unordered().cloned().collect();
-    } else {
-        already_lowered_funcs = LookupSet::default();
-
-        // Pre-register all functions to enable forward references (mutual recursion).
-        // This must happen before lowering any function bodies.
-        for stmt in stmts {
-            if let Statement::Fun(fun_stmt) = stmt {
-                let func_name = fun_stmt.name().text(db).S();
-                let param_count = fun_stmt.params().len();
-                ctx.pre_register_func(&func_name, param_count);
-            }
-        }
+    let (functions, func_name_to_id) = lowered_functions;
+    ctx.functions = functions;
+    // Registered under their existing FuncIds, so that calls resolve.
+    for (name, func_id) in func_name_to_id.iter_unordered() {
+        ctx.register_func_with_id(name, 0, *func_id);
     }
 
     for stmt in stmts {
-        lower_statement_for_script(&mut ctx, stmt, &func_analyses, func_param_types, func_return_types, &already_lowered_funcs)?;
+        lower_statement_for_script(&mut ctx, stmt)?;
     }
     ctx.body.current_stmt_idx = None;
 
@@ -431,22 +402,10 @@ fn shown_binding<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<String>
 
 /// Lower a statement in script unit context.
 ///
-/// This handles function definitions by lowering them and adding to the unit's functions.
-/// The `func_analyses` map must contain pre-computed analyses for all function statements.
-///
-/// If `func_param_types` and `func_return_types` are provided, use those resolved types
-/// for function parameters and return type instead of deriving from AST type hints.
-/// This is needed for type alias support.
-///
-/// If `already_lowered_funcs` contains a function name, that function has already been lowered
-/// and only the export should be emitted (body lowering is skipped).
+/// A function definition only exports the function, which is lowered already.
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &'db datalove_datafun_ast::ast::Statement<'db>,
-    func_analyses: &ScriptFunctionAnalyses<'db>,
-    func_param_types: Option<&LookupMap<String, Vec<Type<'db>>>>,
-    func_return_types: Option<&LookupMap<String, Type<'db>>>,
-    already_lowered_funcs: &LookupSet<String>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
     // This is critical: ownership analysis uses alloc_stmt_id() for ALL statements,
@@ -568,50 +527,12 @@ fn lower_statement_for_script<'db>(
         Statement::Fun(fun_stmt) => {
             let func_name = fun_stmt.name().text(ctx.db).S();
 
-            // If this function was already lowered, just export it (body already in ctx.functions).
-            if already_lowered_funcs.contains(&func_name) {
-                let code_ref = ctx.lookup_func(&func_name)
-                    .expect("lowered function should be registered");
-                let unit_id = match code_ref {
-                    datalove_datafun_ir::CodeRef::Local(id) => id,
-                    _ => panic!("lowered function should be local"),
-                };
-                ctx.exports.push((func_name, ExportBinding::Function(unit_id)));
-                return Ok(());
-            }
-
-            // Look up pre-computed analysis.
-            let analysis = func_analyses.get(&fun_stmt.key())
-                .expect("function analysis not found - caller must run analyze_script_functions first")
-                .C();
-
-            // Define the function in the symbol table first (allows recursion).
-            let param_count = fun_stmt.params().len();
-            let func_id = ctx.define_func(&func_name, param_count);
-
-            // Swap in fresh state for function body.
-            let saved = ctx.swap_body_state(FrameState::new());
-
-            // Look up resolved types for this function.
-            let func_name_str = fun_stmt.name().text(ctx.db);
-            let resolved_params = func_param_types
-                .and_then(|m| m.get(func_name_str))
-                .map(|v| v.as_slice());
-            let resolved_return = func_return_types
-                .and_then(|m| m.get(func_name_str))
-                .cloned();
-
-            // Lower the function body with resolved types for type alias support.
-            let unit = lower_function_body(ctx, func_id, fun_stmt, analysis, resolved_params, resolved_return)?;
-
-            // Restore parent state.
-            ctx.swap_body_state(saved);
-
-            // Add the function to the unit's functions.
-            ctx.functions.push(unit);
-
-            // Export the function.
-            ctx.exports.push((func_name, ExportBinding::Function(datalove_datafun_ir::CodeUnitId(func_id.0))));
+            let code_ref = ctx.lookup_func(&func_name)
+                .expect("every function of the unit is lowered before it");
+            let datalove_datafun_ir::CodeRef::Local(unit_id) = code_ref else {
+                panic!("a function of the unit is local to it");
+            };
+            ctx.exports.push((func_name, ExportBinding::Function(unit_id)));
             Ok(())
         }
         Statement::If(if_stmt) => {

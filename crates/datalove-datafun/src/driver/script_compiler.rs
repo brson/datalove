@@ -2342,31 +2342,15 @@ impl<'db> ScriptCompiler<'db> {
 
         match unit {
             ParsedUnit::Fragment { body, .. } => {
-                // Build func_param_types and func_return_types for type alias support.
-                let mut func_param_types: LookupMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = LookupMap::default();
-                let mut func_return_types: LookupMap<String, datalove_datafun_tycheck::Type<'db>> = LookupMap::default();
-                for (name, func_type) in typecheck.result.function_types(self.db) {
-                    let param_types = func_type.param_types(self.db).C();
-                    func_param_types.insert(name.text(self.db).S(), param_types);
-
-                    let return_type = func_type.return_type(self.db);
-                    func_return_types.insert(name.text(self.db).S(), return_type);
-                }
-
                 let script_analysis = ownership.script_analysis.C()
                     .expect("script_analysis required for fragment units");
 
                 // Const bindings are lowered as let bindings.
                 // Const inlining happens in phase_const_inline after IR assembly.
-                // Pass lowered functions to avoid re-lowering them.
-                let lowered_funcs_arg = if lowered_funcs.functions.is_empty() {
-                    None
-                } else {
-                    Some((
-                        lowered_funcs.functions.iter().map(|f| (**f).C()).collect(),
-                        lowered_funcs.func_name_to_id.C(),
-                    ))
-                };
+                let lowered_funcs_arg = (
+                    lowered_funcs.functions.iter().map(|f| (**f).C()).collect(),
+                    lowered_funcs.func_name_to_id.C(),
+                );
 
                 lower_script_fragment_raw(
                     self.db,
@@ -2376,10 +2360,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.env.data(self.db),
                     script_ctx,
                     body,
-                    ownership.func_analyses.C(),
                     script_analysis,
-                    Some(&func_param_types),
-                    Some(&func_return_types),
                     lowered_funcs_arg,
                 ).map_err(|e| self.lowering_failure(index, e))
             }
