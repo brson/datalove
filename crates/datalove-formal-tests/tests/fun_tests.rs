@@ -934,6 +934,9 @@ fn dump() {
 /// reaches only after them; and copy arguments and operands read where
 /// written.
 const RUN_CORPUS: &[&str] = &[
+    // Strings by their text: escapes read, printed escaped again, compared,
+    // and looked up as a map's keys.
+    "fun same(a: string, b: string): bool\n  ret a == b\nend fun\nfun look(ref m: %{string -> u8}, k: string): ?u8\n  ret some m[k]?\nend fun\nlet s = \"q\\\"b\\\\s\\nn\\rr\\tt\\0z\\u{e9}\\u{1F600}\"\ndebuglog s\ndebuglog s == \"q\\\"b\\\\s\\nn\\rr\\tt\\0z\\u{E9}\\u{1f600}\"\ndebuglog same(s, \"q\")\ndebuglog (\"\", \"\\u{41}\" == \"A\", \"a\" != \"a\")\nlet m: %{string -> u8} = %{\"a\" -> 1, \"b\\n\" -> 2}\ndebuglog look(ref m, \"b\\n\")\ndebuglog look(ref m, \"c\")\nvar t: {s: string, o: ?string} = {s = \"x\", o = some \"y\"}\nset t.s = \"z\"\ndebuglog t\ndebuglog t.o == some \"y\"\n",
     // A hint on a `mut` or `out` argument says only its type: what the
     // parameter came to is written back to the place under it.
     "fun nine(mut a: u8): u8\n  set a = : u8 / 9\n  ret a@\nend fun\nfun put(out a: u8)\n  set a = : u8 / 7\nend fun\nvar x: u8 = : u8 / 1\ndebuglog nine(mut : u8 / x)\ndebuglog x\nvar r: {f: [u8], g: (u8, u8)} = {f = [: u8 / 1, : u8 / 2], g = (: u8 / 3, : u8 / 4)}\ndebuglog nine(mut : u8 / r.f[(: index / 1)]!)\ndebuglog nine(mut : u8 / r.g.0)\ndebuglog r\nvar y: u8\ncall put(out : u8 / y)\ndebuglog y\ncall put(out : u8 / r.g.1)\ndebuglog r\n",
@@ -1294,6 +1297,7 @@ fn runs_agree() {
                 (if finished { prefix && model.len() == out.len() && *success } else { prefix }, fmt!("{out:?}"))
             }
             RustRun::Refused(line) => {
+                assert!(what != "corpus", "the Rust refuses a run corpus script: {line}\n{text}");
                 *ends.entry(fmt!("refused: {}", &line[..line.find(']').X() + 1])).or_default() += 1;
                 continue;
             }

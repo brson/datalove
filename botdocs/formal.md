@@ -355,9 +355,9 @@ that is not generic and whose parameters take literals, top-level
 `debuglog`s of calls with literals of their types, at and near their ranges'
 ends. The model runs it (`Fun.runScript`, the oracle printing each logged
 value as `debuglog` does, `Fun.showVal` in `FunShow.lean`), and so does the
-CLI. Every line must agree, up to what the model does not carry, a string's
-text, a float, an error's message, a map's or set's entries, which match
-anything; a script the model runs to its end, or to an early return, the CLI
+CLI. Every line must agree, up to what the model does not carry, a float,
+an error's message, a map's or set's entries, which match anything; a
+string prints with its text, escaped as `debuglog` escapes it; a script the model runs to its end, or to an early return, the CLI
 must too, printing what it returned early last. Where the model stops at
 what it does not run, what it logged must be what the CLI logged first. A
 script a later phase refuses, the ownership analysis say, is skipped and
@@ -367,8 +367,10 @@ bounds, division, indexes in and out of range, `for`, `loop`, recursion,
 `match`, a binding `if`, `!` and `set` through an index, and `mut` and `out`
 arguments written back, an early return's included, from calls inside
 larger expressions, read later in them, and returned early from after,
-under a hint or not. The model must run each corpus script to its end: one
-it stops in would compare only a prefix, which a gap in the model passes.
+under a hint or not, and strings, escaped, compared and as map keys. The
+Rust must take each corpus script and the model run it to its end: one
+refused would compare nothing, and one the model stops in only a prefix,
+which a gap in the model passes.
 `FORMAL_FUN_RUN_OF=<file>` with the `run_of` test prints what the model
 logs of a file and how it ends, to find where it stops. For this test worldgen
 writes `mut`, `out` and `ref` parameters, and the driver passes a `mut` or
@@ -557,10 +559,11 @@ Four things are proved of it:
   any that do what calls may (`CallOk`), below. What an operator does depends on its operands' type, as
   `a +! b` overflows at `u8`'s bounds or `i8`'s, so evaluation follows the
   checker one function for one and takes the types it gives, as a compiled
-  program carries them. A string, a float, `data` and `error` carry nothing
-  in the model, so a comparison, or a map lookup, is answered where the
-  values' contents are modelled, numbers and booleans and what is built of
-  them, and is otherwise not run. It holds for any inference, since what inference finds is checked
+  program carries them. A string carries its text, escapes read as the
+  parser reads them (`Lit.stringValue`). A float, `data` and `error` carry
+  nothing in the model, so a comparison, or a map lookup, is answered where
+  the values' contents are modelled, numbers, booleans and strings and what
+  is built of them, and is otherwise not run. It holds for any inference, since what inference finds is checked
   before it is used, and of contexts with no type parameter's bound, as an
   instance's are, so of a generic through the check-once theorem. Proving it
   changed two things. A hex literal's value is also the integer it spells

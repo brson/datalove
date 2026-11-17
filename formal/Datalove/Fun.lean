@@ -91,7 +91,8 @@ inductive Expr where
   | int (n : Int)
   | hex (n : Nat)
   | float
-  | str
+  /-- A string literal, by its text, escapes read. -/
+  | str (s : String)
   | none_
   | tuple (es : List Expr)
   | struct (fs : List (String × Expr))
@@ -622,7 +623,7 @@ def inferF : Nat → Ctx → Expr → InferM PTy
       | .ok t => pure (.known t)
       | .error c => if c == "T066" then throw Lit.rigidCode else fresh .unknown
     | .tt | .ff => pure (.known .bool)
-    | .str => pure (.known .string)
+    | .str _ => pure (.known .string)
     | .int _ => fresh .int
     | .hex _ => fresh .hex
     | .float => fresh .float
@@ -1006,7 +1007,7 @@ def partsF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
   | 0, _, _ => throw "fuel"
   | n + 1, Γ, e => match e with
     | .tt | .ff => pure .bool
-    | .str => pure .string
+    | .str _ => pure .string
     | .int _ | .hex _ => pure .int
     | .float => pure .f64
     | .atom a => pure (.atom a)
@@ -1151,7 +1152,7 @@ def checkForm (env : InferEnv) : Nat → Ctx → Expr → Ty → ChkM Unit
       | .result t => checkF env n Γ p t
       | _ => throw "F016"
     | .tt | .ff => if Ty.bool == expected then pure () else throw "F016"
-    | .str => if Ty.string == expected then pure () else throw "F016"
+    | .str _ => if Ty.string == expected then pure () else throw "F016"
     | .int k =>
       let t := expected.expose
       if t == .int then pure ()

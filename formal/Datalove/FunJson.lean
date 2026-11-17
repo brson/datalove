@@ -139,7 +139,7 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
     | "False" => pure .ff
     | "None" => pure .none_
     | "Float" => pure .float
-    | "String" => pure .str
+    | "String" => .str <$> Lit.stringValue (← (← field e "value").getStr?)
     | "Int" =>
       let s := digits (← (← field e "value").getStr?)
       match s.toInt? with

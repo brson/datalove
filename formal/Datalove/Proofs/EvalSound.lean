@@ -1535,7 +1535,7 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (ch
       split at h
       · rename_i hc; simp only [beq_iff_eq] at hc; subst hc; exact SoundT.pure' .bool
       · simp at h
-    case str =>
+    case str s =>
       simp only [checkForm] at h; simp only [evalForm]
       split at h
       · rename_i hc; simp only [beq_iff_eq] at hc; subst hc; exact SoundT.pure' .str

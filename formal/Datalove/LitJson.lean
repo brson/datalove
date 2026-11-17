@@ -10,8 +10,9 @@ A form with no parts is its name as a string; anything else is an array
 whose first element names it:
 
 ```
-"true" "false" "float" "string" "none"
+"true" "false" "float" "none"
 ["int", "-12"]  ["hex", "ff"]                  value, digits only
+["string", "\"a\\n\""]                         as written, quotes and escapes
 ["tuple", [E, ...]]  ["struct", [["x", E], ...]]
 ["list", [E, ...]]  ["set", [E, ...]]  ["map", [[K, V], ...]]
 ["tensor", [d, ...], [E, ...]]  ["table", ["x", ...], [[E, ...], ...]]
@@ -34,13 +35,45 @@ def hexValue (digits : String) : Except String Nat :=
       else throw s!"not a hex digit: {c}"
     pure (n * 16 + d)
 
+/-- The text a string literal written `raw` holds, as the parser reads it
+(`string_literal_value`): its quotes taken off, and `\"`, `\\`, `\n`, `\r`,
+`\t`, `\0` and `\u{...}`, of one to six hex digits naming a character, read.
+Any other escape is a parse error, which no script given the oracle has. -/
+def stringValue (raw : String) : Except String String := do
+  let cs := raw.toList
+  unless cs.length ≥ 2 && cs.head? == some '"' && cs.getLast? == some '"' do
+    throw s!"not a string literal: {raw}"
+  go ((cs.drop 1).dropLast) ""
+where
+  go : List Char → String → Except String String
+    | [], acc => pure acc
+    | '\\' :: c :: rest, acc => match c with
+      | '"' => go rest (acc.push '"')
+      | '\\' => go rest (acc.push '\\')
+      | 'n' => go rest (acc.push '\n')
+      | 'r' => go rest (acc.push '\r')
+      | 't' => go rest (acc.push '\t')
+      | '0' => go rest (acc.push (Char.ofNat 0))
+      | 'u' => match rest with
+        | '{' :: body =>
+          let hex := body.takeWhile (· != '}')
+          if hex.length == body.length then throw "an unclosed \\u{ escape"
+          else if hex.length == 0 || hex.length > 6 then throw "a \\u{ escape of 1-6 hex digits"
+          else match hexValue (String.ofList hex) with
+            | .ok n => if n.isValidChar then go (body.drop (hex.length + 1)) (acc.push (Char.ofNat n))
+              else throw s!"not a character: {n}"
+            | .error e => throw e
+        | _ => throw "\\u without {"
+      | c => throw s!"not an escape: \\{c}"
+    | c :: rest, acc => go rest (acc.push c)
+    termination_by cs => cs.length
+
 partial def Expr.fromJson (j : Json) : Except String Expr := do
   if let .ok s := j.getStr? then
     return ← match s with
       | "true" => pure .tt
       | "false" => pure .ff
       | "float" => pure .float
-      | "string" => pure .str
       | "none" => pure .none
       | _ => throw s!"unknown expression {s}"
   let (tag, args) ← tagged j
@@ -57,6 +90,7 @@ partial def Expr.fromJson (j : Json) : Except String Expr := do
     | Option.some n => pure (.int n)
     | Option.none => throw s!"not an integer: {s}"
   | "hex" => .hex <$> hexValue (← (← arg 0).getStr?)
+  | "string" => .str <$> stringValue (← (← arg 0).getStr?)
   | "tuple" => .tuple <$> list (← arg 0)
   | "struct" => do
     let fs ← (← (← arg 0).getArr?).toList.mapM fun f => do

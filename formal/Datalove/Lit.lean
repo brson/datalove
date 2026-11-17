@@ -37,7 +37,8 @@ inductive Expr where
   /-- A hex literal, by its value. -/
   | hex (n : Nat)
   | float
-  | str
+  /-- A string literal, by its text, escapes read. -/
+  | str (s : String)
   | tuple (es : List Expr)
   | struct (fs : List (String × Expr))
   | list (es : List Expr)
@@ -438,7 +439,7 @@ def inferF : Nat → Expr → InferM PTy
   | n + 1, e => match e with
     | .hinted h _ => do pure (.known (← liftM (convertHint h)))
     | .tt | .ff => pure (.known .bool)
-    | .str => pure (.known .string)
+    | .str _ => pure (.known .string)
     | .int _ => fresh .int
     | .hex _ => fresh .hex
     | .float => fresh .float
@@ -574,7 +575,7 @@ def checkForm (env : CheckEnv) : Expr → Ty → Except Code Unit
     | .result t => checkWith env p t
     | _ => env.sub (.ok p)
   | .tt, expected | .ff, expected => if Ty.bool == expected then pure () else throw "T022"
-  | .str, expected => if Ty.string == expected then pure () else throw "T022"
+  | .str _, expected => if Ty.string == expected then pure () else throw "T022"
   | .int n, expected =>
     let t := expected.expose
     if t == .int then pure ()

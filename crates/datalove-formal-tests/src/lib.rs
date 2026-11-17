@@ -429,7 +429,7 @@ pub fn expr_to_json(db: &Db, expr: &ExprFull<'_>) -> Value {
         Expr::True => json!("true"),
         Expr::False => json!("false"),
         Expr::Float(_) => json!("float"),
-        Expr::String(_) => json!("string"),
+        Expr::String(s) => json!(["string", s.value.as_str(db)]),
         Expr::None => json!("none"),
         Expr::Int(i) => json!(["int", datalove_datalit::parser_util::strip_separators(i.value.as_str(db))]),
         Expr::Hex(h) => {

@@ -32,7 +32,7 @@ inductive Val where
   | int (n : Int)
   | hex (n : Nat)
   | float
-  | str
+  | str (s : String)
   | tuple (vs : List Val)
   | struct (fs : List (String × Val))
   | list (vs : List Val)
@@ -57,7 +57,7 @@ def eval : Expr → Val
   | .int n => .int n
   | .hex n => .hex n
   | .float => .float
-  | .str => .str
+  | .str s => .str s
   | .tuple es => .tuple (evalAll es)
   | .struct fs => .struct (evalFields fs)
   | .list es => .list (evalAll es)
@@ -133,7 +133,7 @@ inductive HasType : Val → Ty → Prop where
   `u8` to `i16` say, is there what it is anywhere. -/
   | hexInt {n : Nat} : HasType (.int (n : Int)) t → HasType (.hex n) t
   | float : t.isFloat = true → HasType .float t
-  | str : HasType .str .string
+  | str {s : String} : HasType (.str s) .string
   | tuple : vs.length = (tysList ts).length →
       (∀ p ∈ vs.zip (tysList ts), HasType p.1 p.2) → HasType (.tuple vs) (.tuple ts)
   | struct : fs.map (·.1) = (fieldsList ts).map (·.1) →
@@ -202,7 +202,7 @@ theorem checkWith_sound (env : CheckEnv) (hsub : ∀ e, env.sub e ≠ .ok ()) : 
     split at hc
     · exact absurd hc throw_ne
     · simpa [eval] using checkForm_sound env hsub inner t hc
-  | .tt, t, hc | .ff, t, hc | .int _, t, hc | .hex _, t, hc | .float, t, hc | .str, t, hc
+  | .tt, t, hc | .ff, t, hc | .int _, t, hc | .hex _, t, hc | .float, t, hc | .str _, t, hc
   | .tuple _, t, hc | .struct _, t, hc | .list _, t, hc | .set _, t, hc | .map _, t, hc
   | .tensor _ _, t, hc | .table _ _, t, hc | .none, t, hc | .some _, t, hc | .ok _, t, hc
   | .er _, t, hc | .data _, t, hc | .error _, t, hc | .atom _, t, hc | .term _ _, t, hc
@@ -237,7 +237,7 @@ theorem checkForm_sound (env : CheckEnv) (hsub : ∀ e, env.sub e ≠ .ok ()) : 
     split at hc
     · rename_i hb; simp at hb; subst hb; exact .bool
     · exact absurd hc throw_ne
-  | .str, t, hc => by
+  | .str _, t, hc => by
     simp only [checkForm] at hc
     split at hc
     · rename_i hb; simp at hb; subst hb; exact .str

@@ -27,15 +27,15 @@ variables, so a variable read after it in the same expression reads what it
 came to. A `mut` or `out` argument into a field or element of a variable
 evaluates its keys with the arguments (`evalPath`), as the Rust takes its
 pointer then, and the parameter's value is written back through the same
-steps with those keys' values (`writeBack`, `writeSteps`). One with type
-arguments that are not ground is `Stop.unsupported`, and so is writing back
-through a hint. `@`
+steps with those keys' values (`writeBack`, `writeSteps`). A hinted one
+is written back to the place under the hint (`unhint`). One with type
+arguments that are not ground is `Stop.unsupported`. `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison, and whether two map keys are one,
 are answered where the values' contents are modelled (`valEq?`): numbers,
-booleans and what is built of them. A string, a float, `data` or `error`
-carries nothing here, so comparing one, or looking one up as a map's key, is
-`Stop.unsupported`.
+booleans, strings, by their text, and what is built of them. A float,
+`data` or `error` carries nothing here, so comparing one, or looking one up
+as a map's key, is `Stop.unsupported`.
 -/
 
 namespace Datalove.Fun
@@ -122,10 +122,11 @@ def fallible (op : BinOp) (t : Ty) (r : Int) : EvalM Val :=
 mutual
 
 /-- Whether two values are equal, where their contents are modelled: none
-for a string, a float, `data`, `error`, a map, a set, a tensor or a table, or
+for a float, `data`, `error`, a map, a set, a tensor or a table, or
 what holds one. Values compared are of one type. -/
 partial def valEq? : Val → Val → Option Bool
   | .bool a, .bool b => some (a == b)
+  | .str a, .str b => some (a == b)
   | .atom a, .atom b => some (a == b)
   | .term a v, .term b w => if a != b then some false else valEq? v w
   | .none, .none => some true
@@ -486,7 +487,7 @@ def evalForm (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Ty → 
       | _ => throw .wrong
     | .tt => pure (.bool true)
     | .ff => pure (.bool false)
-    | .str => pure .str
+    | .str s => pure (.str s)
     | .int k => pure (.int k)
     | .float => pure .float
     | .hex k => pure (.hex k)
