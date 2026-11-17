@@ -377,7 +377,7 @@ let a = 100
 // unit 2
 let b = 1
 // unit 3
-let c = a + 1
+let c = a + b
 ```
 
 Fresh-run result: `c == 101`.
@@ -404,10 +404,10 @@ Edit unit 2:
 ```datalove
 // unit 1
 var a = 100
-// unit 2
+// edit unit 2
 set a = a + 1000
 // unit 3
-let b = 1
+let b = 10
 // unit 4
 let c = a + b
 ```
