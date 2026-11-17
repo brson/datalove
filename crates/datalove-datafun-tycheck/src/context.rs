@@ -1484,6 +1484,17 @@ impl<'db> TypeContext<'db> {
         match statement {
             Statement::Const(stmt) => {
                 self.below.values.remove(&stmt.name);
+                if self.const_deps.get_mut().consts.iter().any(|top| top.name == stmt.name) {
+                    let name = stmt.name.as_str(self.db);
+                    let error = self.error_worded(
+                        ErrorSite::Expr(self.expr(stmt.value).key()),
+                        FCode::ConstDeclaredTwice,
+                        fmt!("const `{name}` is declared twice"),
+                        "a const is declared once in a module or script unit",
+                        Some(fmt!("in a session a later unit may declare `{name}` again")),
+                    );
+                    self.add_error(error);
+                }
                 let is_data = matches!(self.expr(stmt.value).kind(), ExprFunKind::DataFile(_));
                 let deps = self.const_deps.get_mut();
                 deps.current = Some(deps.consts.len() as u32);

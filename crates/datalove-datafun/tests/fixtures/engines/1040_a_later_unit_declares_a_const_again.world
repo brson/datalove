@@ -1,0 +1,33 @@
+----------
+scriptunit-fragment
+----------
+
+const k: int = 1
+fun f(): int
+    ret k@
+end fun
+debuglog f()
+
+----------
+scriptunit-fragment
+----------
+
+// A later unit may declare an earlier unit's const again, of another type
+// too. From here on `k` is this one: this unit's function reads it, and the
+// earlier unit's function still reads the one above it.
+const k: string = "a-long-heap-string-0123456789"
+fun g(): string
+    ret k@
+end fun
+debuglog f()
+debuglog g()
+debuglog k@
+
+----------
+scriptunit-fragment
+----------
+
+const k: int = 3
+debuglog f()
+debuglog g()
+debuglog k@

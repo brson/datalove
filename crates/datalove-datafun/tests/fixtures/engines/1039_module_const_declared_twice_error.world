@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+// A module declares a const once (F112), as a script unit does.
+const k: int = 1
+
+fun f(): int
+    ret k@
+end fun
+
+const k: string = "s"
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.f
+debuglog f()

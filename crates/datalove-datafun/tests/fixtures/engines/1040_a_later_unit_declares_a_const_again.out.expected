@@ -1,0 +1,103 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = call u0()
+                        debuglog v1
+                        drop v1
+                        unit_end_drop v0
+                        unit_end
+                    
+                    fn f():
+                    block0:
+                        v0 = staticref 1int
+                        v1 = clone *v0
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a-long-heap-string-0123456789"
+                        v1 = call unit1.u0()
+                        debuglog v1
+                        drop v1
+                        v2 = call u0()
+                        debuglog v2
+                        drop v2
+                        v3 = clone v0
+                        debuglog v3
+                        drop v3
+                        unit_end_drop v0
+                        unit_end
+                    
+                    fn g():
+                    block0:
+                        v0 = staticref "a-long-heap-string-0123456789"
+                        v1 = clone *v0
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n\"a-long-heap-string-0123456789\"\n\"a-long-heap-string-0123456789\"\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3int
+                        v1 = call unit1.u0()
+                        debuglog v1
+                        drop v1
+                        v2 = call unit2.u0()
+                        debuglog v2
+                        drop v2
+                        v3 = clone v0
+                        debuglog v3
+                        drop v3
+                        unit_end_drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n\"a-long-heap-string-0123456789\"\n3\n"),
+        ),
+    ],
+)

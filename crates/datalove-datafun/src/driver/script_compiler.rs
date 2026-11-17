@@ -1810,9 +1810,16 @@ impl<'db> ScriptCompiler<'db> {
         // bodies that need no value from this unit's consts go first, and the
         // rest wait for const evaluation to lower them, each once the last
         // const it names has its value. This unit's data consts are in scope
-        // here already; see `data_consts`.
+        // here already; see `data_consts`. An earlier unit's const that this
+        // unit declares again is left out, so that a body naming it waits for
+        // this unit's value rather than taking the earlier one.
         let mut first_consts = script_consts_over(&self.unit_records[..index]);
         if let ParsedUnit::Fragment { body, .. } = unit {
+            for statement in &body.statements {
+                if let Statement::Const(binding) = statement {
+                    first_consts.remove(binding.name.text(self.db).as_str());
+                }
+            }
             first_consts.extend(datalove_datafun_compiler::const_eval::data_consts(
                 self.db, body, typecheck.expr_types, self.env.data(self.db)).into_iter_unordered());
         }

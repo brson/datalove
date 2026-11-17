@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// A script unit declares a const once (F112). A function reads the const
+// above it, and a second of the name would leave it unclear which.
+const k: int = 1
+fun f(): int
+    ret k@
+end fun
+const k: int = 2
+debuglog f()

@@ -1387,6 +1387,13 @@ end fun
 Consts are evaluated in source order, and each function is compiled once the
 last const it names has its value.
 
+**One of a name.** A module or a script unit declares a const of a name once;
+a second is an error (F112), so a name always means the one const, wherever
+it is read. A later unit of a session may declare an earlier unit's const
+again, of any type: from there on the name is the new const, while a function
+of an earlier unit still reads the one above it. A `const` in a function body
+is a binding of that body, and may be declared again in it as a `let` may.
+
 A const that cannot be evaluated is an error at its initializer, and a const
 or a function that names it is left at that: what it would have said follows
 from the first. A function whose const parameters are given more than 64
