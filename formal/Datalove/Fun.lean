@@ -1734,6 +1734,30 @@ def constsOf : List (String × Ty × Kind) → List (String × Ty × Kind)
     let rest := (constsOf vs).filter (·.1 != x)
     if k == .const_ then (x, t, k) :: rest else rest
 
+mutual
+/-- A statement with no type alias in it, as the parser makes a body: `type`
+inside a block is P074. -/
+def Stmt.typeFree : Stmt → Bool
+  | .type_ _ _ => false
+  | .if_ _ _ _ t e => blockTypeFree t && elseTypeFree e
+  | .loop _ b => blockTypeFree b
+  | .for_ _ _ b => blockTypeFree b
+  | .match_ _ cs d => casesTypeFree cs && elseTypeFree d
+  | _ => true
+
+def blockTypeFree : List Stmt → Bool
+  | [] => true
+  | s :: ss => s.typeFree && blockTypeFree ss
+
+def casesTypeFree : List Case → Bool
+  | [] => true
+  | .atom _ b :: cs | .term _ _ b :: cs => blockTypeFree b && casesTypeFree cs
+
+def elseTypeFree : Option (List Stmt) → Bool
+  | none => true
+  | some b => blockTypeFree b
+end
+
 /-- A function's body under its parameters (Fun), and F063 if it has a
 return type and can reach its end. A function whose signature is not well
 formed is not in `sigs`, and its body is not checked. It sees the aliases
@@ -1751,6 +1775,13 @@ def checkFun (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (S
       reportIf (match sig.ret with
         | .ty _ => completes body
         | .void => false) "F063"
+
+/-- A function declared at the top level: P074 for a type alias in its body,
+which the parser refuses, then the function checked. -/
+def checkDecl (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (String × Ty × Kind))
+    (f : FunDecl) : StateM (Array Code) Unit :=
+  match f with
+  | .mk _ _ _ _ body => reportIf (!blockTypeFree body) "P074" >>= fun _ => checkFun sigs aliases consts f
 
 /-- The script's names resolved, before anything is checked: its aliases and
 its functions' signatures, in the order they are written, each seeing the
@@ -1786,7 +1817,7 @@ def checkModuleWith (extra : List (String × Sig)) (pre : Array Code) (ss : List
   let run : StateM (Array Code) Unit := do
     let mut Γ : Ctx := { ret := .void, sigs, inModule := true }
     for s in ss do
-      if let .fun_ f := s then checkFun sigs Γ.aliases (constsOf Γ.vars) f
+      if let .fun_ f := s then checkDecl sigs Γ.aliases (constsOf Γ.vars) f
       else Γ ← checkStmt Γ s
   (run.run (pre ++ diags)).2
 
@@ -1868,7 +1899,7 @@ def checkScript (ss : List Stmt) : Array Code :=
   let run : StateM (Array Code) Unit := do
     let mut Γ : Ctx := { ret := .ty (.result unitTy), sigs }
     for s in ss do
-      if let .fun_ f := s then checkFun sigs Γ.aliases (constsOf Γ.vars) f
+      if let .fun_ f := s then checkDecl sigs Γ.aliases (constsOf Γ.vars) f
       else Γ ← checkStmt Γ s
   (run.run diags).2
 

@@ -14,11 +14,10 @@ reads only consts above it, through the functions it calls too, which F089
 sees to; one that read a const not evaluated yet would read it unset. A
 `debuglog` inside a function is not kept.
 
-A function goes into the table only where its signature's type parameters
-are its declaration's, its parameters are as many as its signature's, and
-its body declares no type alias. `resolveNames` makes the first two so of
-any script and the parser the third, which `Proofs/RunSound.lean` does not
-yet show; a function that broke them would not be run.
+A function goes into the table under the signature `resolveNames` gave its
+name. Where the script checks, that is its own, with its type parameters and
+as many parameters (`resolveNames_own`), and its body declares no type alias
+(P074), which `Proofs/RunSound.lean` uses and the runner does not check.
 -/
 
 namespace Datalove.Fun
@@ -60,14 +59,11 @@ def FunDef.entry (fd : FunDef) (store : CStore) : String × FunInfo :=
               cvals := constEnv fd.consts (store.drop (store.length - fd.seen)),
               tps := fd.tps, params := fd.params, body := fd.body })
 
-/-- A function declared in context `Γ` below `seen` consts, where its
-declaration is one `runCall` can run as checked. -/
+/-- A function declared in context `Γ` below `seen` consts, where it has a
+signature. -/
 def funDef (sigs : List (String × Sig)) (Γ : Ctx) (seen : Nat) : FunDecl → Option FunDef
   | .mk name tps params _ body => match sigs.lookup name with
-    | some sig =>
-      if sig.tparams == tps && params.length == sig.params.length && blockTypeFree body then
-        some { name, aliases := Γ.aliases, consts := constsOf Γ.vars, tps, params, body, seen }
-      else none
+    | some _ => some { name, aliases := Γ.aliases, consts := constsOf Γ.vars, tps, params, body, seen }
     | none => none
 
 /-- A script's functions from `Γ`, below `seen` consts, as `checkScript`

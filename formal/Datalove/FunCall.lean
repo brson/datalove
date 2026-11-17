@@ -12,8 +12,8 @@ theirs. A `ret e` is what the call gives, a `ret` or a body that ends gives
 the unit, and with it what each parameter came to, for the caller to write
 back a `mut` or `out` argument from (`paramsAfter`). Calls nest at most as
 deep as they are given (`Stop.diverge`). A function not in the table, one
-whose declaration does not match its signature as `resolveNames` gives it,
-is not run (`Stop.unsupported`).
+with no signature, is not run (`Stop.unsupported`); in a script that checks
+there is none.
 
 It takes `funCtx` and `Ctx.inst` from the proofs, so that the context a body
 runs in is by definition the one it was checked in.

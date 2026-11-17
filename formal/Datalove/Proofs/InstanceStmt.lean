@@ -283,30 +283,6 @@ end
 section
 variable {θ : List (String × Ty)}
 
-mutual
-/-- A statement with no type alias in it, as the parser makes a body: `type`
-inside a function is P074. -/
-def Stmt.typeFree : Stmt → Bool
-  | .type_ _ _ => false
-  | .if_ _ _ _ t e => blockTypeFree t && elseTypeFree e
-  | .loop _ b => blockTypeFree b
-  | .for_ _ _ b => blockTypeFree b
-  | .match_ _ cs d => casesTypeFree cs && elseTypeFree d
-  | _ => true
-
-def blockTypeFree : List Stmt → Bool
-  | [] => true
-  | s :: ss => s.typeFree && blockTypeFree ss
-
-def casesTypeFree : List Case → Bool
-  | [] => true
-  | .atom _ b :: cs | .term _ _ b :: cs => blockTypeFree b && casesTypeFree cs
-
-def elseTypeFree : Option (List Stmt) → Bool
-  | none => true
-  | some b => blockTypeFree b
-end
-
 @[simp] theorem Ctx.ordered_inst (Γ : Ctx) : (Γ.inst θ).ordered = fun _ => false := by
   funext n; rfl
 

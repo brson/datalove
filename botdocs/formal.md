@@ -677,10 +677,13 @@ Four things are proved of it:
   above it, through the functions it calls too, as F089 sees to; the model
   does not need that for soundness, since a const it read before it was
   evaluated would read as unset, a stop a script may end with. A function goes into the
-  table only where its signature's type parameters are its declaration's, its
-  parameters as many as its signature's, and its body declares no type alias;
-  `resolveNames` and the parser make that so, which is not yet proved, so the
-  runner checks it.
+  table under the signature `resolveNames` gave its name, and the runner
+  checks nothing more of it. In a script that checks, that signature is its
+  own, with its type parameters and as many parameters (`Fun.resolveNames_own`,
+  in `Proofs/Sigs.lean`, since a second function of a name is F086 and a
+  signature that does not convert is reported), and its body declares no type
+  alias: the model reports P074 for one at the top level (`checkDecl`), as the
+  parser refuses it, so a script that checks quietly has none.
 - **Inference under a generic steps with inference under its instances**
   (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
   arguments touches only known types, so a variable keeps its number, and

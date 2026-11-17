@@ -481,4 +481,159 @@ theorem checkFun_instance_script {θ : List (String × Ty)} (g : Ground θ) {env
         | .void => false) "F063") () :=
   checkFun_instance g H _ (resolveNames_sigsOk ss) aliases consts name tps params ret body sig hsig hb tf quiet
 
+/-! ## A function's signature is its own -/
+
+/-- One step of `resolveNames`'s loop. -/
+def resolveStep (st : Aliases × List (String × Sig) × Array Lit.Code) (s : Stmt) :
+    Aliases × List (String × Sig) × Array Lit.Code :=
+  match s with
+  | .type_ n h => match defineAlias st.1 n h with
+    | .ok as => (as, st.2.1, st.2.2)
+    | .error c => (st.1, st.2.1, st.2.2.push c)
+  | .fun_ f =>
+    if (st.2.1.lookup f.name).isSome then (st.1, st.2.1, st.2.2.push "F086")
+    else match sigOf st.1 f with
+      | .ok sig => (st.1, st.2.1 ++ [(f.name, sig)], st.2.2)
+      | .error c => (st.1, st.2.1, st.2.2.push c)
+  | _ => (st.1, st.2.1, st.2.2)
+
+theorem forIn_id_foldl {α σ} (g : σ → α → σ) : ∀ (l : List α) (b : σ) (f : α → σ → Id (ForInStep σ)),
+    (∀ a b, f a b = pure (.yield (g b a))) → forIn l b f = (pure (l.foldl g b) : Id σ)
+  | [], _, _, _ => rfl
+  | a :: l, b, f, h => by
+    rw [List.forIn_cons, h]
+    exact forIn_id_foldl g l _ f h
+
+theorem resolveNames_foldl (ss : List Stmt) :
+    resolveNames ss = (let r := ss.foldl resolveStep ([], [], #[]); (r.2.1, r.2.2)) := by
+  simp only [resolveNames, Id.run, bind]
+  rw [forIn_id_foldl resolveStep]
+  · rfl
+  · intro s st
+    cases s
+    case type_ n h => simp only [resolveStep]; cases defineAlias st.1 n h <;> rfl
+    case fun_ f =>
+      simp only [resolveStep]
+      cases (st.2.1.lookup f.name).isSome <;> simp only [Bool.false_eq_true, ite_true, ite_false]
+      cases sigOf st.1 f <;> rfl
+    all_goals rfl
+
+theorem mapM_ok_length {α β ε} {f : α → Except ε β} : ∀ {l : List α} {r : List β},
+    l.mapM f = .ok r → r.length = l.length
+  | [], r, h => by simp [pure, Except.pure] at h; subst h; rfl
+  | x :: l, r, h => by
+    rw [List.mapM_cons] at h
+    cases hx : f x with
+    | error e => simp [hx, bind, Except.bind] at h
+    | ok b =>
+      cases hl : l.mapM f with
+      | error e => simp [hx, hl, bind, Except.bind] at h
+      | ok bs =>
+        simp [hx, hl, bind, Except.bind, pure, Except.pure] at h
+        subst h
+        simp [mapM_ok_length hl]
+
+theorem sigOf_shape {A : Aliases} {name : String} {tps : List (String × Option Bound)}
+    {params : List (Mode × String × Hint)} {ret : Option Hint} {body : List Stmt} {sig : Sig}
+    (h : sigOf A (.mk name tps params ret body) = .ok sig) :
+    sig.tparams = tps ∧ sig.params.length = params.length := by
+  simp only [sigOf] at h
+  revert h
+  generalize hp : (List.mapM (m := Except Lit.Code) _ params) = res
+  intro h
+  cases res with
+  | error _ => simp [bind, Except.bind] at h
+  | ok ps =>
+    simp only [bind, Except.bind] at h
+    have hl := mapM_ok_length hp
+    cases ret with
+    | none => simp [pure, Except.pure] at h; subst h; exact ⟨rfl, hl⟩
+    | some hh =>
+      cases hs : sigHint A tps hh with
+      | error _ => simp [hs, Functor.map, Except.map] at h
+      | ok t => simp [hs, Functor.map, Except.map, pure, Except.pure] at h; subst h; exact ⟨rfl, hl⟩
+
+theorem resolveStep_diags {st : Aliases × List (String × Sig) × Array Lit.Code} {s : Stmt}
+    (h : (resolveStep st s).2.2 = #[]) : st.2.2 = #[] := by
+  cases s
+  case type_ n hh =>
+    simp only [resolveStep] at h
+    split at h
+    · exact h
+    · simp at h
+  case fun_ f =>
+    simp only [resolveStep] at h
+    split at h
+    · simp at h
+    · split at h
+      · exact h
+      · simp at h
+  all_goals exact h
+
+theorem resolveStep_keeps {st : Aliases × List (String × Sig) × Array Lit.Code} {s : Stmt}
+    {n : String} {sig : Sig} (h : st.2.1.lookup n = some sig) : (resolveStep st s).2.1.lookup n = some sig := by
+  cases s
+  case type_ m hh => simp only [resolveStep]; cases defineAlias st.1 m hh <;> exact h
+  case fun_ f =>
+    simp only [resolveStep]
+    split
+    · exact h
+    · cases sigOf st.1 f
+      · exact h
+      · simp [lookup_append_one, h]
+  all_goals exact h
+
+theorem foldl_keeps : ∀ (l : List Stmt) {st : Aliases × List (String × Sig) × Array Lit.Code}
+    {n : String} {sig : Sig}, st.2.1.lookup n = some sig → (l.foldl resolveStep st).2.1.lookup n = some sig
+  | [], _, _, _, h => h
+  | _ :: l, _, _, _, h => foldl_keeps l (resolveStep_keeps h)
+
+theorem foldl_diags : ∀ (l : List Stmt) {st : Aliases × List (String × Sig) × Array Lit.Code},
+    (l.foldl resolveStep st).2.2 = #[] → st.2.2 = #[]
+  | [], _, h => h
+  | _ :: l, _, h => resolveStep_diags (foldl_diags l h)
+
+/-- A function its names' resolving reports nothing of is in the signatures
+after it, with the signature `sigOf` gives it. -/
+theorem resolveStep_fun {st : Aliases × List (String × Sig) × Array Lit.Code} {f : FunDecl}
+    (h : (resolveStep st (.fun_ f)).2.2 = #[]) :
+    ∃ sig, (resolveStep st (.fun_ f)).2.1.lookup f.name = some sig ∧ sigOf st.1 f = .ok sig := by
+  simp only [resolveStep] at h ⊢
+  split at h
+  · simp at h
+  · rename_i hn
+    simp only [hn]
+    split at h
+    · rename_i sig hs
+      simp only [hs, Bool.false_eq_true, ite_false]
+      refine ⟨sig, ?_, rfl⟩
+      rw [lookup_append_one]
+      have : st.2.1.lookup f.name = none := Option.not_isSome_iff_eq_none.mp hn
+      simp [this]
+    · simp at h
+
+/-- Where resolving a script's names reports nothing, each of its functions
+has the signature `sigOf` gives it. -/
+theorem foldl_own : ∀ (l : List Stmt) (st : Aliases × List (String × Sig) × Array Lit.Code),
+    (l.foldl resolveStep st).2.2 = #[] → ∀ f, .fun_ f ∈ l →
+      ∃ A sig, (l.foldl resolveStep st).2.1.lookup f.name = some sig ∧ sigOf A f = .ok sig
+  | [], _, _, _, hm => by simp at hm
+  | s :: l, st, h, f, hm => by
+    rcases List.mem_cons.mp hm with he | hm
+    · subst he
+      obtain ⟨sig, hl, hs⟩ := resolveStep_fun (foldl_diags l h)
+      exact ⟨_, sig, foldl_keeps l hl, hs⟩
+    · exact foldl_own l _ h f hm
+
+/-- In a script whose names resolve quietly, each function's signature has
+its type parameters and as many parameters. -/
+theorem resolveNames_own {ss : List Stmt} (h : (resolveNames ss).2 = #[]) :
+    ∀ name tps params ret body, .fun_ (.mk name tps params ret body) ∈ ss →
+      ∃ sig, (resolveNames ss).1.lookup name = some sig ∧ sig.tparams = tps ∧
+        sig.params.length = params.length := by
+  intro name tps params ret body hm
+  rw [resolveNames_foldl] at h ⊢
+  obtain ⟨A, sig, hl, hs⟩ := foldl_own ss _ h _ hm
+  exact ⟨sig, hl, sigOf_shape hs⟩
+
 end Datalove.Fun

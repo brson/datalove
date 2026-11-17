@@ -25,7 +25,7 @@ open Lit (Val HasType)
 /-- `checkScript`'s statements from `Γ`, as a recursion. -/
 def checkTop (sigs : List (String × Sig)) : Ctx → List Stmt → DiagM Unit
   | _, [] => pure ()
-  | Γ, .fun_ f :: ss => checkFun sigs Γ.aliases (constsOf Γ.vars) f >>= fun _ => checkTop sigs Γ ss
+  | Γ, .fun_ f :: ss => checkDecl sigs Γ.aliases (constsOf Γ.vars) f >>= fun _ => checkTop sigs Γ ss
   | Γ, s :: ss => checkStmt Γ s >>= fun Γ' => checkTop sigs Γ' ss
 
 theorem checkScript_eq (ss : List Stmt) : checkScript ss =
@@ -61,12 +61,17 @@ theorem checkFun_appends (sigs : List (String × Sig)) (aliases : Aliases) (cons
     · exact Appends.pure _
     · exact forM_appends _ (fun _ => Appends.report _ _) _
 
+theorem checkDecl_appends (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (String × Ty × Kind))
+    (f : FunDecl) : Appends (checkDecl sigs aliases consts f) := by
+  obtain ⟨name, tps, params, ret, body⟩ := f
+  exact Appends.bind (Appends.report _ _) (fun _ => checkFun_appends _ _ _ _)
+
 theorem checkTop_appends (sigs : List (String × Sig)) : ∀ (Γ : Ctx) (ss : List Stmt), Appends (checkTop sigs Γ ss)
   | _, [] => Appends.pure _
   | Γ, s :: ss => by
     cases s
     case fun_ f =>
-      exact Appends.bind (checkFun_appends _ _ _ _) (fun _ => checkTop_appends sigs Γ ss)
+      exact Appends.bind (checkDecl_appends _ _ _ _) (fun _ => checkTop_appends sigs Γ ss)
     all_goals exact Appends.bind (checkStmtF_appends _ _ _ _) (fun Γ' => checkTop_appends sigs Γ' ss)
 
 /-- A script that checks quietly: its names resolved quietly, then its
@@ -83,6 +88,13 @@ theorem checkScript_quiet {ss : List Stmt} (h : checkScript ss = #[]) :
   generalize (checkTop _ _ ss).run #[] = r at h2 ⊢
   obtain ⟨u, l⟩ := r
   simp_all
+
+/-- A script that checks resolves its names quietly. -/
+theorem checkScript_names {ss : List Stmt} (h : checkScript ss = #[]) : (resolveNames ss).2 = #[] := by
+  rw [checkScript_eq, (checkTop_appends _ _ _).run] at h
+  have := congrArg Array.size h
+  simp only [Array.size_append, List.size_toArray, List.length_nil] at this
+  exact Array.eq_empty_of_size_eq_zero (by omega)
 
 /-! ## Consts -/
 
@@ -292,39 +304,38 @@ theorem funTable_ok {env : InferEnv} {sigs : List (String × Sig)} {defs : List 
   obtain ⟨hlen, hbody⟩ := hok sig hsig
   exact ⟨hlen, fun θ hg hbd => ⟨hbody θ hg hbd, constEnv_inst hfree (hs.drop _) θ⟩⟩
 
-/-- A function declaration that checks is one as checked. -/
-theorem funDef_ok (ss0 : List Stmt) {Γ : Ctx} (hc : ConstsFree Γ.vars) {seen : Nat} {f : FunDecl}
-    (hf : SQuiet (checkFun (resolveNames ss0).1 Γ.aliases (constsOf Γ.vars) f) ()) :
+/-- A function declaration of a script whose names resolve quietly, that
+checks, is one as checked: its signature is its own (`resolveNames_own`),
+and its body declares no type alias (P074). -/
+theorem funDef_ok (ss0 : List Stmt) (hn : (resolveNames ss0).2 = #[]) {Γ : Ctx} (hc : ConstsFree Γ.vars)
+    {seen : Nat} {f : FunDecl} (hm : .fun_ f ∈ ss0)
+    (hf : SQuiet (checkDecl (resolveNames ss0).1 Γ.aliases (constsOf Γ.vars) f) ()) :
     ∀ fd ∈ (funDef (resolveNames ss0).1 Γ seen f).toList, FunDefOk inferEnv (resolveNames ss0).1 fd := by
   intro fd hfd
   obtain ⟨name, tps, params, ret, body⟩ := f
-  simp only [funDef] at hfd
-  cases hsn : (resolveNames ss0).1.lookup name with
-  | none => simp [hsn] at hfd
-  | some sig0 =>
-    simp only [hsn] at hfd
-    split at hfd
-    · rename_i hcond
-      simp only [Bool.and_eq_true, beq_iff_eq] at hcond
-      obtain ⟨⟨htp, hlen⟩, tf⟩ := hcond
-      simp only [Option.toList_some, List.mem_singleton] at hfd
-      subst hfd
-      refine ⟨fun p hp => ?_, fun sig hs => ?_⟩
-      · obtain ⟨hm, hk⟩ := constsOf_mem hp
-        exact hc p hm hk
-      · simp only at hs
-        rw [hsn] at hs
-        cases hs
-        exact ⟨by simpa using hlen, fun θ hg hbd =>
-          body_checks ss0 Γ.aliases (constsOf Γ.vars) name tps params ret body _ hsn htp tf hf θ hg hbd⟩
-    · simp at hfd
+  obtain ⟨sig0, hsn, htp, hlen⟩ := resolveNames_own hn name tps params ret body hm
+  simp only [checkDecl] at hf
+  obtain ⟨⟨⟩, h74, hf⟩ := SQuiet.bind_inv (fun _ => checkFun_appends _ _ _ _) hf
+  rw [SQuiet.reportIf_iff] at h74
+  have tf : blockTypeFree body = true := by simpa using h74
+  simp only [funDef, hsn, Option.toList_some, List.mem_singleton] at hfd
+  subst hfd
+  refine ⟨fun p hp => ?_, fun sig hs => ?_⟩
+  · obtain ⟨hm, hk⟩ := constsOf_mem hp
+    exact hc p hm hk
+  · simp only at hs
+    rw [hsn] at hs
+    cases hs
+    exact ⟨hlen.symm, fun θ hg hbd =>
+      body_checks ss0 Γ.aliases (constsOf Γ.vars) name tps params ret body _ hsn htp tf hf θ hg hbd⟩
 
 /-- Every function of a script that checks is declared as checked. -/
-theorem funDefs_ok (ss0 : List Stmt) : ∀ (ss : List Stmt) (Γ : Ctx) (seen : Nat),
-    SQuiet (checkTop (resolveNames ss0).1 Γ ss) () → ConstsFree Γ.vars →
+theorem funDefs_ok (ss0 : List Stmt) (hn : (resolveNames ss0).2 = #[]) : ∀ (ss : List Stmt) (Γ : Ctx) (seen : Nat),
+    (∀ s ∈ ss, s ∈ ss0) → SQuiet (checkTop (resolveNames ss0).1 Γ ss) () → ConstsFree Γ.vars →
     ∀ fd ∈ funDefs (resolveNames ss0).1 Γ seen ss, FunDefOk inferEnv (resolveNames ss0).1 fd
-  | [], _, _, _, _ => by simp [funDefs]
-  | s :: ss, Γ, seen, h, hc => by
+  | [], _, _, _, _, _ => by simp [funDefs]
+  | s :: ss, Γ, seen, hsub, h, hc => by
+    have hsub' : ∀ s ∈ ss, s ∈ ss0 := fun s' hs' => hsub s' (List.mem_cons_of_mem _ hs')
     cases s
     case fun_ f =>
       simp only [checkTop] at h
@@ -332,15 +343,15 @@ theorem funDefs_ok (ss0 : List Stmt) : ∀ (ss : List Stmt) (Γ : Ctx) (seen : N
       intro fd hfd
       simp only [funDefs, List.mem_append] at hfd
       rcases hfd with hfd | hfd
-      · exact funDef_ok ss0 hc hf fd hfd
-      · exact funDefs_ok ss0 ss Γ seen h hc fd hfd
+      · exact funDef_ok ss0 hn hc (hsub _ List.mem_cons_self) hf fd hfd
+      · exact funDefs_ok ss0 hn ss Γ seen hsub' h hc fd hfd
     all_goals
       simp only [checkTop] at h
       obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
       have hrun := congrArg Prod.fst hs
       simp only [funDefs]
       rw [hrun]
-      exact funDefs_ok ss0 ss Γ' _ h (checkStmtF_consts hs hc)
+      exact funDefs_ok ss0 hn ss Γ' _ hsub' h (checkStmtF_consts hs hc)
 
 /-- A const binds its name in front of the variables. -/
 theorem const_vars {env : InferEnv} {n : Nat} {Γ Γ' : Ctx} {x : String} {hint : Option Hint} {e : Expr}
@@ -479,7 +490,7 @@ were given. -/
 theorem runScript_sound (ss : List Stmt) (h : checkScript ss = #[]) (k d : Nat) :
     TopOk (runScript k d ss).result ∧ ∀ p ∈ (runScript k d ss).log, HasType p.2 p.1 := by
   have hq := checkScript_quiet h
-  have hd := funDefs_ok ss ss _ 0 hq (fun _ h => by simp at h)
+  have hd := funDefs_ok ss (checkScript_names h) ss _ 0 (fun _ h => h) hq (fun _ h => by simp at h)
   have hcp := constPass_sound ss k d _ hd ss _ [] hq ⟨rfl, rfl⟩ rfl rfl (fun _ h => by simp at h)
     (fun _ h => by simp at h)
   simp only [runScript]
