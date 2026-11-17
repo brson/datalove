@@ -418,29 +418,29 @@ Without the backward rerun: `b == 2111`.
 
 ```datalove
 // unit 1
-let a = 10
+let a = 1000
 // unit 2
-var b = 1
+var b = 100
 // unit 3
-set b = a + b
+set b = a + b + 1
 ```
 
-Fresh-run result: `b == 11`.
+Fresh-run result: `b == 1101`.
 
 Edit unit 1:
 
 ```datalove
 // edit unit 1
-let a = 100
+let a = 10000
 // unit 2
-var b = 1
+var b = 100
 // unit 3
-set b = a + b
+set b = a + b + 1
 ```
 
-Fresh-run result: `b == 101`.
+Fresh-run result: `b == 10101`.
 Unit 1, 2, 3 rerun, 2 because 3 required it transitively.
-Without the backward rerun: `b == 112`.
+Without the backward rerun: `b == 11102`.
 
 ---
 
