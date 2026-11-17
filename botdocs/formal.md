@@ -375,9 +375,11 @@ which a gap in the model passes.
 `FORMAL_FUN_RUN_OF=<file>` with the `run_of` test prints what the model
 logs of a file and how it ends, to find where it stops. For this test worldgen
 writes `mut`, `out` and `ref` parameters, and the driver passes a `mut` or
-`out` argument as a variable, set or not, binds the call's value, and logs
-the variables after it; a thousand seeds write back through about 170
-scripts' calls. A thousand
+`out` argument as a variable, set or not, under a hint or not, or as a field,
+tuple element or list element of a hinted place, `(: {a: T, b: u8} / w).a`,
+binds the call's value, and logs the variables after it. Worldgen's own calls
+pass a `ref`, `mut` or `out` argument as a binding or a field of one, at times
+hinted on the place or on the binding under the field. A thousand
 seeds run about 870 scripts, logging about 4200 lines, all agreeing, a
 quarter of them with something the model does not carry.
 

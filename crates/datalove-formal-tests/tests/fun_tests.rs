@@ -1036,14 +1036,31 @@ fn driver(rng: &mut SeededRng, text: &str) -> String {
                     m => {
                         fresh += 1;
                         let v = fmt!("w{fresh}");
-                        if m == "mut" {
-                            decls += &fmt!("var {v}: {t} = : {t} / {lit}\n");
-                        } else {
-                            decls += &fmt!("var {v}: {t}\n");
-                        }
                         written.push(v.C());
-                        // A hint on what is written back says only its type.
-                        if rng.random_bool(0.3) { fmt!("{m} : {t} / {v}") } else { fmt!("{m} {v}") }
+                        // A hint on what is written back says only its type,
+                        // on the place or on a place along the way to it.
+                        match rng.random_range(0..10) {
+                            0..=6 => {
+                                if m == "mut" {
+                                    decls += &fmt!("var {v}: {t} = : {t} / {lit}\n");
+                                } else {
+                                    decls += &fmt!("var {v}: {t}\n");
+                                }
+                                if rng.random_bool(0.4) { fmt!("{m} : {t} / {v}") } else { fmt!("{m} {v}") }
+                            }
+                            7 => {
+                                decls += &fmt!("var {v}: {{a: {t}, b: u8}} = {{a = : {t} / {lit}, b = : u8 / 1}}\n");
+                                fmt!("{m} (: {{a: {t}, b: u8}} / {v}).a")
+                            }
+                            8 => {
+                                decls += &fmt!("var {v}: ({t}, u8) = (: {t} / {lit}, : u8 / 1)\n");
+                                fmt!("{m} (: ({t}, u8) / {v}).0")
+                            }
+                            _ => {
+                                decls += &fmt!("var {v}: [{t}] = [: {t} / {lit}]\n");
+                                fmt!("{m} (: [{t}] / {v})[(: index / 0)]!")
+                            }
+                        }
                     }
                 }
             }).collect();

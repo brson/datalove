@@ -118,6 +118,8 @@ const ALL_SHAPES: &[&str] = &[
     "bare loop",
     "place with a field step",
     "place with an index step",
+    "hinted place",
+    "place with a step after a hint",
 ];
 
 /// What the generator can write but does not reliably, and why.
@@ -150,7 +152,9 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // `v.a` and `v[i]?` parse as a place with a step rather than as `FieldProj`
     // and `Index`, which are for a base that is not a place. Both pairs are
     // written; the place forms are counted under the two place-step shapes.
-    ("expr", "Hinted", "the generator only hints literals, which keep the hint themselves"),
+    // A hint on a place folds into the place, and is counted under the two
+    // hinted place shapes.
+    ("expr", "Hinted", "the generator hints only literals, which keep the hint themselves, and places"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
 
@@ -342,6 +346,12 @@ fn walk_expr<'db>(
         // `Index`, which are for a base that is not a place. Without this the
         // roll reports both as never written while the generator writes them.
         ExprFunKind::Place(place) => {
+            if let Some(hinted) = place.hinted {
+                cov.hit("shape", "hinted place");
+                if hinted.steps < place.steps.len() {
+                    cov.hit("shape", "place with a step after a hint");
+                }
+            }
             for step in place.steps.iter() {
                 match step {
                     datalove_datafun_ast::ast::PlaceStep::Field(_) => {

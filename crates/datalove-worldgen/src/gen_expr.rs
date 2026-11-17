@@ -712,7 +712,8 @@ fn completable<'db>(
     false
 }
 
-/// The bindings a parameter of this mode would take, by name.
+/// The bindings a parameter of this mode would take, by name: whole, or a
+/// field of one.
 fn argument_candidates<'db>(
     db: &'db dyn salsa::Database,
     param: &Param<'db>,
@@ -722,9 +723,53 @@ fn argument_candidates<'db>(
         .iter()
         .filter(|v| !ctx.is_consumed(&v.name))
         .filter(|v| !param.mode.wants_a_mutable_binding() || v.is_mutable)
-        .filter(|v| types_match(db, v.type_hint.C(), param.type_hint.C()))
+        .filter(|v| {
+            types_match(db, v.type_hint.C(), param.type_hint.C())
+                || !matching_fields(db, &v.type_hint, &param.type_hint).is_empty()
+        })
         .map(|v| v.name.C())
         .collect()
+}
+
+/// The fields of a value of type `of` that are of type `want`: a struct's by
+/// name, a tuple's by position.
+fn matching_fields<'db>(db: &'db dyn salsa::Database, of: &TypeHint<'db>, want: &TypeHint<'db>) -> Vec<String> {
+    match of {
+        TypeHint::AnonStruct(st) => st.fields.iter()
+            .filter(|f| types_match(db, (*f.type_hint).C(), want.C()))
+            .map(|f| f.name.as_str(db).S())
+            .collect(),
+        TypeHint::AnonTuple(tuple) => tuple.fields.iter().enumerate()
+            .filter(|(_, f)| types_match(db, (*f).C(), want.C()))
+            .map(|(i, _)| i.to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// How a `ref`, `mut` or `out` argument names its place in `v`: the binding
+/// or a field of it, at times with a hint on it or on the binding under the
+/// field. A hint says only what type a place is, so each is the same place.
+fn place_argument<'db>(
+    db: &'db dyn salsa::Database,
+    rng: &mut SeededRng,
+    v: &Variable<'db>,
+    param: &Param<'db>,
+) -> String {
+    let whole = types_match(db, v.type_hint.C(), param.type_hint.C());
+    let fields = matching_fields(db, &v.type_hint, &param.type_hint);
+    if fields.is_empty() || (whole && rng.random_bool(0.5)) {
+        return match rng.random_bool(0.3) {
+            true => format!("(: {} / {})", pretty_type_hint(db, v.type_hint.C()), v.name),
+            false => v.name.C(),
+        };
+    }
+    let field = &fields[rng.random_range(0..fields.len())];
+    match rng.random_range(0..4) {
+        0 => format!("(: {} / {}).{field}", pretty_type_hint(db, v.type_hint.C()), v.name),
+        1 => format!("(: {} / {}.{field})", pretty_type_hint(db, param.type_hint.C()), v.name),
+        _ => format!("{}.{field}", v.name),
+    }
 }
 
 pub fn gen_function_call<'db>(
@@ -742,6 +787,7 @@ pub fn gen_function_call<'db>(
     // after it: [`can_call`] found one way to give each its own, but a pick
     // at random may take what a later one needs.
     let mut spoken_for: Vec<(usize, String)> = Vec::new();
+    let mut written: Vec<(usize, String)> = Vec::new();
     for (i, param) in func.params.iter().enumerate() {
         if param.mode == ParamMode::In {
             continue;
@@ -757,6 +803,8 @@ pub fn gen_function_call<'db>(
             })
             .collect();
         let name = candidates[rng.random_range(0..candidates.len())].C();
+        let variable = ctx.variables.iter().find(|v| v.name == name).X();
+        written.push((i, place_argument(db, rng, variable, param)));
         spoken_for.push((i, name));
     }
 
@@ -774,8 +822,8 @@ pub fn gen_function_call<'db>(
         .params
         .iter()
         .enumerate()
-        .map(|(i, param)| match spoken_for.iter().find(|(j, _)| *j == i) {
-            Some((_, name)) => format!("{}{}", param.mode.marker(), name),
+        .map(|(i, param)| match written.iter().find(|(j, _)| *j == i) {
+            Some((_, place)) => format!("{}{}", param.mode.marker(), place),
             // Most often fuel it will recurse on, which an expression of
             // its type seldom is.
             Option::None if func.recurses() && i + 1 == func.params.len() && rng.random_bool(0.7) => {
