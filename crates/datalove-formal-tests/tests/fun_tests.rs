@@ -1338,3 +1338,115 @@ fn run_of() {
     println!("rust:  {codes:?}");
     println!("model: {}", ask_oracle(&[json!({ "run": script })])[0]);
 }
+
+/// The places and values a call's arguments are drawn from in
+/// `aliasing_agrees`, each with its type: a variable, its fields, fields of
+/// fields, elements, the same through a hint, fields of a hinted place, and
+/// values that are no place.
+const ALIAS_ARGS: &[(&str, &str)] = &[
+    ("n", "u8"), ("s", "string"), ("r", "R"), ("r.x", "u8"), ("r.s", "string"), ("r.l", "[u8]"),
+    ("r.l[0]!", "u8"), ("r.l[1]!", "u8"), ("r.t", "(u8, string)"), ("r.t.0", "u8"), ("r.t.1", "string"),
+    ("ls", "[string]"), ("ls[0]!", "string"), (": u8 / r.x", "u8"), (": string / r.s", "string"),
+    ("(: R / r).x", "u8"), ("(: R / r).s", "string"), ("(: R / r).t.1", "string"),
+    ("n +! 1", "u8"), ("s@", "string"), ("r.t.1@", "string"),
+];
+
+/// What an `out` parameter of each type in `ALIAS_ARGS` is set to.
+fn alias_default(ty: &str) -> &'static str {
+    match ty {
+        "u8" => "0",
+        "string" => "\"x\"",
+        "R" => "{x = 0, s = \"x\", l = [], t = (0, \"x\")}",
+        "[u8]" | "[string]" => "[]",
+        "(u8, string)" => "(0, \"x\")",
+        _ => unreachable!("a type of ALIAS_ARGS"),
+    }
+}
+
+/// A script of one call whose arguments may name overlapping places, under
+/// parameters of modes drawn at random.
+fn alias_script(rng: &mut SeededRng) -> String {
+    let count = rng.random_range(2..=3);
+    let mut params = Vec::new();
+    let mut sets = Vec::new();
+    let mut args = Vec::new();
+    for i in 0..count {
+        let (arg, ty) = ALIAS_ARGS[rng.random_range(0..ALIAS_ARGS.len())];
+        let mode = ["", "", "ref ", "mut ", "out "][rng.random_range(0..5)];
+        let name = ["a", "b", "c"][i];
+        params.push(fmt!("{mode}{name}: {ty}"));
+        if mode == "out " {
+            sets.push(fmt!("    set {name} = {}\n", alias_default(ty)));
+        }
+        args.push(fmt!("{mode}{arg}"));
+    }
+    fmt!(
+        "type R = {{x: u8, s: string, l: [u8], t: (u8, string)}}\n\
+         fun f({})\n{}end fun\n\
+         var n: u8 = 1\n\
+         var s: string = \"a-long-heap-string-0123456789\"\n\
+         var r: R = {{x = 1, s = \"a-long-heap-string-0123456789\", l = [1, 2], t = (2, \"a-long-heap-string-0123456789\")}}\n\
+         var ls: [string] = [\"a-long-heap-string-0123456789\", \"b\"]\n\
+         call f({})\n",
+        params.join(", "), sets.concat(), args.join(", "),
+    )
+}
+
+/// O010 as the model decides it (`formal/Datalove/FunAlias.lean`) held to the
+/// Rust's, on calls whose arguments name overlapping places: the model says
+/// a call is O010 where, and only where, the CLI refuses it with O010. A
+/// script the model's checker refuses, or the Rust refuses with another
+/// code first, is counted and skipped.
+#[test]
+fn aliasing_agrees() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the aliasing tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let mut cases = Vec::new();
+    for seed in seeds.iter() {
+        let mut rng = SeededRng::derive(seed, "alias");
+        let text = alias_script(&mut rng);
+        let (_, script, _) = rust_side(&text);
+        cases.push((fmt!("seed {seed}"), text, script));
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script)| json!({ "alias": script })).collect();
+    let answers = ask_oracle(&queries);
+
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    let mut mismatches = Vec::new();
+    for ((what, text, _), oracle) in cases.iter().zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
+            continue;
+        }
+        let codes = oracle["codes"].as_array().X();
+        if !codes.is_empty() {
+            *outcomes.entry("model checker refuses".S()).or_default() += 1;
+            continue;
+        }
+        let model = oracle["calls"][0].as_bool().X();
+        let rust = match rust_run(text) {
+            RustRun::Refused(line) if line.starts_with("[O010]") => true,
+            RustRun::Refused(line) => {
+                *outcomes.entry(fmt!("rust refuses {}", &line[..line.find(']').X() + 1])).or_default() += 1;
+                continue;
+            }
+            RustRun::Ran(..) => false,
+            RustRun::TimedOut => panic!("a call of an empty function timed out:\n{text}"),
+        };
+        *outcomes.entry(if rust { "O010" } else { "accepted" }.S()).or_default() += 1;
+        if model != rust {
+            mismatches.push(fmt!("{what}:\n{text}    rust O010: {rust}, model O010: {model}"));
+        }
+    }
+    println!(
+        "{} calls over seeds {}..{}: {} differ; {outcomes:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model decide O010 differently on {} calls", mismatches.len());
+}

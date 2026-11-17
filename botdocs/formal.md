@@ -659,6 +659,26 @@ Four things are proved of it:
   is written: distinct fields are apart, and a place holding another, or
   two elements of one collection, are refused. Values here are never
   freed, so a `ref` argument moved under it, also O010, is outside this.
+- **A call O010 accepts passes nothing written by two pointers**
+  (`Fun.aliased_apart` and `Fun.aliased_unshared`, in
+  `Proofs/AliasSound.lean`, of O010 as `FunAlias.lean` models it). O010
+  compares two arguments where each names a place, by its variable and its
+  fields up to the first index (`placeKey`), and refuses an overlapping pair
+  by how their parameters take them (`clash`), as botspec's table says. Of a
+  call it accepts, no argument a `mut` or `out` parameter takes overlaps one
+  passed by pointer, which is any but a copy given to `in`. So under
+  locations as passing by pointer gives them, two arguments sharing one only
+  where their places overlap (`Faithful`), `PassBy.Unshared` holds, and the
+  call by pointer and by copy-in, copy-out end with the same store.
+  `aliasing_agrees` in `fun_tests` holds the Rust's O010 to the model's, on
+  calls of two or three arguments drawn from a variable, its fields, fields
+  of fields, elements, hinted places, fields of a hinted place and values,
+  under parameters of random modes; over a thousand seeds none differ, 183
+  O010 and 343 accepted. It found the Rust comparing a later argument only
+  where it was a place itself, so that `f(mut r, ref (: R / r).s)` passed
+  `r` twice by pointer while the other order was O010; a field of a hinted
+  place is now the place under the hint in either order, as the model takes
+  it.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by

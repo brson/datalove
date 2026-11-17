@@ -20,7 +20,10 @@ the callee writes only writable parameters, which the checker sees to (an
 is a writable one's (`Unshared`), the two end with the same store, and the
 callee reads the same at every step (`ptr_eq_copy`, `params_agree`).
 
-`Unshared` is O010 together with the early copy. A writable argument's
+`Unshared` is O010 together with the early copy, which
+`Proofs/AliasSound.lean` proves of O010 as `FunAlias.lean` models it
+(`Fun.aliased_unshared`), and `aliasing_agrees` holds the Rust's O010 to
+that model. A writable argument's
 variable passed again `mut`, `out` or `ref` is O010. Passed again to an `in`
 parameter, a copy is read by lowering into a value of its own before the call,
 a location no other parameter has, and anything else is O010 too. Without it

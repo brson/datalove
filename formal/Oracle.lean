@@ -13,6 +13,7 @@ line, and writes one answer per line to stdout, in order:
 {"synth": E}     →  {"ok": T} or {"err": code}
 {"run": S}       →  {"log": [line, ...], "end": how, "returned": line or null} or {"unsupported": what}
 {"fun": S}       →  {"codes": [code, ...], "inits": [T or null, ...]} or {"unsupported": what}
+{"alias": S}     →  {"codes": [code, ...], "calls": [b, ...]} or {"unsupported": what}
 ```
 
 A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
@@ -22,6 +23,9 @@ A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
 as the Rust prints it (`Fun.showVal`), what the model does not know of a
 value as U+0001, and how it ended: `ok`, or the `Stop` it stopped at, with
 what it returned early, which the CLI prints after its logs.
+
+An `alias` is the script checked, and for each top-level `call`, in order,
+whether its arguments are O010 (`Fun.aliasScript`).
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -68,6 +72,11 @@ def answer (q : Json) : Except String Json := do
           ("inits", Json.arr ((Fun.traceScript ss).toArray.map fun
             | .some t => t.toJson
             | .none => Json.null))]
+      | .error e => Json.mkObj [("unsupported", e)]
+  if let .ok script := q.getObjVal? "alias" then
+    return match Fun.scriptFromSerde script with
+      | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str)),
+          ("calls", Json.arr ((Fun.aliasScript ss).toArray.map Json.bool))]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok script := q.getObjVal? "run" then
     return match Fun.scriptFromSerde script with

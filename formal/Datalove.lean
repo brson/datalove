@@ -37,3 +37,5 @@ import Datalove.FunRun
 import Datalove.Proofs.RunSound
 import Datalove.Proofs.PassBy
 import Datalove.FunShow
+import Datalove.FunAlias
+import Datalove.Proofs.AliasSound
