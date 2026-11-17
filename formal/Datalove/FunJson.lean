@@ -176,11 +176,20 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
     | "Term" => .term <$> (← field e "name").getStr? <*> sub "payload"
     | "EnumLiteral" => .enum <$> sub "variant"
     | "Hinted" => sub "inner"
+    -- A place the Rust folded a hint into, `(: T / p).a`, is the hint as
+    -- written with the steps after it on what it hints.
     | "Place" => do
       let root ← (← field e "root").getStr?
-      match ← (← (← field e "steps").getArr?).toList.mapM stepFromSerde with
-      | [] => pure (.var root)
-      | steps => pure (.place root steps)
+      let steps ← (← (← field e "steps").getArr?).toList.mapM stepFromSerde
+      match optField e "hinted", steps with
+      | Option.some h, _ => do
+        let base ← exprFromSerde (← field h "base")
+        let n ← (← field h "steps").getNat?
+        pure ((steps.drop n).foldl (fun b st => match st with
+          | .field s => .proj b s
+          | .index k m => .index b k m) base)
+      | Option.none, [] => pure (.var root)
+      | Option.none, steps => pure (.place root steps)
     | "FieldProj" => .proj <$> sub "base" <*> selFromSerde (← field e "field")
     | "Index" => .index <$> sub "base" <*> sub "index" <*> pure Option.none
     | "BinOp" => .binop <$> binOpOf (← (← field e "op").getStr?) <*> sub "lhs" <*> sub "rhs"

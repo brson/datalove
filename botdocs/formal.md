@@ -673,12 +673,13 @@ Four things are proved of it:
   `aliasing_agrees` in `fun_tests` holds the Rust's O010 to the model's, on
   calls of two or three arguments drawn from a variable, its fields, fields
   of fields, elements, hinted places, fields of a hinted place and values,
-  under parameters of random modes; over a thousand seeds none differ, 183
-  O010 and 343 accepted. It found the Rust comparing a later argument only
+  under parameters of random modes; over a thousand seeds none differ, 106
+  O010 and 446 accepted. It found the Rust comparing a later argument only
   where it was a place itself, so that `f(mut r, ref (: R / r).s)` passed
-  `r` twice by pointer while the other order was O010; a field of a hinted
-  place is now the place under the hint in either order, as the model takes
-  it.
+  `r` twice by pointer while the other order was O010. Both took a field of
+  a hinted place as all of the place under the hint; now the parser folds a
+  hinted place into the place, `(: R / r).s` is `r.s` to every pass after
+  the type checker, and the model's `placeOf` takes it the same way.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by

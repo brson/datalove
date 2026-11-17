@@ -2,9 +2,9 @@
 module local/test/main
 ----------
 
-// A field of a hinted place, `(: R / r).s`, is `r` to O010 in either order:
-// after `mut r` it was not compared, and the callee read through `b` what it
-// had written through `a`.
+// A field of a hinted place, `(: R / r).s`, is the place `r.s`, which `r`
+// holds, to O010 in either order: after `mut r` it was not compared, and the
+// callee read through `b` what it had written through `a`.
 type R = {x: u8, s: string}
 
 fun f(mut a: R, ref b: string): string

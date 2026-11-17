@@ -341,8 +341,10 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         self.arena.expect("an expression is analyzed inside a body").get(id)
     }
 
-    /// The expression under any type hints, which say nothing about what runs:
-    /// a hinted place is the place.
+    /// The expression under any type hints, which say nothing about what runs.
+    ///
+    /// A hinted place needs none of this: the parser folds it into the place.
+    /// This is for what a hint is on otherwise, as `: T / o?`.
     fn peel(&self, expr: ExprFun<'db>) -> ExprFun<'db> {
         match expr.kind() {
             ExprFunKind::Hinted(h) => self.peel(self.expr(h.inner)),
@@ -761,10 +763,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// What a place is rooted in: the binding of the name it starts from,
     /// or that name, where an earlier script unit made the binding.
     fn place_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
-        let expr = self.peel(expr);
         match expr.kind() {
             ExprFunKind::Place(place) => Some(self.walked_root(place.root.text(self.db))),
-            ExprFunKind::FieldProj(proj) => self.place_root(self.expr(proj.base)),
             _ => None,
         }
     }
@@ -815,10 +815,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     }
 
     /// The place an expression names, as O010 and O017 tell places apart.
-    /// A field of what is not a place (`f().a`) is none; a projection of a
-    /// place in parentheses is its base's, a part of it.
+    /// A field of what is not a place (`f().a`) is none.
     fn place_path(&self, expr: ExprFun<'db>) -> Option<PlacePath<'db>> {
-        let expr = self.peel(expr);
         match expr.kind() {
             ExprFunKind::Place(place) => {
                 let fields = place.steps.iter()
@@ -829,7 +827,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     .collect();
                 Some(PlacePath { root: self.walked_root(place.root.text(self.db)), fields })
             }
-            ExprFunKind::FieldProj(proj) => self.place_path(self.expr(proj.base)),
             _ => None,
         }
     }
@@ -838,7 +835,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     fn borrowed_path(&self, expr: ExprFun<'db>) -> Option<PlacePath<'db>> {
         let expr = self.peel(expr);
         match expr.kind() {
-            ExprFunKind::Place(_) | ExprFunKind::FieldProj(_) => self.place_path(expr),
+            ExprFunKind::Place(_) => self.place_path(expr),
             ExprFunKind::Index(idx) => self.borrowed_path(self.expr(idx.base)),
             ExprFunKind::TryOption(t) => self.borrowed_path(self.expr(t.operand)),
             ExprFunKind::TryResult(t) => self.borrowed_path(self.expr(t.operand)),
@@ -1018,7 +1015,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// If the expression is a simple name, return its binding ID.
     fn expr_to_binding(&self, expr: ExprFun<'db>) -> Option<BindingId> {
-        let expr = self.peel(expr);
         if let ExprFunKind::Place(place) = expr.kind() {
             if place.steps.is_empty() {
                 let name: &str = place.root.text(self.db).as_ref();
@@ -1033,7 +1029,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// Unlike `expr_to_binding` this answers for projections and indexes too:
     /// `a.x` and `a[i]?` are both rooted at `a`.
     fn expr_to_place_root(&self, expr: ExprFun<'db>) -> Option<BindingId> {
-        let expr = self.peel(expr);
         if let ExprFunKind::Place(place) = expr.kind() {
             let name: &str = place.root.text(self.db).as_ref();
             return self.name_to_binding.get(name).copied();
@@ -1057,7 +1052,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// declaration, and writes through a temporary are silently discarded.
     fn check_mutable_argument(&mut self, arg: ExprFun<'db>, call: ExprKey<'db>) {
         let expr_key = arg.key();
-        let arg = self.peel(arg);
 
         let ExprFunKind::Place(place) = arg.kind() else {
             self.errors.push(AnalysisError::CannotMutateTemporary { expr_key });

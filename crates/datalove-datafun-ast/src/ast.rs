@@ -451,11 +451,38 @@ pub struct StmtSet<'db> {
 /// All variable references are Places. A bare variable `x` is
 /// `Place { root: "x", steps: [] }`. Field chains like `x.a.b` have
 /// Field steps. Index operations like `a[i]?` have Index steps.
+///
+/// A hint on a place, or on a place along the way, leaves it a place: the
+/// parser folds `(: R / r).x` into the place `r.x`, so that nothing after the
+/// type checker can tell the two apart. The hint is kept in `hinted` for the
+/// type checker alone.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct Place<'db> {
     pub root: InternedText<'db>,
     pub steps: Vec<PlaceStep<'db>>,
+    pub hinted: Option<PlaceHinted>,
+}
+
+impl Place<'_> {
+    /// The hinted expression this place is, if its last hint is on all of it:
+    /// `: T / p` as written.
+    pub fn hinted_whole(&self) -> Option<ExprId> {
+        self.hinted.filter(|hinted| hinted.steps == self.steps.len()).map(|hinted| hinted.base)
+    }
+}
+
+/// The last hint written on a place along the way to it.
+///
+/// `base` is the `Hinted` expression as written, around the place it hints,
+/// which is this place's first `steps` steps. The type checker checks `base`,
+/// and goes on from the hint's type through the steps after; nothing else
+/// reads it, as the steps it covers are this place's own.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct PlaceHinted {
+    pub base: ExprId,
+    pub steps: usize,
 }
 
 /// A navigation step within a place.

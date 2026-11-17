@@ -1129,6 +1129,12 @@ Place expressions:
 - Tuple element: `x.0`
 - Index: `a[i]?`, `a[i]!`, `m[key]?`, `m[key]!`
 - Chains: `a[i]?.field`, `a.b[0]?`
+- Any of these under a hint, or with a hint along the way: `(: R / r)`,
+  `(: R / r).field`, `(: [u8] / (r.xs))[i]?`
+
+A hint says what type a place is and nothing else: a hinted place is the place,
+wherever a place is asked for. `(: R / r).x` is the place `r.x`, passed `mut`
+as `r.x` is, told apart from `r.y` by O010, and walked where it is by `for`.
 
 Value expressions:
 - Literals, function calls, arithmetic results, constructors, `@` clones
@@ -2473,8 +2479,8 @@ call f(mut r.1, ref r.1.0)             // error (O010): r.1 holds r.1.0
 call f(mut xs[0]!, ref xs[1]!)         // error (O010): one list's elements
 ```
 
-A field of what is a place only under a hint, `(: T / p).a`, is taken as
-the whole of `p`.
+A hinted place is the place (Section 7.1): `(: R / r).x` and `r.y` part at a
+field, and `(: R / r).s` is held by `r`.
 
 As in Rust, distinct indexes are refused: whether `i` and `j` differ is not
 known, and a callee that grows the list moves every element. O017 tells

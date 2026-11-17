@@ -66,6 +66,12 @@ def Respects (θ : List (String × Ty)) (Γ : Ctx) : Prop :=
     Respects θ Γ.borrow ↔ Respects θ Γ := Iff.rfl
 @[simp] theorem Respects.through {θ : List (String × Ty)} {Γ : Ctx} :
     Respects θ Γ.through ↔ Respects θ Γ := Iff.rfl
+@[simp] theorem Respects.under {θ : List (String × Ty)} {Γ : Ctx} {b : Expr} :
+    Respects θ (Γ.under b) ↔ Respects θ Γ := by
+  unfold Ctx.under; split <;> rfl
+theorem Ctx.inst_under (θ : List (String × Ty)) (Γ : Ctx) (b : Expr) :
+    (Γ.under b).inst θ = (Γ.inst θ).under b := by
+  unfold Ctx.under; split <;> rfl
 @[simp] theorem Respects.forArg {θ : List (String × Ty)} {Γ : Ctx} {m : Mode} :
     Respects θ (Γ.forArg m) ↔ Respects θ Γ := Iff.rfl
 @[simp] theorem Respects.bind {θ : List (String × Ty)} {Γ : Ctx} {x : String} {t : Ty} {k : Kind} :
@@ -894,7 +900,9 @@ theorem synthF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (�
       · simp at h
       · rename_i hcp
         rw [Quiet.pure_iff] at h; subst h
-        exact Quiet.bind (synthF_inst g H n _ b bt hb r sg)
+        have hb' := synthF_inst g H n _ b bt hb (by simpa using r) (by simpa using sg)
+        rw [Ctx.inst_under] at hb'
+        exact Quiet.bind hb'
           (Quiet.bind (Quiet.liftE_iff.mpr (fieldType_inst g hf))
             (quiet_ite_false (copyOk_inst hcp) (Quiet.pure _)))
     case index b k mode =>
@@ -917,7 +925,9 @@ theorem synthF_inst (g : Ground θ) (H : InstEnv θ env env') : ∀ (n : Nat) (�
             · simp at h
             · rename_i hfm
               rw [Quiet.pure_iff] at h; subst h
-              refine Quiet.bind (synthF_inst g H n _ b bt hb r sg)
+              have hb' := synthF_inst g H n _ b bt hb (by simpa using r) (by simpa using sg)
+              rw [Ctx.inst_under] at hb'
+              refine Quiet.bind hb'
                 (Quiet.bind (Quiet.liftE_iff.mpr (indexTypes_inst g hi)) ?_)
               refine Quiet.bind (a := ()) (Quiet.recover_iff.mpr (checkF_inst g H n _ k kt hk r sg)) ?_
               refine quiet_ite_false ?_ (quiet_ite_false (copyOk_inst hcp) (quiet_ite_false ?_ (Quiet.pure _)))

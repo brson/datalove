@@ -148,6 +148,19 @@ fn require_result_return_type<'db>(
 // Type Synthesis
 // ============================================================================
 
+/// The hinted expression a place is as written, `: T / p`, if it is one.
+///
+/// The parser folds a hinted place into the place, for every pass after the
+/// type checker to take as the place. The type checker takes it as written:
+/// a hint on all of what is used is checked first against what is expected,
+/// and gives its type even where what is under it does not check.
+pub(crate) fn written_hint<'db>(expr: ExprFun<'db>) -> Option<ExprFun<'db>> {
+    match expr.kind() {
+        ExprFunKind::Place(place) => place.hinted_whole().map(|base| expr.at(base)),
+        _ => None,
+    }
+}
+
 /// Synthesize a type for an expression.
 ///
 /// An expression with a hint has the hint's type, and is checked against it
@@ -157,6 +170,14 @@ pub fn synthesize_expr<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Type<'db>, TypeError> {
+    if let Some(hinted) = written_hint(expr) {
+        // Of the hint's type whether or not it checks, as what is written is.
+        let synthesized = ctx.synthesize_expr(hinted);
+        if let Some(ty) = ctx.expr_types.get(hinted).cloned() {
+            ctx.store_expr_type(expr, &ty);
+        }
+        return synthesized;
+    }
     if ctx.ref_context && builds_from_parts(expr.kind()) {
         ctx.ref_context = false;
         let result = synthesize_expr(ctx, expr);
@@ -537,9 +558,11 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // Place expression with index steps (e.g., `a[i]?`, `a[i]?.field`).
-        ExprFunKind::Place(place) => {
-            synthesize_place(ctx, expr, place)
-        }
+        // One hinted as a whole is, without the hint, what is under it.
+        ExprFunKind::Place(place) => match written_hint(expr) {
+            Some(hinted) => ctx.synthesize_unhinted(hinted),
+            None => synthesize_place(ctx, expr, place),
+        },
     }
 }
 
@@ -1415,25 +1438,41 @@ fn synthesize_place<'db>(
     expr: ExprFun<'db>,
     place: &Place<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    // Look up root variable type.
-    let mut current_ty = ctx.lookup_variable(place.root)
-        .ok_or_else(|| ctx.error_undefined_variable(expr, place.root))?;
-
-    // Inside a const expression only other consts are in scope. Without this
-    // the name typechecks against the binding it shadows and then reaches
-    // lowering, which has no value for it and panics.
-    if ctx.in_const_expr && !ctx.is_const_binding(place.root) {
-        return Err(ctx.error_non_const_in_const_expr(expr, place.root));
-    }
-
     let old_ref_context = ctx.ref_context;
     let old_mut_context = ctx.mut_context;
     let step_count = place.steps.len();
 
+    // A hinted place along the way is checked as written, `: T / p`, and the
+    // steps after it go on from its hint's type. Like any step but the last,
+    // it only navigates if a step follows it.
+    let (mut current_ty, first_step) = match place.hinted {
+        Some(hinted) => {
+            if hinted.steps < step_count {
+                ctx.ref_context = true;
+                ctx.mut_context = false;
+            }
+            let ty = ctx.synthesize_expr(ctx.expr(hinted.base));
+            ctx.ref_context = old_ref_context;
+            ctx.mut_context = old_mut_context;
+            (ty?, hinted.steps)
+        }
+        None => {
+            let ty = ctx.lookup_variable(place.root)
+                .ok_or_else(|| ctx.error_undefined_variable(expr, place.root))?;
+            // Inside a const expression only other consts are in scope.
+            // Without this the name typechecks against the binding it shadows
+            // and then reaches lowering, which has no value for it and panics.
+            if ctx.in_const_expr && !ctx.is_const_binding(place.root) {
+                return Err(ctx.error_non_const_in_const_expr(expr, place.root));
+            }
+            (ty, 0)
+        }
+    };
+
     // Walk each step. Intermediate steps (all but last) are in ref context
     // because they only navigate to a location; only the final step's result
     // is consumed/borrowed per the destination context.
-    for (i, step) in place.steps.iter().enumerate() {
+    for (i, step) in place.steps.iter().enumerate().skip(first_step) {
         let is_final = i == step_count - 1;
         if !is_final {
             ctx.ref_context = true;

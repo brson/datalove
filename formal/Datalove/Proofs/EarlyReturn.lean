@@ -296,7 +296,9 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
     case proj b s =>
       simp only [synthF] at h
       obtain ⟨hb, -⟩ := peel h
-      exact .one rfl rfl (synthF_guarded env n (Γ.enter _) b hb)
+      have := synthF_guarded env n _ b hb
+      rw [Ctx.under_ret] at this
+      exact .one rfl rfl this
     case index b k mode =>
       cases mode with
       | none => simp only [synthF] at h; impossible
@@ -315,7 +317,9 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
           simpa using hf
         · simp only [Expr.parts, List.mem_cons, List.not_mem_nil, or_false] at hp
           rcases hp with rfl | rfl
-          · exact synthF_guarded env n (Γ.enter _) _ hb
+          · have := synthF_guarded env n _ _ hb
+            rw [Ctx.under_ret] at this
+            exact this
           · exact checkF_guarded env n (Γ.enter _) _ _ (clean_recover hk)
     case tuple | struct | list | set | map | tensor | table | some_ | ok | er | data | error
       | term | enum =>

@@ -27,6 +27,13 @@ pub fn check_expr<'db>(
     expr: ExprFun<'db>,
     expected: &Type<'db>,
 ) -> Result<(), TypeError> {
+    if let Some(hinted) = crate::synthesize::written_hint(expr) {
+        let checked = check_expr(ctx, hinted, expected);
+        if let Some(ty) = ctx.expr_types.get(hinted).cloned() {
+            ctx.store_expr_type(expr, &ty);
+        }
+        return checked;
+    }
     let db = ctx.db;
     let expr_kind = expr.kind();
 

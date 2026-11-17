@@ -99,8 +99,11 @@ pub fn lower_operand<'db>(
 }
 
 /// The expression under any type hints. A hint says what to check against
-/// and nothing about what runs, so a hinted place is passed and borrowed as
-/// the place is.
+/// and nothing about what runs.
+///
+/// A hinted place needs none of this: the parser folds it into the place.
+/// This is for what a hint is on otherwise, as `: T / xs[0]?` on an element
+/// of what is no place.
 pub fn peel_hints<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> ExprFun<'db> {
     match expr.kind() {
         ExprFunKind::Hinted(h) => peel_hints(ctx, ctx.expr(h.inner)),
@@ -426,15 +429,8 @@ pub fn lower_field_proj_as_ref<'db>(
 ) -> Result<Operand, LowerError> {
     let base_type = ctx.expr_type(ctx.expr(proj.base));
 
-    // When the base is a Place (with or without steps), build an extended
-    // Place with the field step appended and delegate to lower_place_as_ref.
-    if let ExprFunKind::Place(place) = peel_hints(ctx, ctx.expr(proj.base)).kind() {
-        let mut extended = place.C();
-        extended.steps.push(ast::PlaceStep::Field(proj.field.C()));
-        return lower_place_as_ref(ctx, &extended);
-    }
-
-    // When the base is a nested FieldProj, recurse to get a ref, then
+    // A field of a place parses as the place's step, and is lowered by
+    // `lower_place_as_ref`; this is a field of what is no place. When the base is a nested FieldProj, recurse to get a ref, then
     // apply GetFieldRef on top. A base that is a value made here is a
     // temporary, kept until whatever borrows the field is done with it and
     // then dropped whole, as `lower_operand` keeps any other.
@@ -2070,12 +2066,14 @@ fn lower_field_proj<'db>(
     // A base that is not a place is a value made here, and reading one field
     // out of it leaves the rest to be let go of: `f().0` takes the number out
     // of a tuple the call made and drops the string beside it. A place base
-    // does not reach this -- `v.a` parses as a place with a field step, which
-    // the place walker lowers -- but the guard says so rather than relying on
-    // it, because dropping something a binding owns would be worse.
-    if !matches!(ctx.expr(proj.base).kind(), ExprFunKind::Place(_)) {
-        ctx.record_expr_temp(base_id, base_type.C());
-    }
+    // does not reach this: `v.a` and `(: T / v).a` parse as a place with a
+    // field step, which the place walker lowers. Dropping something a binding
+    // owns would be worse than stopping here.
+    assert!(
+        !matches!(ctx.expr(proj.base).kind(), ExprFunKind::Place(_)),
+        "a field of a place parses as the place's step",
+    );
+    ctx.record_expr_temp(base_id, base_type.C());
 
     // Get the field index.
     let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;

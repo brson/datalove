@@ -59,10 +59,9 @@ fn check_variable_decl<'db>(
                     // checks, which synthesis has recorded where the hint
                     // converted; the name is bound at it, as it would be at a
                     // type written on the binding.
-                    match value.kind().type_hint() {
-                        Some(_) => ctx.expr_types.get(value).cloned(),
-                        None => None,
-                    }
+                    let hinted = crate::synthesize::written_hint(value)
+                        .or_else(|| value.kind().type_hint().map(|_| value));
+                    hinted.and_then(|hinted| ctx.expr_types.get(hinted).cloned())
                 }
             }
         }
@@ -1150,7 +1149,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
 
     // A temporary would have to live to the loop's end and be dropped on
     // every way out of it, `ret` and `?` included; nothing wants that yet.
-    if !is_place(db, ctx.expr(iteratee)) {
+    if !is_place(ctx.expr(iteratee)) {
         coded(ctx, FCode::ForOverTemporary, S("a `for` walks a collection that is already somewhere"),
             "name a variable, a parameter, or a field or element of one");
         return;
@@ -1223,12 +1222,8 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::a
 }
 
 /// Whether an expression names somewhere a value already is: a name with
-/// field or element steps, or a field of one. A field of anything else is a
-/// field of a temporary.
-fn is_place<'db>(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> bool {
-    match expr.kind() {
-        ExprFunKind::Place(_) => true,
-        ExprFunKind::FieldProj(proj) => is_place(db, expr.at(proj.base)),
-        _ => false,
-    }
+/// field or element steps, hinted or not. A field of anything else is a field
+/// of a temporary.
+fn is_place(expr: ExprFun<'_>) -> bool {
+    matches!(expr.kind(), ExprFunKind::Place(_))
 }

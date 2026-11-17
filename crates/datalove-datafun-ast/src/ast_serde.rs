@@ -115,6 +115,16 @@ pub struct StmtSet {
 pub struct Place {
     pub root: String,
     pub steps: Vec<PlaceStep>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hinted: Option<PlaceHinted>,
+}
+
+/// The last hint on a place along the way to it: the `Hinted` expression as
+/// written, around the place of the first `steps` steps.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PlaceHinted {
+    pub base: Box<ExprFun>,
+    pub steps: usize,
 }
 
 /// Tagged by `step`, not `variant`, which a field step's selector is tagged by:
@@ -741,6 +751,10 @@ impl Place {
         Place {
             root: ast.root.as_str(db).S(),
             steps: ast.steps.iter().map(|s| PlaceStep::from_ast(db, arena, s)).collect(),
+            hinted: ast.hinted.map(|h| PlaceHinted {
+                base: Box::new(ExprFun::from_ast(db, arena.get(h.base))),
+                steps: h.steps,
+            }),
         }
     }
 }

@@ -458,7 +458,7 @@ statements that run belong in a function or a script")
 
         // Parse optional field projections and index steps.
         let steps = self.parse_place_steps();
-        let target = ast::Place { root: name, steps };
+        let target = ast::Place { root: name, steps, hinted: None };
         let local_index = self.record_set_span(target_ts.with_end(self.last_byte_end()));
 
         // Need `=`, or a compound assignment's operator and `=`.

@@ -548,7 +548,31 @@ impl<'db> Parser<'db> {
     }
 
     /// Create an expression and record its span in the side table.
+    ///
+    /// A hint on a place leaves it a place: `: T / p` is created as written,
+    /// for the type checker, and what is returned is the place `p` with the
+    /// hint kept in it. A step after it then extends the place, as it would
+    /// `p`'s.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan) -> ast::ExprId {
+        let place = match &kind {
+            ast::ExprFunKind::Hinted(hinted) => match self.expr_kind(hinted.inner) {
+                ast::ExprFunKind::Place(place) => Some(place.C()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let expr = self.push_spanned(kind, ts.C());
+        match place {
+            Some(place) => {
+                let hinted = ast::PlaceHinted { base: expr, steps: place.steps.len() };
+                let kind = ast::ExprFunKind::Place(ast::Place { hinted: Some(hinted), ..place });
+                self.push_spanned(kind, ts)
+            }
+            None => expr,
+        }
+    }
+
+    fn push_spanned(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan) -> ast::ExprId {
         let expr = self.push_expr(kind);
         self.filed.expr_spans.push(ast::ParseSpanEntry::new(
             ast::ExprKey::new(self.module_id, self.current_fn_name, expr.0),

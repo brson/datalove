@@ -1,0 +1,120 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn both(p0, p1):
+                    block0:
+                        v0 = const 1u8
+                        store p0, v0
+                        v1 = const 2u8
+                        store p1, v1
+                        return
+                    
+                    fn write_read(p0, p1):
+                    block0:
+                        v0 = const 7u8
+                        store p0, v0
+                        return
+                    
+                    fn total(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move s0, v0
+                        v1 = getfieldref p0.3
+                        cursorbegin s1, *v1
+                        goto block1
+                    block1:
+                        v2 = cursordone s1
+                        branch v2, block4, block2
+                    block2:
+                        v3 = cursorelem s1
+                        v4 = widen *v3
+                        v5 = add s0, v4
+                        drop v4
+                        drop s0
+                        store.move s0, v5
+                        goto block3
+                    block3:
+                        cursoradvance s1, *v1
+                        goto block1
+                    block4:
+                        v6 = load.move s0
+                        return v6
+                    
+                    fn run():
+                    block0:
+                        v0 = const 0u8
+                        v1 = const 0u8
+                        v2 = const "a-long-heap-string-0123456789"
+                        v3 = const 5u8
+                        v4 = const 6u8
+                        v5 = const 7u8
+                        v6 = list [v3, v4, v5]
+                        v7 = pack struct {v0, v1, v2, v6}
+                        store.move s0, v7
+                        v8 = getfieldref s0.0
+                        v9 = getfieldref s0.1
+                        v10 = call m0.u0(*v8, *v9)
+                        debuglog s0
+                        v11 = getfieldref s0.1
+                        v12 = getfieldref s0.2
+                        v13 = call m0.u1(*v11, *v12)
+                        debuglog s0
+                        v14 = getfieldref s0.3
+                        v15 = const 0index
+                        v16 = listboundscheck *v14[v15]
+                        branch v16, block2, block1
+                    block1:
+                        v17 = none
+                        drop s0
+                        return v17
+                    block2:
+                        v18 = listelementref *v14[v15]
+                        v19 = getfieldref s0.1
+                        v20 = call m0.u0(*v18, *v19)
+                        debuglog s0
+                        v21 = call m0.u2(s0)
+                        debuglog v21
+                        drop v21
+                        v22 = load.move s0
+                        v23 = some v22
+                        return v23
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u3()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{x = 1, y = 2, s = \"a-long-heap-string-0123456789\", xs = [5, 6, 7]}\n{x = 1, y = 7, s = \"a-long-heap-string-0123456789\", xs = [5, 6, 7]}\n{x = 1, y = 2, s = \"a-long-heap-string-0123456789\", xs = [1, 6, 7]}\n14\nsome {x = 1, y = 2, s = \"a-long-heap-string-0123456789\", xs = [1, 6, 7]}\n"),
+        ),
+    ],
+)

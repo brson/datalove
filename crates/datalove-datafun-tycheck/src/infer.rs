@@ -312,9 +312,14 @@ fn infer_unhinted<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<
             infer_field(ctx, &base, &p.field)
         }
         ExprFunKind::Place(place) => {
-            let Some(Type::Datalit(root)) = ctx.lookup_variable(place.root) else { return unknown(ctx) };
-            let mut ty = PType::Known(root);
-            for step in &place.steps {
+            let (mut ty, first_step) = match place.hinted {
+                Some(hinted) => (infer(ctx, at(hinted.base)), hinted.steps),
+                None => {
+                    let Some(Type::Datalit(root)) = ctx.lookup_variable(place.root) else { return unknown(ctx) };
+                    (PType::Known(root), 0)
+                }
+            };
+            for step in &place.steps[first_step..] {
                 ty = match step {
                     PlaceStep::Field(field) => infer_field(ctx, &ty, field),
                     PlaceStep::Index(_) => element_of(ctx, &ty),

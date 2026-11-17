@@ -827,7 +827,6 @@ fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
 fn place_root<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<&'db str> {
     match expr.kind() {
         ExprFunKind::Place(place) => Some(place.root.text(ctx.db).as_ref()),
-        ExprFunKind::FieldProj(proj) => place_root(ctx, ctx.expr(proj.base)),
         _ => None,
     }
 }

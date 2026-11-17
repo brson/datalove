@@ -449,15 +449,15 @@ def evalS (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT Val
       | some (some v), some (t, _) => evalSteps env call n Γ t v steps
       | some none, _ => throw .uninit
       | _, _ => throw .wrong
-    | .proj b s => do here (fieldVal (← evalS env call n Γ b) s)
+    | .proj b s => do here (fieldVal (← evalS env call n (Γ.under b) b) s)
     | .index b k mode => match mode with
       | none => throw .wrong
       | some m => do
-        let bt ← here (typeOf (synthF env n Γ b))
+        let bt ← here (typeOf (synthF env n (Γ.under b) b))
         let (_, kt) ← match indexTypes bt with
           | .ok p => pure p
           | .error _ => throw .wrong
-        let v ← evalS env call n Γ b
+        let v ← evalS env call n (Γ.under b) b
         let kv ← evalC env call n Γ k kt
         here (indexVal m v kv)
     | e => do

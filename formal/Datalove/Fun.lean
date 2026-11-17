@@ -832,6 +832,31 @@ def Ctx.enter (Γ : Ctx) (e : Expr) : Ctx :=
 what is read. -/
 def Ctx.through (Γ : Ctx) : Ctx := { Γ with borrowed := true, mutArg := false }
 
+/-- The place an expression names, its variable and steps, a hint on it or
+on a place along the way left aside: `(: T / p).a` is `p.a`, as the Rust's
+parser folds it. None for what is no place. -/
+def placeOf : Expr → Option (String × List Step)
+  | .var x => some (x, [])
+  | .place x steps => some (x, steps)
+  | .hinted _ e => placeOf e
+  | .proj b s => (placeOf b).map fun (x, ss) => (x, ss ++ [.field s])
+  | .index b k m => (placeOf b).map fun (x, ss) => (x, ss ++ [.index k m])
+  | _ => none
+
+/-- The context of what a field or index is taken of: a place, hinted along
+the way, is only gone through, as a place's step that is not its last. -/
+def Ctx.under (Γ : Ctx) (b : Expr) : Ctx :=
+  if (placeOf b).isSome then Γ.through else Γ
+
+@[simp] theorem Ctx.under_ret (Γ : Ctx) (b : Expr) : (Γ.under b).ret = Γ.ret := by
+  unfold Ctx.under; split <;> rfl
+@[simp] theorem Ctx.under_vars (Γ : Ctx) (b : Expr) : (Γ.under b).vars = Γ.vars := by
+  unfold Ctx.under; split <;> rfl
+@[simp] theorem Ctx.under_sigs (Γ : Ctx) (b : Expr) : (Γ.under b).sigs = Γ.sigs := by
+  unfold Ctx.under; split <;> rfl
+@[simp] theorem Ctx.under_bounds (Γ : Ctx) (b : Expr) : (Γ.under b).bounds = Γ.bounds := by
+  unfold Ctx.under; split <;> rfl
+
 def tysOf : List Ty → Tys
   | [] => .nil
   | t :: ts => .cons t (tysOf ts)
@@ -922,9 +947,10 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     | .place x steps => match Γ.lookup x with
       | Option.some (t, k) => if Γ.nonConst k then throw "F058" else stepsF env n Γ t steps
       | Option.none => throw "F001"
-    -- Syn-FieldProj, for what is not a place.
+    -- Syn-FieldProj, for what is not a place, or is one only under a hint,
+    -- which is the place's step (`Ctx.under`).
     | .proj b s => do
-      let bt ← synthF env n Γ b
+      let bt ← synthF env n (Γ.under b) b
       let t ← liftE (fieldType bt s)
       if !t.isCopy && !Γ.borrowed then throw "F070"
       pure t
@@ -933,7 +959,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
     | .index b k mode => match mode with
       | Option.none => throw "F104"
       | Option.some m => do
-        let bt ← synthF env n Γ b
+        let bt ← synthF env n (Γ.under b) b
         let (t, kt) ← liftE (indexTypes bt)
         recover (checkF env n Γ k kt)
         if Γ.mutArg && isView bt then throw "F073"
@@ -1432,11 +1458,9 @@ def walk (c : Ty) (names : List String) : Except Code (List (String × Ty)) :=
   | .list _, _ | .tensor _ _, _ | .set _, _ | .map _ _, _ => throw "F109"
   | _, _ => throw "F087"
 
-/-- Whether an expression is a place: a variable, with steps into it or not. -/
-def isPlace : Expr → Bool
-  | .var _ | .place _ _ => true
-  | .proj b _ => isPlace b
-  | _ => false
+/-- Whether an expression is a place: a variable, with steps into it or not,
+hinted or not. -/
+def isPlace (e : Expr) : Bool := (placeOf e).isSome
 
 /-- A `for`'s bindings: its collection a place (else F108), read borrowed, of
 a type it walks. With none, the body is left unchecked. -/

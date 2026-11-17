@@ -1666,8 +1666,12 @@ not held; so is a copy `in` argument whose variable the same call passes
 `mut` or `out`, which O010 then admits. Either way the callee sees the
 copy-in, copy-out meaning the model gives calls, which
 `formal/Datalove/Proofs/PassBy.lean` shows pointer passing keeps where no
-written location is shared (botspec 11.3). Both passes see through a
-type hint (`peel_hints`, `peel`), which has no semantics of its own. The one way
+written location is shared (botspec 11.3). A type hint has no semantics of
+its own. On a place, the parser folds it into the place (`create_expr`): `(: R
+/ r).x` is the `Place` `r.x`, with the hint kept in `Place::hinted` for the
+type checker alone, so no later pass can tell it from `r.x`, and a field or
+index never has a place as its base. Both passes see through a hint on what
+is no place (`peel_hints`, `peel`), as `: T / o?`. The one way
 the language has of naming a place twice in a runtime call is `set x += x`,
 which lowering turns into the operator and a store, keeping the update in
 place for a value rooted elsewhere. An export handed such a value beside

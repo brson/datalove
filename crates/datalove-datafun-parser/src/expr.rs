@@ -157,11 +157,11 @@ impl<'db> Parser<'db> {
                             let span = chain_start..end_pos;
                             // If base is a Place, push Field step directly.
                             if let ast::ExprFunKind::Place(place) = self.expr_kind(expr) {
-                                let root = place.root;
+                                let (root, hinted) = (place.root, place.hinted);
                                 let mut steps = place.steps.C();
                                 steps.push(ast::PlaceStep::Field(field));
                                 expr = self.create_expr(
-                                    ast::ExprFunKind::Place(ast::Place { root, steps }),
+                                    ast::ExprFunKind::Place(ast::Place { root, steps, hinted }),
                                     TextSpan::new(text, span),
                                 );
                             } else {
@@ -205,7 +205,7 @@ impl<'db> Parser<'db> {
 
                     // If base is a Place, push Index step directly.
                     if let ast::ExprFunKind::Place(place) = self.expr_kind(expr) {
-                        let root = place.root;
+                        let (root, hinted) = (place.root, place.hinted);
                         let mut steps = place.steps.C();
                         steps.push(ast::PlaceStep::Index(ast::PlaceIndex {
                             index,
@@ -214,7 +214,7 @@ impl<'db> Parser<'db> {
                         let end_pos = self.last_byte_end();
                         let span = start_pos..end_pos;
                         expr = self.create_expr(
-                            ast::ExprFunKind::Place(ast::Place { root, steps }),
+                            ast::ExprFunKind::Place(ast::Place { root, steps, hinted }),
                             TextSpan::new(text, span),
                         );
                     } else if let Some(error_mode) = error_mode {
@@ -270,7 +270,7 @@ impl<'db> Parser<'db> {
         let call_span = TextSpan::new(text, start..self.last_byte_end());
 
         let qualified = match self.expr_kind(base) {
-            ast::ExprFunKind::Place(place) => match place.steps.as_slice() {
+            ast::ExprFunKind::Place(place) if place.hinted.is_none() => match place.steps.as_slice() {
                 [ast::PlaceStep::Field(ast::FieldSelector::Name(name))] => Some((place.root, *name)),
                 _ => None,
             },
@@ -745,7 +745,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     } else {
                                         // It's just a variable name.
                                         self.create_expr(
-                                            ast::ExprFunKind::Place(ast::Place { root: name, steps: vec![] }),
+                                            ast::ExprFunKind::Place(ast::Place { root: name, steps: vec![], hinted: None }),
                                             ts
                                         )
                                     }

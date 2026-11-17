@@ -552,6 +552,9 @@ theorem var_check {env : InferEnv} : ∀ {n : Nat} {Γ : Ctx} {x : String} {t : 
 program's functions. -/
 def Ctx.Runs (sigs : List (String × Sig)) (Γ : Ctx) : Prop := Γ.bounds = [] ∧ Γ.sigs = sigs
 
+theorem Ctx.Runs.under {sigs : List (String × Sig)} {Γ : Ctx} (h : Γ.Runs sigs) (b : Expr) :
+    (Γ.under b).Runs sigs := ⟨by simpa using h.1, by simpa using h.2⟩
+
 /-- What a call gives: the function's return type, or the unit for one that
 returns nothing. -/
 def Sig.retTy (sig : Sig) (θ : List (String × Ty)) : Ty :=
@@ -1366,7 +1369,9 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (synth
       rw [Quiet.pure_iff] at h; subst h
       rw [Quiet.liftE_iff] at hw
       simp only [evalS]
-      exact SoundT.bind' (evalS_sound n _ b u hu hb) (fun v hv => SoundT.here (fieldVal_sound hv hw))
+      have hs := evalS_sound n _ b u hu (Ctx.Runs.under (Γ := Γ.enter _) hb b)
+      simp only [Ctx.under_vars, Ctx.under_ret] at hs
+      exact SoundT.bind' hs (fun v hv => SoundT.here (fieldVal_sound hv hw))
     case index b key mode =>
       cases mode with
       | none => simp [synthF] at h
@@ -1391,7 +1396,9 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (synth
         simp only [hi]
         refine SoundT.bind' (P := ((et, kt) = ·)) (SoundT.pure' rfl) (fun _ e => ?_)
         subst e
-        exact SoundT.bind' (evalS_sound n _ b u hu hb) (fun v hv =>
+        have hs := evalS_sound n _ b u hu (Ctx.Runs.under (Γ := Γ.enter _) hb b)
+        simp only [Ctx.under_vars, Ctx.under_ret] at hs
+        exact SoundT.bind' hs (fun v hv =>
           SoundT.bind' (evalC_sound n _ key kt hk hb) (fun kv hkv =>
             SoundT.here (indexVal_sound hv hi hkv (missing_ok (by simpa using hfit)))))
     case unop op a =>

@@ -1,0 +1,45 @@
+----------
+module local/test/main
+----------
+
+// A hint on a place, or on a place along the way to one, leaves it the place:
+// it is passed `mut` as the place is, its fields and elements are told apart
+// by O010 as the place's are, and a `for` walks it where it is.
+type R = {x: u8, y: u8, s: string, xs: [u8]}
+
+fun both(mut a: u8, mut b: u8)
+    set a = 1
+    set b = 2
+end fun
+
+fun write_read(mut a: u8, ref b: string)
+    set a = 7
+end fun
+
+fun total(ref r: R): int
+    var n: int = 0
+    for v in ref (: [u8] / r.xs)
+        set n = n + v@
+    end for
+    ret n
+end fun
+
+fun run(): ?R
+    var r: R = {x = 0, y = 0, s = "a-long-heap-string-0123456789", xs = [5, 6, 7]}
+    call both(mut (: R / r).x, mut (: R / r).y)
+    debuglog r
+    call write_read(mut r.y, ref (: R / r).s)
+    debuglog r
+    call both(mut (: [u8] / ((: R / r).xs))[(: index / 0)]?, mut (: u8 / r.y))
+    debuglog r
+    debuglog total(ref r)
+    ret some r
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.run
+debuglog run()

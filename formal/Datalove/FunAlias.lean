@@ -13,9 +13,9 @@ table of a call's arguments says.
 Two arguments are compared where each names a place, by the variable it
 starts from and its fields up to the first index, which may reach any
 element (`placeKey`): they overlap where they start from one variable and
-the fields of one begin the other's. A field of what is a place only under
-a hint, `(: T / p).a`, is taken as the place under the hint, `p`, as the
-Rust takes it. Of two that overlap, the earlier and the later are refused
+the fields of one begin the other's. A hint leaves a place the place
+(`placeOf`): `(: T / p).a` is `p.a`, as the Rust's parser folds it. Of two
+that overlap, the earlier and the later are refused
 by how their parameters take them (`clash`): a copy given to an `in`
 parameter never, as it is read into a value of its own before the call;
 otherwise a `mut` or `out` one with anything, and a `ref` one with a later
@@ -52,14 +52,9 @@ def fieldsBefore : List Step → List Sel
   | _ => []
 
 /-- The place an argument names, as O010 tells places apart: the variable it
-starts from and its fields up to the first index, and for a field of what
-is not a place, the place under it, if any. None for what is no place. -/
-def placeKey : Expr → Option (String × List Sel)
-  | .var x => some (x, [])
-  | .place x steps => some (x, fieldsBefore steps)
-  | .hinted _ e => placeKey e
-  | .proj b _ => placeKey b
-  | _ => none
+starts from and its fields up to the first index. -/
+def placeKey (e : Expr) : Option (String × List Sel) :=
+  (placeOf e).map fun (x, ss) => (x, fieldsBefore ss)
 
 /-- Two places overlap where they start from one variable and the fields of
 one begin the other's. -/
