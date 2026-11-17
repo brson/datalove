@@ -301,8 +301,36 @@ making these same edits.
 
 ---
 
+## Access types and terminology
+
+The unit that declares a binding is its _provider_.
+After it,
+later units may perform four kinds of _accesses_ on the binding:
+
+- _read_ it, leaving it as it was,
+- _update_ it, reading the old value and writing a new one,
+- _overwrite_ it, writing a new value without reading the old one,
+- _take_ it, moving the value out and leaving the binding empty,
+- _revive_ it, moving a new value into a previously-emptied value.
+
+Updates and overwrites are mutations.
+Takes and revives are linear moves.
+Datalove has immutable `let` bindings and mutable `var` bindings.
+From here we'll use simple examples with integers,
+which are linear-typed bigints,
+so `let f = b` moves `b` rather than copying it.
+
+We will work through reruns caused by edits to cells
+that interact with updates and takes.
+Reruns due to the remaining access types will be discussed in brief,
+as will reruns due to compilation failures and fixes.
+For the full rules see the
+[Datalove literate reactive test suite](../../botdocs/script-reactivity-cases.md).
+
+
 ## Experiments
 
+<!--
 We want simple and understandable bite-sized examples.
 We need to get across the idea from the abstract that we
 use linear anti-dependence analysis to decide reruns.
@@ -313,22 +341,102 @@ We need to use the simplest math possible.
 
 This is the main story:
 
-- Forward rerun (mutation)
-- Backward rerun (mutation)
-- Chained rerun due to multiple binding accesses (mutation)
-- Edit that changes the access type (mutation)
+- Forward rerun (updates)
+- Backward rerun (updates)
+- Chained backward rerun due to multiple binding accesses (updates)
+- Edit that changes the access type (updates vs ?)
+
+Note that this is only sound because linear types.
 
 These are refinements, could be optional:
 
+- Updates vs overwrites
 - Takes and revives
 - Compile break/fix
+-->
 
 
+## Forward reruns
+
+```datalove
+// unit 1
+let a = 10
+// unit 2
+let b = a + 1
+```
+
+Fresh-run result: `b == 11`.
+
+Edit unit 1:
+
+```datalove
+// edit unit 1
+let a = 100
+// unit 2
+let b = a + 1
+```
+
+Fresh-run result: `c == 101`.
+Unit 1,2 rerun.
 
 
+## Backward reruns
+
+```datalove
+// unit 1
+let a = 100
+// unit 2
+set a = a + 10
+// unit 3
+let b = a + 1
+```
+
+Fresh-run result: `b == 111`.
+
+Edit unit 2:
+
+```datalove
+// unit 1
+let a = 100
+// unit 2
+set a = a + 1000
+// unit 3
+let b = a + 1
+```
+
+Fresh-run result: `c == 1101`.
+Unit 1,2,3 rerun.
+Without the backward rerun: `c == 2101`.
+<!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
 
 
+## Chained backwards rerun
 
+```datalove
+// unit 1
+let a = 100
+// unit 2
+var b = 10
+// unit 3
+set b = a + b
+```
+
+Fresh-run result: `b == 110`.
+
+Edit unit 1:
+
+```datalove
+// unit 1
+let a = 10
+// unit 2
+var b = 1
+// unit 3
+set b = a + b
+```
+
+Fresh-run result: `b == 11`.
+Unit 1,2,3 rerun, 2 because 3 required it.
+Without the backward rerun: `b == 120`.
 
 ---
 
@@ -390,8 +498,6 @@ The rules below say what each half calls for:
 more modifications,
 first back to the units before the triggering unit `T`,
 then forward to the units after `T`, and after each unit that runs again.
-The backward rules are the access table of
-[the second section](#user-content-but-what-about-edits-that-change-what-a-unit-does).
 
 **Backward**, to put earlier bindings back as `T` first found them:
 
