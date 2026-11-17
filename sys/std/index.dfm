@@ -273,6 +273,7 @@ fun from_u64(x: u64): ?index
 end fun
 
 fun from_u32(x: u32): index
+  inline
   let wide: u64 = x@
   ret icall u64_to_index(wide)
 end fun
