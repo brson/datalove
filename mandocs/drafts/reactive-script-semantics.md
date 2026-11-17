@@ -303,28 +303,24 @@ making these same edits.
 
 ## How does editing a unit affect preceding units?
 
-Whatever we rerun,
-the session must end up as a fresh run of the current code
-from the top would leave it.
-That's the rule every step below is held to.
-
 The unit that declares a binding is its _provider_.
 After it,
 later units may perform four kinds of _accesses_ on the binding:
 
 - _read_ it, leaving it as it was,
-- _take_ it, moving the value out and leaving the binding empty,
 - _overwrite_ it, writing a new value without reading the old one,
-- _update_ it, reading the old value and writing a new one.
+- _update_ it, reading the old value and writing a new one,
+- _take_ it, moving the value out and leaving the binding empty,
+- _revive it, moving a new value into a previously-emptied value.
 
-A take is a move.
 Overwrites and updates are the two kinds of mutation,
 and only a `var` can be mutated.
+From here we'll use simple examples with integers.
 Integer literals are `int`, a bigint,
 which is linear,
 so `let f = b` moves `b` rather than copying it.
 
-In the initial example the first four units each make one binding.
+In this example the first four units each make one binding.
 The fifth does something different to each of them.
 
 ```datalove
@@ -476,7 +472,7 @@ unit 5 won't run to overwrite it.
 | 5 | `let e = a + 100; ...; let x = y` | reads `a` (1), takes `b` (2), overwrites `c` (3), updates `d` (4) | recompile fails | edited | - |
 
 These steps give a first set of rules.
-Call the unit an edit or a break modifies the _triggering unit_.
+Call the edited or broken unit the _triggering unit_.
 What happens to the units before it
 depends on what its code did to their bindings the last time it ran:
 
@@ -538,7 +534,7 @@ scriptunit-fragment 3
 set b = b + 1
 ```
 
-Entered, these leave `b` = 251.
+After a fresh run these leave `b` = 251.
 Edit unit 2 to read `b` instead of updating it.
 
 ```datalove
@@ -549,14 +545,17 @@ scriptunit-edit 2
 let c = b + 1
 ```
 
-The first rules see that unit 2 is a read of `b`,
-which needs nothing,
-so unit 2 runs alone, finds 251,
-and computes an incorrect 252.
-A fresh run gives 126.
-Two units wrote `b` since unit 1 provided it:
-unit 2 itself, with code that no longer exists,
-and unit 3, which runs after it.
+Which code do we need to look at to decide what to do?
+The new unit 2 only reads `b`,
+but the old unit 2 updated it.
+Because the old updated `b` we have to rerun the unit that created `b`,
+unit 1.
+Because the unit that created `b` is rerun,
+the units that read `b` must rerun too,
+which includes the new unit 2 and unit 3.
+
+To decide which units rerun we must consider both
+the old and new code of the edited unit.
 
 **Step 2: unit 2 is edited to read `b`.**
 
@@ -744,11 +743,6 @@ Entered, these leave `b` = 0, `z` = 11 and `c` = 501.
 Edit unit 4.
 It reads `b`, which unit 5 overwrote after it,
 so `b` has to be restored.
-The restore doesn't have to start at unit 1, which provides `b`.
-Any unit that set `b` without reading it,
-by providing, overwriting or reviving it,
-rebuilds it from nothing,
-so the restore starts at the nearest one, unit 3.
 But unit 3 also updates `z`,
 so rerunning it as it is would leave `z` at 12.
 Unit 2 has to rerun first,
@@ -831,7 +825,7 @@ so the session as it would stand between the two never runs.
 The modification table says which halves a modification has.
 The rules below say what each half calls for:
 more modifications,
-first back to the units before `T`,
+first back to the units before the triggering unit `T`,
 then forward to the units after `T`, and after each unit that runs again.
 The backward rules are the access table of
 [the second section](#user-content-but-what-about-edits-that-change-what-a-unit-does),
