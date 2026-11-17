@@ -308,16 +308,16 @@ After it,
 later units may perform four kinds of _accesses_ on the binding:
 
 - _read_ it, leaving it as it was,
-- _overwrite_ it, writing a new value without reading the old one,
 - _update_ it, reading the old value and writing a new one,
+- _overwrite_ it, writing a new value without reading the old one,
 - _take_ it, moving the value out and leaving the binding empty,
-- _revive it, moving a new value into a previously-emptied value.
+- _revive_ it, moving a new value into a previously-emptied value.
 
-Overwrites and updates are the two kinds of mutation,
-and only a `var` can be mutated.
+Updates and overwrites are mutations.
+Takes and revives are linear moves.
+Datalove has immutable `let` bindings and mutable `var` bindings.
 From here we'll use simple examples with integers.
-Integer literals are `int`, a bigint,
-which is linear,
+Integer literals are `int`, a bigint, which is linear,
 so `let f = b` moves `b` rather than copying it.
 
 In this example the first four units each make one binding.
@@ -391,16 +391,16 @@ and _update_ `d` again from 8 to 16.
 A fresh run from the top would do neither.
 Units 2 and 4 have to rerun first,
 so that `b` and `d` are as unit 5 first found them.
-Unit 3 does not need to rerun:
-unit 5 _overwrites_ `c` without looking at what it held.
+Unit 3 does not need to rerun
+because unit 5 _overwrites_ `c` without looking at what it held.
 Unit 1 doesn't either,
 because _reading_ `a` left it as it was.
 
-A table says what each unit does in a step.
+This table says what each unit does in a step.
 _Uses from earlier units_ names the unit each binding came from in parentheses.
 _Holds after_ is what a unit's bindings hold at the end of the step,
-whichever unit last changed them:
-unit 3 holds `c` = 30 because unit 5 overwrote it.
+whichever unit last changed them.
+Here unit 3 holds `c` = 30 because unit 5 overwrote it.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
@@ -425,7 +425,7 @@ let a = 2
 
 Unit 5 reads `a`,
 so it reruns.
-But rerunning unit 5 puts it in the same spot as editing it did,
+But rerunning unit 5 also accesses b, c, d, and e,
 so units 2 and 4 rerun before it,
 just as they did in step 2.
 The edited unit forced a rerun of a later unit,
@@ -723,7 +723,7 @@ var z = 10
 scriptunit-fragment 3
 ----------
 
-set b = 500
+set b = b + 500
 set z = z + 1
 
 ----------
@@ -739,10 +739,21 @@ scriptunit-fragment 5
 set b = 0
 ```
 
-Entered, these leave `b` = 0, `z` = 11 and `c` = 501.
+Entered, these leave `b` = 0, `z` = 11 and `c` = 502.
 Edit unit 4.
+
+```datalove
+----------
+scriptunit-edit 4
+----------
+
+let c = b + 2
+```
+
 It reads `b`, which unit 5 overwrote after it,
-so `b` has to be restored.
+so `b` has to be restored:
+unit 1 reruns,
+then unit 3, which updates it.
 But unit 3 also updates `z`,
 so rerunning it as it is would leave `z` at 12.
 Unit 2 has to rerun first,
@@ -752,10 +763,10 @@ though unit 4 never names `z`.
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 1` | - | untouched | unit 3 overwrites `b` after it | `b` = 0 |
+| 1 | `var b = 1` | - | reruns | rerun: unit 4 reads `b`, which unit 5 overwrote after it | `b` = 0 |
 | 2 | `var z = 10` | - | reruns | rerun: unit 3 reruns and updates `z`, so `z` has to be as unit 3 first found it | `z` = 11 |
-| 3 | `set b = 500; set z = z + 1` | overwrites `b` (1), updates `z` (2) | reruns | rerun: unit 4 reads `b`, which unit 5 overwrote after it, and unit 3 is the nearest to set it | - |
-| 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 502 |
+| 3 | `set b = b + 500; set z = z + 1` | updates `b` (1), updates `z` (2) | reruns | rerun: updates `b` after unit 1, which reran | - |
+| 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 503 |
 | 5 | `set b = 0` | overwrites `b` (1) | reruns | rerun: overwrites `b` after unit 4 | - |
 
 Moves chain the same way, one link at a time.
@@ -828,9 +839,7 @@ more modifications,
 first back to the units before the triggering unit `T`,
 then forward to the units after `T`, and after each unit that runs again.
 The backward rules are the access table of
-[the second section](#user-content-but-what-about-edits-that-change-what-a-unit-does),
-except that a restore starts at the nearest unit that set the binding,
-as [the third section](#user-content-but-what-if-a-rerun-unit-has-other-bindings-that-must-be-restored) found.
+[the second section](#user-content-but-what-about-edits-that-change-what-a-unit-does).
 
 **Backward**, to put earlier bindings back as `T` first found them:
 
@@ -844,8 +853,8 @@ as [the third section](#user-content-but-what-if-a-rerun-unit-has-other-bindings
   `T` won't look at what it held.
 - **Restore.**
   To restore a binding,
-  rerun the nearest unit before `T` that provided, overwrote or revived it.
-  That rebuilds it from nothing.
+  rerun its provider,
+  then, in order, the units between it and `T` that took or wrote it.
   A binding whose provider no longer runs has nothing to restore.
 
 **Forward**, to the units after `T`, and after each unit that runs again:
@@ -1063,7 +1072,6 @@ Some of the vocabulary in my rules has established terminology:
 | retract | retraction, as in Prolog and Datalog's assert and retract |
 | later units rerun on a changed value | flow (read-after-write) dependence |
 | restore because a later unit took or wrote what an earlier one reads | anti (write-after-read) dependence |
-| the nearest unit that set the binding without reading it | nearest killing definition |
 | restore by rerunning instead of keeping the old value | rematerialization |
 | repeat until nothing more needs to rerun | worklist fixed point |
 

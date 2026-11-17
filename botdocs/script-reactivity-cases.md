@@ -1227,7 +1227,7 @@ var z = 10
 scriptunit-fragment 3
 ----------
 
-set b = 500
+set b = b + 500
 set z = z + 1
 
 ----------
@@ -1251,8 +1251,8 @@ set b = 0
 |------|------|-------------------------|-----------|---------|-------------|
 | 1 | `var b = 1` | - | compiles, runs | new | `b` = 0 |
 | 2 | `var z = 10` | - | compiles, runs | new | `z` = 11 |
-| 3 | `set b = 500; set z = z + 1` | overwrites `b` (1), updates `z` (2) | compiles, runs | new | - |
-| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 501 |
+| 3 | `set b = b + 500; set z = z + 1` | updates `b` (1), updates `z` (2) | compiles, runs | new | - |
+| 4 | `let c = b + 1` | reads `b` (1) | compiles, runs | new | `c` = 502 |
 | 5 | `set b = 0` | overwrites `b` (1) | compiles, runs | new | - |
 <!-- end world -->
 
@@ -1261,15 +1261,15 @@ set b = 0
 
 | unit | code | uses from earlier units | this step | because | holds after |
 |------|------|-------------------------|-----------|---------|-------------|
-| 1 | `var b = 1` | - | untouched | unit 3 overwrites `b` after it | `b` = 0 |
+| 1 | `var b = 1` | - | reruns | rerun: unit 4 reads `b`, which unit 5 overwrote after it | `b` = 0 |
 | 2 | `var z = 10` | - | reruns | rerun: unit 3 reruns and updates `z`, so `z` has to be as unit 3 first found it | `z` = 11 |
-| 3 | `set b = 500; set z = z + 1` | overwrites `b` (1), updates `z` (2) | reruns | rerun: unit 4 reads `b`, which unit 5 overwrote after it, and unit 3 is the nearest to set it | - |
-| 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 502 |
+| 3 | `set b = b + 500; set z = z + 1` | updates `b` (1), updates `z` (2) | reruns | rerun: updates `b` after unit 1, which reran | - |
+| 4 | `let c = b + 2` | reads `b` (1) | recompiles, runs | edited | `c` = 503 |
 | 5 | `set b = 0` | overwrites `b` (1) | reruns | rerun: overwrites `b` after unit 4 | - |
 <!-- end world -->
 
-Unit 4 needs `b` as unit 3 left it, so unit 3 reruns. Unit 3 also updates `z`,
-so unit 2 reruns first, though unit 4 never names `z`.
+Unit 4 needs `b` as unit 3 left it, so units 1 and 3 rerun to rebuild it. Unit 3
+also updates `z`, so unit 2 reruns too, though unit 4 never names `z`.
 
 <!-- world rerun-through-moves code -->
 ```datalove
