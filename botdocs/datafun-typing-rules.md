@@ -1007,7 +1007,6 @@ same, and its tests hold the Rust to it.
 | F112 | A const declared twice in one module, script unit or function body, in any of its blocks |
 | T005-T015, T061 | A literal out of range for its type, as in datalit |
 | T016 | `none`, `er e`, an enum literal or an empty collection with nothing expected |
-| T017 | An expression that holds a parse error |
 | T038, T039, T042 | A tuple or struct literal whose length, fields or field order do not fit its type |
 | T040 | A hint that disagrees with the expected type |
 | T048, T049 | A tensor literal whose rank or element count does not fit its type |
@@ -1016,8 +1015,8 @@ same, and its tests hold the Rust to it.
 | T058 | An enum literal against a type that is not an enum |
 | T062-T066 | A recursive type that is not well formed; as in datalit, and T066 for a type parameter inside one |
 
-A code missing from the table is unassigned; F011, F060, F065 and F075 are
-retired. Two parse errors belong to the same rules: P074, a declaration
+A code missing from the table is unassigned; F011, F060, F065, F075 and
+T017 are retired. Two parse errors belong to the same rules: P074, a declaration
 inside a block, and P077, a statement at the top level of a module that is
 not a declaration.
 A fault in a literal form, which datafun shares with datalit, has datalit's

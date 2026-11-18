@@ -251,10 +251,10 @@ compared with the oracle's. A hinted expression `: T / e` is checked against
 Before the generated cases it runs a corpus: every example the typing rules
 give, with what the doc says each synthesizes or is reported as, held to the
 doc as well as to the oracle, and the cases found by hand. A hundred thousand
-generated expressions reach every code in the doc's table but four: T017, a
-parse error, which the test skips; T066, which is datafun's; and T049 and
-T056, a tensor's element count and a table row's width, which the parser
-refuses before the checker sees them, as the doc says.
+generated expressions reach every code in the doc's table but three: T066,
+which is datafun's, and T049 and T056, a tensor's element count and a table
+row's width, which the parser refuses before the checker sees them, as the
+doc says. An expression that does not parse is skipped.
 
 It found one place where the code and the doc differed. The doc gives an
 atom literal's class as admitting `atom a` and any enum, and a term

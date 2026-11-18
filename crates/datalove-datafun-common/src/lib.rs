@@ -392,6 +392,9 @@ pub enum TypeError {
     TypeMismatch { expected: String, actual: String },
     UnresolvedName(String),
     CannotSynthesize,
+    /// An expression the parser reported, at which checking stops without a
+    /// word of its own.
+    ParseError,
     InvalidOperandType { op: String, ty: String },
     ArityMismatch { expected: usize, actual: usize },
     NotAFunction(String),
@@ -528,6 +531,7 @@ impl std::fmt::Display for TypeError {
             }
             TypeError::UnresolvedName(name) => write!(f, "cannot find `{name}` in this scope"),
             TypeError::CannotSynthesize => write!(f, "cannot infer a type here"),
+            TypeError::ParseError => write!(f, "an expression that did not parse"),
             TypeError::InvalidOperandType { op, ty } => write!(f, "invalid operand type `{ty}` for operator `{op}`"),
             TypeError::ArityMismatch { expected, actual } => write!(
                 f, "this function takes {expected} argument{} but {actual} {} supplied",

@@ -446,8 +446,7 @@ impl<'db> Parser<'db> {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
         builder.emit_parse();
-        // Filed with its span, as every expression is: the type checker reports
-        // T017 at it.
+        // Filed with its span, as every expression is.
         let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span.C(), message: message_text });
         self.create_expr(kind, ts)
     }

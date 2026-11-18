@@ -326,10 +326,12 @@ impl<'db> TypeContext<'db> {
     /// A `TypeError` is how checking stops, and a pending diagnostic is how
     /// it is reported. Every error is reported where it is made, through the
     /// `error_*` methods, so a check with errors and no diagnostic is a site
-    /// that skipped them, and its failure would reach nobody.
+    /// that skipped them, and its failure would reach nobody. A parse error
+    /// is the exception, the parser having reported it.
     pub fn assert_errors_reported(&self) {
+        let unreported = self.errors.iter().any(|e| *e != TypeError::ParseError);
         assert!(
-            self.errors.is_empty() || !self.pending_diagnostics.is_empty(),
+            !unreported || !self.pending_diagnostics.is_empty(),
             "type errors with no diagnostic: {:?}",
             self.errors.iter().map(|e| e.S()).collect::<Vec<_>>(),
         );
@@ -517,6 +519,9 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         &mut self,
         type_hint: datalove_datalit::ast::TypeHint<'db>,
     ) -> Result<Type<'db>, TypeError> {
+        if let datalove_datalit::ast::TypeHint::ParseError(_) = type_hint {
+            return Err(TypeError::ParseError);
+        }
         let result = convert_type_hint_inheriting(
             self.db, type_hint, &self.type_aliases, &|name| self.inherited_type_alias(name));
         if let Err(TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) }) = &result {

@@ -402,9 +402,9 @@ pub fn synthesize_unhinted<'db>(
             synthesize_field_proj(ctx, expr, proj)
         }
 
-        ExprFunKind::ParseError(_) => {
-            Err(ctx.error_cannot_synthesize(expr, TCode::ParseErrorInExpr, "type inference blocked by syntax error"))
-        }
+        // The parser reported it, and there is nothing to say about its
+        // type that would not say so again.
+        ExprFunKind::ParseError(_) => Err(TypeError::ParseError),
 
         // New inline variants - simple literals.
         // All these check for type hints first.

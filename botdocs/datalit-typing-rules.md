@@ -631,7 +631,6 @@ forms it shares; its own table lists which
 | T014 | check | Hex literal too wide for an `f64` bit pattern |
 | T015 | check | Integer or hex literal out of range for `index` |
 | T016 | synth | A type left open with nothing to decide it: by `none`, `er e`, `enum {e}` or an empty collection |
-| T017 | synth | Expression contains a parse error |
 | T022 | check | `true`, `false` or a string literal against another type |
 | T032 | check | `Check-Subsume` failed, or `none` / `er` against a non-option / non-result |
 | T038 | check | Tuple length mismatch |
@@ -681,6 +680,9 @@ conditions of [Well-formed types](#user-content-well-formed-types).
 The diagnostic codes T018 to T021, T051, T052 and T060 were for elements that
 differed from the first under the first-element rule this replaces. They are
 retired: a disagreement is now reported by the check, with that check's code.
+T017 was for an expression holding a parse error, which the parser has
+already reported; it is retired in datalit and datafun both, and the checker
+says nothing of a parse error's type.
 
 ## References
 

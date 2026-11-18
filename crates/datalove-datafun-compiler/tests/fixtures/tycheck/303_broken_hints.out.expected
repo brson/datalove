@@ -1,60 +1,17 @@
 {
-  "diagnostics": [
-    {
-      "code": "T017",
-      "labels": [
-        {
-          "message": "cannot infer type",
-          "span": [
-            29,
-            30
-          ],
-          "text": "5"
-        }
-      ],
-      "message": "type inference blocked by syntax error"
-    },
-    {
-      "code": "T017",
-      "labels": [
-        {
-          "message": "cannot infer type",
-          "span": [
-            46,
-            47
-          ],
-          "text": ":"
-        }
-      ],
-      "message": "type inference blocked by syntax error"
-    },
-    {
-      "code": "T017",
-      "labels": [
-        {
-          "message": "cannot infer type",
-          "span": [
-            74,
-            74
-          ],
-          "text": ""
-        }
-      ],
-      "message": "type inference blocked by syntax error"
-    }
-  ],
+  "diagnostics": [],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     },
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     },
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     },
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     }
   ],
   "judgements": [

@@ -420,8 +420,6 @@ codes! {
         IndexOutOfRange = 15,
         /// A type left open with nothing to decide it.
         OpenType = 16,
-        /// An expression that contains a parse error.
-        ParseErrorInExpr = 17,
         /// `true`, `false` or a string literal against another type.
         LiteralMismatch = 22,
         /// `Check-Subsume` failed, or `none` or `er` against a type it is no
@@ -464,7 +462,7 @@ codes! {
         /// A type parameter inside a recursive type.
         RecGeneric = 66,
     }
-    retired = [18, 19, 20, 21, 51, 52, 60];
+    retired = [17, 18, 19, 20, 21, 51, 52, 60];
 }
 
 codes! {

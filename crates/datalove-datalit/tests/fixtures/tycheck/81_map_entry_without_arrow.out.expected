@@ -23,22 +23,7 @@
       }
     }
   },
-  "diagnostics": [
-    {
-      "code": "T017",
-      "labels": [
-        {
-          "message": "parse error occurred here",
-          "span": [
-            4,
-            5
-          ],
-          "text": "2"
-        }
-      ],
-      "message": "cannot type-check expression with parse errors"
-    }
-  ],
+  "diagnostics": [],
   "errors": [
     {
       "kind": "CannotSynthesize"

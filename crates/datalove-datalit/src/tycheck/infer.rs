@@ -720,15 +720,9 @@ pub fn infer_unhinted<'db>(
         }
         // Rule: Inf-Enum
         Expr::Enum(_) => uni.fresh(Class::Open, Origin::Expr(expr.C())),
-        Expr::ParseError(_) => {
-            let ts = ctx.get_span(expr);
-            DiagnosticBuilder::error(ctx.db, "cannot type-check expression with parse errors")
-                .code(TCode::ParseErrorInExpr.as_str())
-                .primary_label(ts, "parse error occurred here")
-                .note("fix the parse error before type checking")
-                .emit_type();
-            return Err(TypeError::CannotSynthesize);
-        }
+        // The parser reported it, and there is nothing to say about its
+        // type that would not say so again.
+        Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
     })
 }
 
