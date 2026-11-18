@@ -381,7 +381,7 @@ let c = a + b
 ```
 
 Fresh-run result: `c == 101`.
-Unit 1, 3 rerun. Unit 2 unchanged.
+Unit 1, 3 rerun. Unit 2 does not rerun.
 
 
 ## Backward reruns
@@ -409,7 +409,7 @@ set b = a + b + 10
 ```
 
 Fresh-run result: `b == 1110`.
-Unit 2, 3 rerun, unit 2 because 3 updated 2. Unit 1 unchanged.
+Unit 2, 3 rerun, unit 2 because 3 updated 2. Unit 1 does not rerurn.
 Without the backward rerun: `b == 2111`.
 <!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
 
@@ -439,7 +439,9 @@ set b = a + b + 1
 ```
 
 Fresh-run result: `b == 10101`.
-Unit 1, 2, 3 rerun, 2 because 3 required it transitively.
+Unit 1, 2, 3 rerun.
+Unit 3 reruns because it reads `a`.
+Unit 2 reruns because unit 3 updates `b`.
 Without the backward rerun: `b == 11102`.
 
 ---
