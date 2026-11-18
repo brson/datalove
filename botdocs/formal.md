@@ -359,7 +359,13 @@ that is not generic and whose parameters take literals, top-level
 `debuglog`s of calls with literals of their types, at and near their ranges'
 ends. The model runs it (`Fun.runScript`, the oracle printing each logged
 value as `debuglog` does, `Fun.showVal` in `FunShow.lean`), and so does the
-CLI. Every line must agree, up to what the model does not carry, a float,
+CLI, on every engine: the bytecode interpreter, the IR walker, the JIT
+compiling each function at its first call and entering a loop's code after
+its first pass, and both AOT backends, Cranelift's and C's, each building an
+executable that is then run. The AOT backends take a build and a link a
+script, so they run the corpus and one generated script in eight
+(`FORMAL_FUN_AOT_EVERY`). Every run checks for leaks, and a run that leaks
+does not agree. Every line must agree, up to what the model does not carry, a float,
 an error's message, a map's or set's entries, which match anything; a
 string prints with its text, escaped as `debuglog` escapes it; a script the model runs to its end, or to an early return, the CLI
 must too, printing what it returned early last. Where the model stops at
@@ -384,14 +390,26 @@ tuple element or list element of a hinted place, `(: {a: T, b: u8} / w).a`,
 binds the call's value, and logs the variables after it. Worldgen's own calls
 pass a `ref`, `mut` or `out` argument as a binding or a field of one, at times
 hinted on the place or on the binding under the field. A thousand
-seeds run about 870 scripts, logging about 4200 lines, all agreeing, a
-quarter of them with something the model does not carry.
+seeds run about 1150 scripts on each interpreter and the JIT, and 156 on
+each AOT backend, logging about 29000 lines, all agreeing, one in thirty
+with something the model does not carry; it takes about a minute and a
+half, most of it the AOT builds.
 
 What it found:
 
 - **No rule of the slice differs** between the doc and the code. The
   differences were all recovery, which the doc did not cover, and which the
   model now follows.
+- **The AOT backends leaked what a script kept when it returned early.** A
+  unit that returns early from its top level keeps its frame, for the
+  session to destroy when it ends, so ownership takes the bindings it keeps
+  out of what its early exits drop. An AOT program's frame ends with the
+  script, and `UnitEarlyReturn` returned without destroying them, leaking
+  every `var` and every `let` still held there. Running the corpus on the
+  AOT backends with the leak check found it; lowering now emits the
+  unit-end drops before a unit's early return, no-ops in the interpreter as
+  at the unit's end. The backend fixture `48_top_level_early_return_keeps`
+  holds it.
 - **The serde AST dropped `loop while`'s condition.** It is what the parser's
   snapshot tests compare, so a `loop while` lost its condition there with
   none of them noticing. It is now kept.

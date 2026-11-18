@@ -1173,6 +1173,30 @@ fn shaped_calls(rng: &mut SeededRng) -> String {
     out
 }
 
+/// An engine `runs_agree` runs a script on.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum Engine {
+    /// The interpreter's register bytecode, what `script` runs by default.
+    Bytecode,
+    /// The IR walker every other engine is tested against.
+    Ir,
+    /// The JIT, compiling each function at its first call and entering a
+    /// loop's compiled code after its first pass.
+    Jit,
+    /// Cranelift's AOT backend, linked into an executable.
+    CraneliftAot,
+    /// The C backend, compiled by the system's C compiler.
+    CAot,
+}
+
+impl Engine {
+    const ALL: [Engine; 5] = [Engine::Bytecode, Engine::Ir, Engine::Jit, Engine::CraneliftAot, Engine::CAot];
+
+    fn is_aot(self) -> bool {
+        matches!(self, Engine::CraneliftAot | Engine::CAot)
+    }
+}
+
 /// What running a script with the CLI came to.
 enum RustRun {
     /// What its `debuglog`s printed, and whether it exited successfully.
@@ -1181,19 +1205,16 @@ enum RustRun {
     Refused(String),
     /// It ran past the time it was given.
     TimedOut,
+    /// An AOT backend failed to build it, with no diagnostic: what it printed.
+    BuildFailed(String),
 }
 
-/// A script run with the CLI.
-fn rust_run(text: &str) -> RustRun {
-    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
-    let binary = workspace.join("target").join(profile).join("datalove");
-    assert!(binary.exists(), "{} not built; `just test-formal` builds it", binary.display());
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("script.dl");
-    std::fs::write(&path, text).X();
-    let mut child = std::process::Command::new(&binary)
-        .arg("script").arg(&path)
+/// A command run for at most `limit`: how it exited, none if it ran out of
+/// time and was killed, and what it wrote to stderr, uncolored.
+fn run_bounded(mut cmd: std::process::Command, limit: std::time::Duration)
+    -> (Option<std::process::ExitStatus>, Vec<String>)
+{
+    let mut child = cmd
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
         .spawn().X();
@@ -1202,27 +1223,85 @@ fn rust_run(text: &str) -> RustRun {
         if let Some(status) = child.try_wait().X() {
             break Some(status);
         }
-        if start.elapsed() > std::time::Duration::from_secs(5) {
+        if start.elapsed() > limit {
             let _ = child.kill();
             let _ = child.wait();
             break None;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
     };
-    // `debuglog` writes to stderr.
     let mut stderr = String::new();
     std::io::Read::read_to_string(&mut child.stderr.take().X(), &mut stderr).X();
-    let Some(status) = status else { return RustRun::TimedOut };
     // Diagnostics are colored whatever the environment says.
     let ansi = rmx::regex::Regex::new("\x1b\\[[0-9;]*m").X();
-    let lines: Vec<String> = stderr.lines().map(|l| ansi.replace_all(l, "").into_owned()).collect();
-    // A diagnostic is `[CODE] Error: ...`, which no value prints as.
-    let refused = lines.first().filter(|l| {
-        let l = l.as_bytes();
-        l.first() == Some(&b'[') && l.get(1).is_some_and(u8::is_ascii_uppercase) && l.contains(&b']')
-            && String::from_utf8_lossy(l).contains("] Error:")
-    });
-    match refused {
+    (status, stderr.lines().map(|l| ansi.replace_all(l, "").into_owned()).collect())
+}
+
+/// The first line, where it is a diagnostic: `[CODE] Error: ...`, which no
+/// value prints as.
+fn diagnostic(lines: &[String]) -> Option<&String> {
+    lines.first().filter(|l| {
+        let b = l.as_bytes();
+        b.first() == Some(&b'[') && b.get(1).is_some_and(u8::is_ascii_uppercase) && b.contains(&b']')
+            && l.contains("] Error:")
+    })
+}
+
+/// A script run with the CLI on the bytecode interpreter.
+fn rust_run(text: &str) -> RustRun {
+    rust_run_on(text, Engine::Bytecode)
+}
+
+/// A script run with the CLI on `engine`. An AOT backend builds an
+/// executable, which is then run, so that running out of time kills the
+/// program and not only the CLI that started it. Every run checks for leaks,
+/// whether or not the tests were started with `DATALOVE_LEAK_CHECK`: a
+/// program that leaks prints the leak, and so does not agree.
+fn rust_run_on(text: &str, engine: Engine) -> RustRun {
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let binary = workspace.join("target").join(profile).join("datalove");
+    assert!(binary.exists(), "{} not built; `just test-formal` builds it", binary.display());
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("script.dl");
+    std::fs::write(&path, text).X();
+    let run_limit = std::time::Duration::from_secs(5);
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.env("DATALOVE_LEAK_CHECK", "panic");
+    let (status, lines) = match engine {
+        Engine::Bytecode => {
+            cmd.arg("script").arg(&path);
+            run_bounded(cmd, run_limit)
+        }
+        Engine::Ir => {
+            cmd.env("DATALOVE_INTERP", "ir").arg("script").arg(&path);
+            run_bounded(cmd, run_limit)
+        }
+        Engine::Jit => {
+            cmd.args(["script", "--jit", "--jit-threshold", "1", "--jit-osr-threshold", "1"]).arg(&path);
+            run_bounded(cmd, run_limit)
+        }
+        Engine::CraneliftAot | Engine::CAot => {
+            let exe = dir.path().join("script");
+            cmd.arg("aot-compile").arg("--link");
+            if engine == Engine::CAot {
+                cmd.arg("--c");
+            }
+            cmd.arg("-o").arg(&exe).arg(&path);
+            let (status, lines) = run_bounded(cmd, std::time::Duration::from_secs(120));
+            if let Some(line) = diagnostic(&lines) {
+                return RustRun::Refused(line.C());
+            }
+            if !status.is_some_and(|s| s.success()) {
+                return RustRun::BuildFailed(lines.join("\n"));
+            }
+            let mut run = std::process::Command::new(&exe);
+            run.env("DATALOVE_LEAK_CHECK", "panic");
+            run_bounded(run, run_limit)
+        }
+    };
+    let Some(status) = status else { return RustRun::TimedOut };
+    match diagnostic(&lines) {
         Some(line) => RustRun::Refused(line.C()),
         None => RustRun::Ran(lines, status.success()),
     }
@@ -1244,11 +1323,11 @@ fn regex_escape(s: &str) -> String {
 }
 
 /// Generated scripts that check, with a driver calling their functions,
-/// run by the model and by the Rust: each top-level `debuglog` prints the
-/// same, up to what the model does not know of a value, and a script the
-/// model runs to its end, or to an early return, the Rust does too, printing
-/// nothing more. Where the model stops at what it does not run, what it
-/// printed before is what the Rust printed first.
+/// run by the model and by the Rust on each engine: each top-level
+/// `debuglog` prints the same, up to what the model does not know of a value,
+/// and a script the model runs to its end, or to an early return, the Rust
+/// does too, printing nothing more. Where the model stops at what it does not
+/// run, what it printed before is what the Rust printed first.
 #[test]
 fn runs_agree() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -1296,12 +1375,11 @@ fn runs_agree() {
     let queries: Vec<Value> = cases.iter().map(|(_, _, script)| json!({ "run": script })).collect();
     let answers = ask_oracle(&queries);
 
+    // What the model ran each script to: what it logged, the value it
+    // returned early printed last, as the CLI prints it, and how it ended.
     let mut ends = BTreeMap::<String, usize>::new();
-    let mut lines = 0;
-    let mut unknown = 0;
-    let mut writing = 0;
-    let mut mismatches = Vec::new();
-    for ((what, text, _), oracle) in cases.iter().zip(&answers) {
+    let mut models = Vec::new();
+    for (i, ((what, text, _), oracle)) in cases.iter().zip(&answers).enumerate() {
         if let Some(why) = oracle.get("unsupported") {
             assert!(what != "corpus", "the model does not take a run corpus script ({why}):\n{text}");
             *ends.entry(fmt!("unsupported script: {why}")).or_default() += 1;
@@ -1309,42 +1387,82 @@ fn runs_agree() {
         }
         let mut model: Vec<String> = oracle["log"].as_array().X().iter().map(|l| l.as_str().X().S()).collect();
         let end = oracle["end"].as_str().X().S();
-        // The CLI prints what a script returns early, after what it logged.
         if let Some(returned) = oracle["returned"].as_str() {
             model.push(returned.S());
         }
         *ends.entry(end.C()).or_default() += 1;
-        let rust = rust_run(text);
         let finished = end == "ok" || end == "early";
         // A corpus script is written to be run to its end: one the model
         // stops in is a gap in the model, not a script to compare a prefix of.
         assert!(finished || what != "corpus", "the model stops in a run corpus script ({end}):\n{text}");
-        let (agree, out) = match &rust {
+        models.push((i, model, end, finished));
+    }
+
+    // Every script runs on the interpreters and the JIT; the AOT backends,
+    // which take a C or Cranelift build and a link a script, run the corpus
+    // and one generated script in `FORMAL_FUN_AOT_EVERY`.
+    let aot_every: usize = std::env::var("FORMAL_FUN_AOT_EVERY").map(|v| v.parse().X()).unwrap_or(8);
+    let jobs: Vec<(usize, Engine)> = models.iter().enumerate()
+        .flat_map(|(n, (i, ..))| {
+            let aot = cases[*i].0 == "corpus" || (aot_every != 0 && n % aot_every == 0);
+            Engine::ALL.into_iter().filter(move |e| aot || !e.is_aot()).map(move |e| (n, e))
+        })
+        .collect();
+    let runs: Vec<RustRun> = {
+        use rmx::rayon::prelude::*;
+        jobs.par_iter().map(|&(n, e)| rust_run_on(&cases[models[n].0].1, e)).collect()
+    };
+
+    let mut lines = 0;
+    let mut unknown = 0;
+    let mut writing = 0;
+    let mut per_engine = BTreeMap::<Engine, usize>::new();
+    let mut mismatches = Vec::new();
+    let mut refused_on = BTreeMap::<usize, String>::new();
+    for (&(n, engine), rust) in jobs.iter().zip(&runs) {
+        let (i, model, end, finished) = &models[n];
+        let (what, text, _) = &cases[*i];
+        let (agree, out) = match rust {
             RustRun::Ran(out, success) => {
                 let prefix = model.len() <= out.len()
                     && model.iter().zip(out).all(|(m, r)| line_matches(m, r));
-                (if finished { prefix && model.len() == out.len() && *success } else { prefix }, fmt!("{out:?}"))
+                (if *finished { prefix && model.len() == out.len() && *success } else { prefix }, fmt!("{out:?}"))
             }
+            // A later phase refuses a script on every engine alike, before
+            // any of them runs it.
             RustRun::Refused(line) => {
                 assert!(what != "corpus", "the Rust refuses a run corpus script: {line}\n{text}");
-                *ends.entry(fmt!("refused: {}", &line[..line.find(']').X() + 1])).or_default() += 1;
+                let code = line[..line.find(']').X() + 1].S();
+                if engine == Engine::Bytecode {
+                    *ends.entry(fmt!("refused: {code}")).or_default() += 1;
+                }
+                refused_on.insert(n, code);
                 continue;
             }
             // Out of time: the model must not have finished.
             RustRun::TimedOut => (!finished, "timed out".S()),
+            RustRun::BuildFailed(why) => (false, fmt!("build failed: {why}")),
         };
-        if agree {
+        *per_engine.entry(engine).or_default() += 1;
+        if !agree {
+            mismatches.push(fmt!("{what} on {engine:?}:\n{text}    model ({end}): {model:?}\n    rust: {out}"));
+        } else if engine == Engine::Bytecode {
             if text.contains("mut w") || text.contains("out w") {
                 writing += 1;
             }
             lines += model.len();
             unknown += model.iter().filter(|l| l.contains('\u{1}')).count();
-        } else {
-            mismatches.push(fmt!("{what}:\n{text}    model ({end}): {model:?}\n    rust: {out}"));
+        }
+    }
+    // A script one engine refuses and another runs.
+    for (&(n, engine), rust) in jobs.iter().zip(&runs) {
+        if refused_on.contains_key(&n) && !matches!(rust, RustRun::Refused(_)) {
+            mismatches.push(fmt!("{} on {engine:?} runs what another engine refuses ({}):\n{}",
+                cases[models[n].0].0, refused_on[&n], cases[models[n].0].1));
         }
     }
     println!(
-        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; ends {ends:?}",
+        "{} scripts run over seeds {}..{}: {} differ; {lines} lines agree, {unknown} with what the model does not know; {writing} writing back through a call; runs by engine {per_engine:?}; ends {ends:?}",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(10) {
@@ -1460,6 +1578,7 @@ fn aliasing_agrees() {
             }
             RustRun::Ran(..) => false,
             RustRun::TimedOut => panic!("a call of an empty function timed out:\n{text}"),
+            RustRun::BuildFailed(_) => unreachable!("only an AOT backend builds"),
         };
         *outcomes.entry(if rust { "O010" } else { "accepted" }.S()).or_default() += 1;
         if model != rust {
