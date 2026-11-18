@@ -32,39 +32,43 @@ impl<'db> Parser<'db> {
         let ts = self.peek_text_span();
         self.eat_sigil(Sigil::Colon);
         let type_hint = self.parse_type_hint();
-        // A type that did not parse was reported, and what follows it is
-        // whatever the writer meant by it; a missing `/` would say the same
-        // thing twice.
-        if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
+        // Whatever goes wrong goes under the hint, as in datalit, so that a
+        // hint is one node however it was written.
+        let inner = if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
+            // The type was reported, and what follows it is whatever the
+            // writer meant by it; a missing `/` would say the same thing
+            // twice.
             let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
                 source: e.source, span: e.span.C(), message: e.message,
             });
-            return self.create_expr(kind, ts);
-        }
-        if !self.eat_sigil(Sigil::SlashForward) {
+            let error_ts = TextSpan::new(e.source, e.span.C());
+            self.eat_sigil(Sigil::SlashForward);
+            self.create_expr(kind, error_ts)
+        } else if !self.eat_sigil(Sigil::SlashForward) {
             let ts = self.peek_text_span();
-            return self.emit_expr_error(ts,
+            self.emit_expr_error(ts,
                 "expected '/' after type hint in `: type / expr` pattern",
                 DCode::HintWithoutSlash,
                 "expected '/'"
-            );
-        }
-        // Two hints on one expression would have to agree, and the second
-        // says nothing the first does not.
-        if self.peek_colon_type_hint() {
+            )
+        } else if self.peek_colon_type_hint() {
+            // Two hints on one expression would have to agree, and the
+            // second says nothing the first does not.
             let ts = self.peek_text_span();
             self.next();
-            return self.emit_expr_error(ts,
+            self.emit_expr_error(ts,
                 "a type hint cannot be written directly under another",
                 PCode::UnexpectedToken,
                 "parenthesize the inner hint"
-            );
-        }
-        let inner = self.parse_expr_primary();
-        if matches!(self.expr_kind(inner), ast::ExprFunKind::ParseError(_)) {
-            return inner;
-        }
-        let inner = self.parse_postfix_try_operators(inner);
+            )
+        } else {
+            let inner = self.parse_expr_primary();
+            if matches!(self.expr_kind(inner), ast::ExprFunKind::ParseError(_)) {
+                inner
+            } else {
+                self.parse_postfix_try_operators(inner)
+            }
+        };
         let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
         self.create_expr(ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner }), ts)
     }

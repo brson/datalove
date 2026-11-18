@@ -27,8 +27,16 @@
         },
         "value": {
           "expr": {
-            "kind": "ParseError",
-            "message": "expected '{' after 'enum'"
+            "inner": {
+              "expr": {
+                "kind": "ParseError",
+                "message": "expected '{' after 'enum'"
+              }
+            },
+            "kind": "Hinted",
+            "type_hint": {
+              "Alias": "E"
+            }
           }
         }
       }

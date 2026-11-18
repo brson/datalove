@@ -1,0 +1,193 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "inner": {
+                  "expr": {
+                    "kind": "ParseError",
+                    "message": "unexpected token in type hint"
+                  }
+                },
+                "kind": "Hinted",
+                "type_hint": {
+                  "ParseError": {
+                    "message": "unexpected token in type hint"
+                  }
+                }
+              }
+            },
+            "op": "Add",
+            "rhs": {
+              "expr": {
+                "kind": "ParseError",
+                "message": "unexpected token in expression"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "inner": {
+              "expr": {
+                "kind": "ParseError",
+                "message": "expected '/' after type hint in `: type / expr` pattern"
+              }
+            },
+            "kind": "Hinted",
+            "type_hint": "U8"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "inner": {
+              "expr": {
+                "kind": "ParseError",
+                "message": "a type hint cannot be written directly under another"
+              }
+            },
+            "kind": "Hinted",
+            "type_hint": "U8"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "inner": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Int",
+                    "value": "1"
+                  }
+                },
+                "op": "Add",
+                "rhs": {
+                  "expr": {
+                    "kind": "ParseError",
+                    "message": "expected expression"
+                  }
+                }
+              }
+            },
+            "kind": "Hinted",
+            "type_hint": "U8"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "e",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "value": "1"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D046",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            10,
+            11
+          ],
+          "text": "+"
+        }
+      ],
+      "message": "unexpected token in type hint"
+    },
+    {
+      "code": "P080",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            12,
+            13
+          ],
+          "text": "/"
+        }
+      ],
+      "message": "unexpected token in expression"
+    },
+    {
+      "code": "D049",
+      "labels": [
+        {
+          "message": "expected '/'",
+          "span": [
+            29,
+            30
+          ],
+          "text": "5"
+        }
+      ],
+      "message": "expected '/' after type hint in `: type / expr` pattern"
+    },
+    {
+      "code": "P080",
+      "labels": [
+        {
+          "message": "parenthesize the inner hint",
+          "span": [
+            46,
+            47
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "a type hint cannot be written directly under another"
+    },
+    {
+      "code": "P081",
+      "labels": [
+        {
+          "message": "expected expression",
+          "span": [
+            74,
+            74
+          ],
+          "text": ""
+        },
+        {
+          "message": "in this tuple",
+          "span": [
+            70,
+            71
+          ],
+          "text": "("
+        }
+      ],
+      "message": "expected expression"
+    }
+  ]
+}

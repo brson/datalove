@@ -1,0 +1,82 @@
+{
+  "diagnostics": [
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            29,
+            30
+          ],
+          "text": "5"
+        }
+      ],
+      "message": "type inference blocked by syntax error"
+    },
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            46,
+            47
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "type inference blocked by syntax error"
+    },
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            74,
+            74
+          ],
+          "text": ""
+        }
+      ],
+      "message": "type inference blocked by syntax error"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    },
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "u8"
+    },
+    {
+      "kind": "variable",
+      "name": "c",
+      "type": "u8"
+    },
+    {
+      "kind": "variable",
+      "name": "d",
+      "type": "u8"
+    },
+    {
+      "kind": "variable",
+      "name": "e",
+      "type": "int"
+    }
+  ]
+}

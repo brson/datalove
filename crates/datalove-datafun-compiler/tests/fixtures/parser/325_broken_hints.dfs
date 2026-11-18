@@ -1,0 +1,5 @@
+let a = : + / 5
+let b = : u8 5
+let c = : u8 / : u8 / 5
+let d = : u8 / (1 +)
+let e = 1
