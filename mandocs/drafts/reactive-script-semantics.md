@@ -417,7 +417,7 @@ set b = a + b + 10
 Fresh-run result: `b == 1110`.
 Unit 2, 3 rerun, unit 2 because 3 updated 2. Unit 1 does not rerurn.
 Without the backward rerun: `b == 2111`.
-<!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
+<!-- a digit other than 1 or 0 in the result means something was counted twice -->
 
 
 
@@ -453,9 +453,9 @@ Unit 2 reruns because unit 3 updates `b`.
 Without the backward rerun: `b == 11102`.
 
 
-## Changing the access type
+## Edits that change what a unit accesses
 
-To start, unit 2 update `a` and unit 3 reads it.
+To start, unit 3 updates `a` and unit 4 reads `b`.
 
 ```datalove
 // unit 1
@@ -465,28 +465,33 @@ var b = 10
 // unit 3
 set a = a + 1
 // unit 4
-let c = b
+let c = b + 1000
 ```
 
-Fresh-run result: `a == 101`, `b == 10`, `c == 10`.
+Fresh-run result: `a == 101`, `b == 10`, `c == 1010`.
 
 Edit unit 3 to update `b` instead of `a`.
 
+```datalove
 // unit 1
 var a = 100
 // unit 2
 var b = 10
-// unit 3
+// edit unit 3
 set b = b + 1
 // unit 4
-let c = b
+let c = b + 1000
 ```
 
-Fresh run result: `a == 100`, `b == 11`, `c == `11`.
+Fresh-run result: `a == 100`, `b == 11`, `c == 1011`.
 Unit 1, 3, 4 rerun.
 Unit 1 reruns because _the old version of unit 3_ updated `a`.
-Unit 4 reruns because _the new version of unit 3_ updated `b`.
-Without the reruns: `a == 101`, `b == 11`, `c == 10`. (would be nice to have a 2 here).
+Unit 4 reruns because _the new version of unit 3_ updates `b`.
+Unit 2 doesn't rerun: nothing after unit 3 changed `b`.
+
+Looking only at the old code reruns unit 1 but not unit 4: `a == 100`, `c == 1010`.
+Looking only at the new code reruns unit 4 but not unit 1: `a == 101`, `c == 1011`.
+<!-- No 2 here: these wrong values are stale, not counted twice. -->
 
 
 
