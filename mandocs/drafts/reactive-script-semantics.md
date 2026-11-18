@@ -504,9 +504,9 @@ and performs _accesses_ on the bindings of earlier units:
 | access    | what it does to the binding |
 |-----------|-----------------------------|
 | read      | uses the value and leaves it |
-| take      | moves the value out, leaving the binding empty |
-| overwrite | writes a value without reading the old one |
 | update    | reads the value and writes a new one |
+| overwrite | writes a value without reading the old one |
+| take      | moves the value out, leaving the binding empty |
 | revive    | overwrites a binding an earlier unit took |
 
 The accesses are what the compiler sees in the code.
