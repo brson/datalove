@@ -31,14 +31,19 @@ has run, which a `mut` or `out` argument after the early return can change:
 `o? + get(out p)` leaves without writing `p` when `o` is none, and the Rust
 lets it through.
 
+A `mut` parameter is kept as an `out` one is, as a parameter the caller
+reads back: it starts with a value, so the check at a way out never fails
+for it, but the proof needs to know it holds one there.
+
 `Proofs/InitSound.lean` shows that a script this accepts, and that checks,
-never stops at `Stop.uninit`.
+stops at `Stop.uninit` only while evaluating its consts.
 -/
 
 namespace Datalove.Fun
 
 /-- A variable as the analysis keeps it: its name, whether it holds a value
-on every way to here, and whether it is an `out` parameter. -/
+on every way to here, and whether it is a parameter the caller reads back, a
+`mut` or `out` one, which has to hold a value wherever the function returns. -/
 abbrev IVar := String × Bool × Bool
 
 /-- The variables in scope, innermost first, as the run keeps them. -/
@@ -52,7 +57,9 @@ def ISt.give (x : String) : ISt → ISt
   | [] => []
   | (y, s, o) :: σ => if y == x then (y, true, o) :: σ else (y, s, o) :: ISt.give x σ
 
-/-- Whether every `out` parameter holds a value. -/
+/-- Whether every `mut` and `out` parameter holds a value. A `mut` one
+starts with one and nothing takes it away, so this asks it of the `out`
+ones. -/
 def ISt.outsSet (σ : ISt) : Bool := σ.all fun (_, s, o) => s || !o
 
 /-- What two ways to one point agree holds a value. -/
@@ -230,17 +237,22 @@ def initKeys (sigs : List (String × Sig)) : ISt → List Step → InitM ISt
   | σ, .field _ :: rest => initKeys sigs σ rest
   | σ, .index k _ :: rest => initE sigs σ k >>= fun σ => initKeys sigs σ rest
 
+/-- What a `set` asks of the variable it writes: a compound one reads it
+(O005), and one through steps writes a part of it, which has to hold a value
+(O009). -/
+def initTarget (σ : ISt) (x : String) (steps : List Step) : Option BinOp → InitM ISt
+  | some _ => readI σ x
+  | none => if !steps.isEmpty && σ.holds x == some false then throw "O009" else pure σ
+
 /-- `set x … = e` or `set x … ⊕= e`: the value, then the keys, then the
-place. A compound one reads `x` (O005), and one through steps writes a part
-of it, which has to hold a value (O009). -/
+place, which a compound operator or an index with `?` or `!` on the way to
+it can return early from. -/
 def initSet (sigs : List (String × Sig)) (σ : ISt) (x : String) (steps : List Step) (op : Option BinOp)
-    (e : Expr) : InitM ISt := do
-  let σ ← initE sigs σ e
-  let σ ← initKeys sigs σ steps
-  let σ ← match op with
-    | some _ => readI σ x
-    | none => if !steps.isEmpty && σ.holds x == some false then throw "O009" else pure σ
-  let σ ← if stepsExit steps || op.any BinOp.exits then exitI σ else pure σ
+    (e : Expr) : InitM ISt :=
+  initE sigs σ e >>= fun σ =>
+  initKeys sigs σ steps >>= fun σ =>
+  initTarget σ x steps op >>= fun σ =>
+  (if stepsExit steps || op.any BinOp.exits then exitI σ else pure σ) >>= fun σ =>
   pure (if steps.isEmpty then σ.give x else σ)
 
 /-- What a statement, a block or a `match`'s cases leave: what holds a value
@@ -262,60 +274,65 @@ def initStmt (sigs : List (String × Sig)) : ISt → Stmt → InitM IOut
     match e with
     | some e => pure (← initE sigs σ e, [])
     | none => pure (σ, [])
-  | σ, .if_ c tB eB t e => do
-    let σc ← initE sigs σ c
-    let (σt, bt) ← initBlock sigs (σc.bind tB.toList true) t
-    match e with
-    | some e => do
-      let (σe, be) ← initBlock sigs (σc.bind eB.toList true) e
-      pure ((σc.back σt).meet (σc.back σe), bt ++ be)
-    | none => pure ((σc.back σt).meet σc, bt)
-  | σ, .loop c body => do
-    let σc ← match c with
+  | σ, .if_ c tB eB t e =>
+    initE sigs σ c >>= fun σc =>
+    initBlock sigs (σc.bind tB.toList true) t >>= fun rt =>
+    initElse sigs (σc.bind eB.toList true) e >>= fun re =>
+    pure ((σc.back rt.1).meet (σc.back re.1), rt.2 ++ re.2)
+  | σ, .loop c body =>
+    (match c with
       | some c => initE sigs σ c
-      | none => pure σ
-    let (_, bs) ← initBlock sigs σc body
-    pure (σc.meetAll ((if c.isSome then [σc] else []) ++ bs.map σc.back), [])
+      | none => pure σ) >>= fun σc =>
+    initBlock sigs σc body >>= fun r =>
+    pure (σc.meetAll ((if c.isSome then [σc] else []) ++ r.2.map σc.back), [])
   | σ, .brk => pure (σ, [σ])
   | σ, .cont => pure (σ, [])
   | σ, .debuglog e => do pure (← initE sigs σ e, [])
   | σ, .call e => do pure (← initE sigs σ e, [])
   | σ, .const_ x _ e => do let σ ← initE sigs σ e; pure (σ.bind [x] true, [])
   | σ, .type_ _ _ => pure (σ, [])
-  | σ, .match_ e cases dflt => do
-    let σc ← initE sigs σ e
-    let (ends, bs) ← initCases sigs σc cases
-    let (ends, bs) ← match dflt with
-      | some d => do
-        let (σd, bd) ← initBlock sigs σc d
-        pure (if completes d then ends ++ [σc.back σd] else ends, bs ++ bd)
-      | none => pure (ends, bs)
-    pure (σc.meetAll ends, bs)
-  | σ, .for_ names coll body => do
-    let σc ← initE sigs σ coll
-    let (_, bs) ← initBlock sigs (σc.bind names true) body
-    pure (σc.meetAll (σc :: bs.map σc.back), [])
+  | σ, .match_ e cases dflt =>
+    initE sigs σ e >>= fun σc =>
+    initCases sigs σc cases >>= fun r =>
+    initDflt sigs σc dflt >>= fun d =>
+    pure (σc.meetAll (r.1 ++ d.1), r.2 ++ d.2)
+  | σ, .for_ names coll body =>
+    initE sigs σ coll >>= fun σc =>
+    initBlock sigs (σc.bind names true) body >>= fun r =>
+    pure (σc.meetAll (σc :: r.2.map σc.back), [])
+
+/-- An `else`, in its own scope, or nothing, which leaves things as they
+were. -/
+def initElse (sigs : List (String × Sig)) : ISt → Option (List Stmt) → InitM IOut
+  | σ, some e => initBlock sigs σ e
+  | σ, none => pure (σ, [])
+
+/-- A `match`'s default, as `initCases` takes a case: what it leaves, back in
+`σ`'s scope, where it can complete, and its `break`s. -/
+def initDflt (sigs : List (String × Sig)) : ISt → Option (List Stmt) → InitM (List ISt × List ISt)
+  | σ, some d => initBlock sigs σ d >>= fun r => pure (if completes d then [σ.back r.1] else [], r.2)
+  | _, none => pure ([], [])
 
 /-- A `match`'s cases, each from `σ`: what each that can complete leaves,
 back in `σ`'s scope, and every `break` in them. -/
 def initCases (sigs : List (String × Sig)) : ISt → List Case → InitM (List ISt × List ISt)
   | _, [] => pure ([], [])
-  | σ, .atom _ b :: cs => do
-    let (σb, bb) ← initBlock sigs σ b
-    let (ends, bs) ← initCases sigs σ cs
-    pure (if completes b then σ.back σb :: ends else ends, bb ++ bs)
-  | σ, .term _ x b :: cs => do
-    let (σb, bb) ← initBlock sigs (σ.bind [x] true) b
-    let (ends, bs) ← initCases sigs σ cs
-    pure (if completes b then σ.back σb :: ends else ends, bb ++ bs)
+  | σ, .atom _ b :: cs =>
+    initBlock sigs σ b >>= fun rb =>
+    initCases sigs σ cs >>= fun r =>
+    pure (if completes b then σ.back rb.1 :: r.1 else r.1, rb.2 ++ r.2)
+  | σ, .term _ x b :: cs =>
+    initBlock sigs (σ.bind [x] true) b >>= fun rb =>
+    initCases sigs σ cs >>= fun r =>
+    pure (if completes b then σ.back rb.1 :: r.1 else r.1, rb.2 ++ r.2)
 
 /-- A block's statements in order. -/
 def initBlock (sigs : List (String × Sig)) : ISt → List Stmt → InitM IOut
   | σ, [] => pure (σ, [])
-  | σ, s :: ss => do
-    let (σ, b1) ← initStmt sigs σ s
-    let (σ, b2) ← initBlock sigs σ ss
-    pure (σ, b1 ++ b2)
+  | σ, s :: ss =>
+    initStmt sigs σ s >>= fun r1 =>
+    initBlock sigs r1.1 ss >>= fun r2 =>
+    pure (r2.1, r1.2 ++ r2.2)
 
 end
 
@@ -323,7 +340,7 @@ end
 each holding a value but an `out` one, then the consts it sees, as
 `argVals` binds them. -/
 def funStart (params : List (Mode × String × Hint)) (consts : List String) : ISt :=
-  params.reverse.map (fun (m, x, _) => (x, m != .out, m == .out)) ++ consts.map (·, true, false)
+  params.reverse.map (fun (m, x, _) => (x, m != .out, m == .out || m == .mut)) ++ consts.map (·, true, false)
 
 /-- A function's body: what it refuses, if anything. Its end is a way out
 where it can complete. -/
@@ -337,12 +354,10 @@ the context the checker reaches its declaration in, with the consts it sees
 there, and every other statement on the top level's variables. -/
 def initTop (sigs : List (String × Sig)) : Ctx → ISt → List Stmt → InitM Unit
   | _, _, [] => pure ()
-  | Γ, σ, .fun_ (.mk _ _ params _ body) :: ss => do
-    initFun sigs ((constsOf Γ.vars).map (·.1)) params body
-    initTop sigs Γ σ ss
-  | Γ, σ, s :: ss => do
-    let (σ, _) ← initStmt sigs σ s
-    initTop sigs ((checkStmt Γ s).run #[]).1 σ ss
+  | Γ, σ, .fun_ (.mk _ _ params _ body) :: ss =>
+    initFun sigs ((constsOf Γ.vars).map (·.1)) params body >>= fun _ => initTop sigs Γ σ ss
+  | Γ, σ, s :: ss =>
+    initStmt sigs σ s >>= fun r => initTop sigs ((checkStmt Γ s).run #[]).1 r.1 ss
 
 /-- What a script's analysis refuses first, if anything: O005, O006 or O009. -/
 def initScript (ss : List Stmt) : Option Lit.Code :=

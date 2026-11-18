@@ -606,7 +606,8 @@ Four things are proved of it:
   bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
   of the return type, or with none from a function that returns nothing.
   It may also stop at a read of a variable declared with no value, which
-  the ownership analysis refuses (O005), at a loop run more often than it
+  the ownership analysis refuses (O005, and `Fun.runScript_init` below shows
+  that a script it lets through does not, past its consts), at a loop run more often than it
   was given, or calls nested deeper than they were given, and at what the
   model does not run, each a case of `Gap` in `FunEval.lean`: a call with a
   type argument that has a `rec` in it, a comparison or map key of a float,
@@ -676,6 +677,40 @@ Four things are proved of it:
   its hints are on (`placeOf`), and evaluated as `checkF` reaches it, through
   the hints, each key at the fuel it is checked at (`placeC`, sound by
   `Fun.placeC_sound`), so no check has to be had again at another fuel.
+- **A script the ownership analysis lets through never reads what holds
+  nothing** (`Fun.runScript_init`, in `Proofs/InitSound.lean`, of O005,
+  O006 and O009 as `FunInit.lean` models them). The analysis follows a body
+  in the order the model runs it, keeping for each variable in scope,
+  innermost first as the run keeps them, whether it holds a value on every
+  way to here: a `var` with no value and an `out` parameter start without
+  one, `set x = e` and passing `x` `mut` or `out` give it one, an `if`
+  meets both branches, a `match` the arms that can complete, a loop its
+  condition or end and each `break`. A read of one that may hold nothing is
+  O005, a way out of the function, `ret`, the end of a body that completes
+  or an early return inside an expression, while an `out` parameter may is
+  O006, and a write to a part of one is O009. Where a script checks and
+  this lets it through, running it stops at `Stop.uninit` only while
+  evaluating its consts: the analysis's state and the run's variables line
+  up name by name (`IAg`), a step only ever gives a variable a value
+  (`Keeps`), and every way out of a body the analysis lets through leaves
+  each `mut` and `out` parameter holding one, so writing back never meets
+  none (`CallInit`, kept by `runCall` of such a program, `runCall_init`).
+  The consts each function sees hold values in the store the const pass
+  builds (`constPass_has`). The proof needs no typing: to make it hold of
+  every run, the evaluator now stops with `Stop.wrong` where a checked
+  program never goes and it used to go on: a literal with fewer elements
+  than its type, a pattern whose value lacks a part it names, an option's
+  `else` binding (F094), a `match` with no case for its value and no
+  default (F100), a call with too few arguments, and a `break` out of a
+  function body; the typing proofs show none is reached.
+  `init_agrees` in `fun_tests` holds the Rust's O005, O006 and O009 to the
+  model's on generated functions that give, read and pass on such variables
+  across branches, loops, `match` arms and early returns; over three
+  thousand seeds none differ. It found the Rust checking an early return
+  inside an expression against what the whole expression wrote, so that
+  `o? + get(out p)` returned without writing `p` and the caller read an
+  unset string; the analysis now checks at each such operator as it reaches
+  it (error fixture 152), as the model does.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -860,6 +895,13 @@ it, as it did not find the atom and term case.
 ## What is not covered
 
 In rough order of what to do next:
+
+- **Consts read before they are evaluated.** `Fun.runScript_init` leaves
+  out the const pass: a const's initializer runs on the consts' values
+  alone, and that it reads only consts evaluated before it rests on F058
+  and on the order consts and functions are declared in, which the proof
+  does not carry. A const calling a function declared below it that reads a
+  const declared below the first is the case to settle.
 
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Order independence.** The doc claims that where unification's
