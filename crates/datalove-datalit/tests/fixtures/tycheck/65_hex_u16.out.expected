@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0xFFFF"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0xFFFF"
+            }
+          }
+        },
+        "type_hint": "U16"
       }
-    },
-    "type_hint": "U16"
+    }
   },
   "diagnostics": [],
   "errors": [],

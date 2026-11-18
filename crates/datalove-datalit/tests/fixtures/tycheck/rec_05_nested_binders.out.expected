@@ -1,131 +1,128 @@
 {
   "ast": {
     "expr": {
-      "Term": {
-        "name": "Block",
-        "payload": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "List": {
-              "elements": [
-                {
-                  "expr": {
-                    "Term": {
-                      "name": "Let",
-                      "payload": {
+            "Term": {
+              "name": "Block",
+              "payload": {
+                "expr": {
+                  "List": {
+                    "elements": [
+                      {
                         "expr": {
                           "Term": {
-                            "name": "Lit",
+                            "name": "Let",
                             "payload": {
                               "expr": {
-                                "Int": {
-                                  "value": "1"
+                                "Term": {
+                                  "name": "Lit",
+                                  "payload": {
+                                    "expr": {
+                                      "Int": {
+                                        "value": "1"
+                                      }
+                                    }
+                                  }
                                 }
-                              },
-                              "type_hint": null
+                              }
                             }
                           }
-                        },
-                        "type_hint": null
-                      }
-                    }
-                  },
-                  "type_hint": null
-                },
-                {
-                  "expr": {
-                    "Term": {
-                      "name": "Seq",
-                      "payload": {
+                        }
+                      },
+                      {
                         "expr": {
-                          "List": {
-                            "elements": [
-                              {
-                                "expr": {
-                                  "Term": {
-                                    "name": "Let",
-                                    "payload": {
+                          "Term": {
+                            "name": "Seq",
+                            "payload": {
+                              "expr": {
+                                "List": {
+                                  "elements": [
+                                    {
                                       "expr": {
                                         "Term": {
-                                          "name": "Block",
+                                          "name": "Let",
                                           "payload": {
                                             "expr": {
-                                              "List": {
-                                                "elements": []
+                                              "Term": {
+                                                "name": "Block",
+                                                "payload": {
+                                                  "expr": {
+                                                    "List": {
+                                                      "elements": []
+                                                    }
+                                                  }
+                                                }
                                               }
-                                            },
-                                            "type_hint": null
+                                            }
                                           }
                                         }
-                                      },
-                                      "type_hint": null
+                                      }
                                     }
-                                  }
-                                },
-                                "type_hint": null
-                              }
-                            ]
-                          }
-                        },
-                        "type_hint": null
-                      }
-                    }
-                  },
-                  "type_hint": null
-                }
-              ]
-            }
-          },
-          "type_hint": null
-        }
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "Enum": {
-            "variants": [
-              {
-                "name": "Lit",
-                "payload": "Int"
-              },
-              {
-                "name": "Block",
-                "payload": {
-                  "List": {
-                    "element_type": {
-                      "Rec": {
-                        "body": {
-                          "Enum": {
-                            "variants": [
-                              {
-                                "name": "Let",
-                                "payload": {
-                                  "Alias": "E"
-                                }
-                              },
-                              {
-                                "name": "Seq",
-                                "payload": {
-                                  "List": {
-                                    "element_type": {
-                                      "Alias": "S"
-                                    }
-                                  }
+                                  ]
                                 }
                               }
-                            ]
+                            }
                           }
-                        },
-                        "name": "S"
+                        }
                       }
-                    }
+                    ]
                   }
                 }
               }
-            ]
+            }
           }
         },
-        "name": "E"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "Enum": {
+                "variants": [
+                  {
+                    "name": "Lit",
+                    "payload": "Int"
+                  },
+                  {
+                    "name": "Block",
+                    "payload": {
+                      "List": {
+                        "element_type": {
+                          "Rec": {
+                            "body": {
+                              "Enum": {
+                                "variants": [
+                                  {
+                                    "name": "Let",
+                                    "payload": {
+                                      "Alias": "E"
+                                    }
+                                  },
+                                  {
+                                    "name": "Seq",
+                                    "payload": {
+                                      "List": {
+                                        "element_type": {
+                                          "Alias": "S"
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "name": "S"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "E"
+          }
+        }
       }
     }
   },

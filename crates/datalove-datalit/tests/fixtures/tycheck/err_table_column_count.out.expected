@@ -1,56 +1,59 @@
 {
   "ast": {
     "expr": {
-      "Table": {
-        "header": [
-          "x",
-          "y",
-          "z"
-        ],
-        "rows": [
-          {
-            "elements": [
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Table": {
+              "header": [
+                "x",
+                "y",
+                "z"
+              ],
+              "rows": [
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "1"
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "2"
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "3"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "type_hint": {
+          "Table": {
+            "columns": [
               {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
-                },
-                "type_hint": null
+                "name": "x",
+                "type_hint": "U32"
               },
               {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "type_hint": null
-              },
-              {
-                "expr": {
-                  "Int": {
-                    "value": "3"
-                  }
-                },
-                "type_hint": null
+                "name": "y",
+                "type_hint": "U32"
               }
             ]
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Table": {
-        "columns": [
-          {
-            "name": "x",
-            "type_hint": "U32"
-          },
-          {
-            "name": "y",
-            "type_hint": "U32"
-          }
-        ]
+        }
       }
     }
   },
@@ -61,10 +64,10 @@
         {
           "message": "expected 2 column(s), found 3",
           "span": [
-            0,
+            25,
             50
           ],
-          "text": ": {| x: u32, y: u32 |} / {|\n  x, y, z\n  1, 2, 3\n|}"
+          "text": "{|\n  x, y, z\n  1, 2, 3\n|}"
         }
       ],
       "message": "table has wrong number of columns"

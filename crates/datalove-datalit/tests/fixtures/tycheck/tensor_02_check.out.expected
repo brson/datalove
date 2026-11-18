@@ -1,68 +1,68 @@
 {
   "ast": {
     "expr": {
-      "Tensor": {
-        "elements": [
-          {
-            "expr": {
-              "Int": {
-                "value": "10"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "20"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "30"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "40"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "50"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "60"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Tensor": {
+              "elements": [
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "10"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "20"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "30"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "40"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "50"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "60"
+                    }
+                  }
+                }
+              ],
+              "header": false,
+              "shape": [
+                3,
+                2
+              ]
+            }
           }
-        ],
-        "header": false,
-        "shape": [
-          3,
-          2
-        ]
-      }
-    },
-    "type_hint": {
-      "Tensor": {
-        "element_type": "U32",
-        "rank": 2
+        },
+        "type_hint": {
+          "Tensor": {
+            "element_type": "U32",
+            "rank": 2
+          }
+        }
       }
     }
   },

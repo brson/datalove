@@ -1,33 +1,37 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": [
-          {
-            "key": {
-              "expr": {
-                "String": {
-                  "value": "\"bad\""
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Map": {
+              "entries": [
+                {
+                  "key": {
+                    "expr": {
+                      "String": {
+                        "value": "\"bad\""
+                      }
+                    }
+                  },
+                  "value": {
+                    "expr": {
+                      "String": {
+                        "value": "\"value\""
+                      }
+                    }
+                  }
                 }
-              },
-              "type_hint": null
-            },
-            "value": {
-              "expr": {
-                "String": {
-                  "value": "\"value\""
-                }
-              },
-              "type_hint": null
+              ]
             }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Map": {
-        "key_type": "U32",
-        "value_type": "String"
+        },
+        "type_hint": {
+          "Map": {
+            "key_type": "U32",
+            "value_type": "String"
+          }
+        }
       }
     }
   },

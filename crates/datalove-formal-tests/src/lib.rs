@@ -425,7 +425,7 @@ pub fn type_pool<'db>(
 
 /// An expression in the oracle's encoding; see `formal/Datalove/LitJson.lean`.
 pub fn expr_to_json(db: &Db, expr: &ExprFull<'_>) -> Value {
-    let inner = match expr.expr() {
+    match expr.expr() {
         Expr::True => json!("true"),
         Expr::False => json!("false"),
         Expr::Float(_) => json!("float"),
@@ -458,12 +458,8 @@ pub fn expr_to_json(db: &Db, expr: &ExprFull<'_>) -> Value {
         Expr::Atom(a) => json!(["atom", a.name.as_str(db)]),
         Expr::Term(t) => json!(["term", t.name.as_str(db), expr_to_json(db, &t.payload)]),
         Expr::Enum(e) => json!(["enum", expr_to_json(db, &e.variant)]),
-        Expr::Group(g) => json!(["group", expr_to_json(db, &g.inner)]),
+        Expr::Hinted(h) => json!(["hint", hint_to_json(db, &h.type_hint), expr_to_json(db, &h.inner)]),
         Expr::ParseError(_) => panic!("expressions with parse errors are skipped before encoding"),
-    };
-    match expr.type_hint() {
-        Some(hint) => json!(["hint", hint_to_json(db, &hint), inner]),
-        None => inner,
     }
 }
 

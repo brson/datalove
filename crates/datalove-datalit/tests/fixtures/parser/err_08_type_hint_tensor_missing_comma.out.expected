@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected comma between tensor element type and rank"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "expected comma between tensor element type and rank"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected comma between tensor element type and rank"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "expected comma between tensor element type and rank"
+          }
+        }
       }
     }
   },

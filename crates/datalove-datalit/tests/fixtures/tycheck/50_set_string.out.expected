@@ -1,38 +1,41 @@
 {
   "ast": {
     "expr": {
-      "Set": {
-        "elements": [
-          {
-            "expr": {
-              "String": {
-                "value": "\"a\""
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "String": {
-                "value": "\"b\""
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "String": {
-                "value": "\"c\""
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Set": {
+              "elements": [
+                {
+                  "expr": {
+                    "String": {
+                      "value": "\"a\""
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "String": {
+                      "value": "\"b\""
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "String": {
+                      "value": "\"c\""
+                    }
+                  }
+                }
+              ]
+            }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Set": {
-        "element_type": "String"
+        },
+        "type_hint": {
+          "Set": {
+            "element_type": "String"
+          }
+        }
       }
     }
   },

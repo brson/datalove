@@ -1,38 +1,41 @@
 {
   "ast": {
     "expr": {
-      "List": {
-        "elements": [
-          {
-            "expr": {
-              "Int": {
-                "value": "1"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "2"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "3"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "List": {
+              "elements": [
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "3"
+                    }
+                  }
+                }
+              ]
+            }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "List": {
-        "element_type": "U32"
+        },
+        "type_hint": {
+          "List": {
+            "element_type": "U32"
+          }
+        }
       }
     }
   },

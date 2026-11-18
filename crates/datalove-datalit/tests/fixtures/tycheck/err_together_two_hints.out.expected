@@ -5,24 +5,35 @@
         "elements": [
           {
             "expr": {
-              "Int": {
-                "value": "1"
+              "Hinted": {
+                "inner": {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  }
+                },
+                "type_hint": "U8"
               }
-            },
-            "type_hint": "U8"
+            }
           },
           {
             "expr": {
-              "Int": {
-                "value": "2"
+              "Hinted": {
+                "inner": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  }
+                },
+                "type_hint": "U16"
               }
-            },
-            "type_hint": "U16"
+            }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

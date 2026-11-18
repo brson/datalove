@@ -4,8 +4,7 @@
       "String": {
         "value": "\"hello\""
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": []
 }

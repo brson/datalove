@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0x7FFF"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0x7FFF"
+            }
+          }
+        },
+        "type_hint": "I16"
       }
-    },
-    "type_hint": "I16"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "expected `i16`, found `int`",
           "span": [
-            0,
+            8,
             14
           ],
-          "text": ": i16 / 0x7FFF"
+          "text": "0x7FFF"
         }
       ],
       "message": "mismatched types"

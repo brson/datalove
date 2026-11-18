@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "a tensor's shape has no extents"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

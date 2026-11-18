@@ -1,18 +1,23 @@
 {
   "ast": {
     "expr": {
-      "Enum": {
-        "variant": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Atom": {
-              "name": "Ready"
+            "Enum": {
+              "variant": {
+                "expr": {
+                  "Atom": {
+                    "name": "Ready"
+                  }
+                }
+              }
             }
-          },
-          "type_hint": null
-        }
+          }
+        },
+        "type_hint": "U32"
       }
-    },
-    "type_hint": "U32"
+    }
   },
   "diagnostics": [
     {
@@ -21,10 +26,10 @@
         {
           "message": "expected `u32`, found enum literal",
           "span": [
-            0,
+            8,
             27
           ],
-          "text": ": u32 / enum { atom Ready }"
+          "text": "enum { atom Ready }"
         }
       ],
       "message": "mismatched types"

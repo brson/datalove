@@ -1,56 +1,66 @@
 {
   "ast": {
     "expr": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "field1",
-            "value": {
-              "expr": "True",
-              "type_hint": null
-            }
-          },
-          {
-            "name": "field2",
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "42"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "field1",
+                  "value": {
+                    "expr": "True"
+                  }
+                },
+                {
+                  "name": "field2",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "42"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "field3",
+                  "value": {
+                    "expr": {
+                      "Hinted": {
+                        "inner": {
+                          "expr": {
+                            "Int": {
+                              "value": "2"
+                            }
+                          }
+                        },
+                        "type_hint": "U32"
+                      }
+                    }
+                  }
                 }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "name": "field3",
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "2"
-                }
-              },
-              "type_hint": "U32"
+              ]
             }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "field1",
-            "type_hint": "Bool"
-          },
-          {
-            "name": "field2",
-            "type_hint": "U32"
-          },
-          {
-            "name": "field3",
-            "type_hint": "U32"
+        },
+        "type_hint": {
+          "AnonStruct": {
+            "fields": [
+              {
+                "name": "field1",
+                "type_hint": "Bool"
+              },
+              {
+                "name": "field2",
+                "type_hint": "U32"
+              },
+              {
+                "name": "field3",
+                "type_hint": "U32"
+              }
+            ]
           }
-        ]
+        }
       }
     }
   },

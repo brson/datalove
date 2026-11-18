@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "18446744073709551616"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "18446744073709551616"
+            }
+          }
+        },
+        "type_hint": "U64"
       }
-    },
-    "type_hint": "U64"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             28
           ],
-          "text": ": u64 / 18446744073709551616"
+          "text": "18446744073709551616"
         }
       ],
       "message": "integer literal out of range for type u64"

@@ -1,20 +1,25 @@
 {
   "ast": {
     "expr": {
-      "Ok": {
-        "payload": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "String": {
-              "value": "\"wrong type\""
+            "Ok": {
+              "payload": {
+                "expr": {
+                  "String": {
+                    "value": "\"wrong type\""
+                  }
+                }
+              }
             }
-          },
-          "type_hint": null
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": "U32"
+          }
         }
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": "U32"
       }
     }
   },

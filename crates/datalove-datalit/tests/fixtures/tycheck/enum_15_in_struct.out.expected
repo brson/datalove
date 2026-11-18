@@ -10,8 +10,7 @@
                 "Atom": {
                   "name": "Ready"
                 }
-              },
-              "type_hint": null
+              }
             }
           },
           {
@@ -29,70 +28,69 @@
                               "Int": {
                                 "value": "100"
                               }
-                            },
-                            "type_hint": null
+                            }
                           },
                           {
                             "expr": {
                               "Int": {
                                 "value": "200"
                               }
-                            },
-                            "type_hint": null
+                            }
                           }
                         ]
                       }
-                    },
-                    "type_hint": null
+                    }
                   }
                 }
-              },
-              "type_hint": null
+              }
             }
           },
           {
             "name": "kind",
             "value": {
               "expr": {
-                "Enum": {
-                  "variant": {
+                "Hinted": {
+                  "inner": {
                     "expr": {
-                      "Term": {
-                        "name": "Custom",
-                        "payload": {
+                      "Enum": {
+                        "variant": {
                           "expr": {
-                            "String": {
-                              "value": "\"experiment\""
+                            "Term": {
+                              "name": "Custom",
+                              "payload": {
+                                "expr": {
+                                  "String": {
+                                    "value": "\"experiment\""
+                                  }
+                                }
+                              }
                             }
-                          },
-                          "type_hint": null
+                          }
                         }
                       }
-                    },
-                    "type_hint": null
-                  }
-                }
-              },
-              "type_hint": {
-                "Enum": {
-                  "variants": [
-                    {
-                      "name": "Ready",
-                      "payload": null
-                    },
-                    {
-                      "name": "Custom",
-                      "payload": "String"
                     }
-                  ]
+                  },
+                  "type_hint": {
+                    "Enum": {
+                      "variants": [
+                        {
+                          "name": "Ready",
+                          "payload": null
+                        },
+                        {
+                          "name": "Custom",
+                          "payload": "String"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [],
   "errors": [],

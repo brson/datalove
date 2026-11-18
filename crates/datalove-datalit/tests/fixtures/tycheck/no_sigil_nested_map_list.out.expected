@@ -1,79 +1,78 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": [
-          {
-            "key": {
-              "expr": {
-                "Int": {
-                  "value": "1"
-                }
-              },
-              "type_hint": null
-            },
-            "value": {
-              "expr": {
-                "List": {
-                  "elements": [
-                    {
-                      "expr": {
-                        "String": {
-                          "value": "\"a\""
-                        }
-                      },
-                      "type_hint": null
-                    },
-                    {
-                      "expr": {
-                        "String": {
-                          "value": "\"b\""
-                        }
-                      },
-                      "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Map": {
+              "entries": [
+                {
+                  "key": {
+                    "expr": {
+                      "Int": {
+                        "value": "1"
+                      }
                     }
-                  ]
-                }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "key": {
-              "expr": {
-                "Int": {
-                  "value": "2"
-                }
-              },
-              "type_hint": null
-            },
-            "value": {
-              "expr": {
-                "List": {
-                  "elements": [
-                    {
-                      "expr": {
-                        "String": {
-                          "value": "\"c\""
-                        }
-                      },
-                      "type_hint": null
+                  },
+                  "value": {
+                    "expr": {
+                      "List": {
+                        "elements": [
+                          {
+                            "expr": {
+                              "String": {
+                                "value": "\"a\""
+                              }
+                            }
+                          },
+                          {
+                            "expr": {
+                              "String": {
+                                "value": "\"b\""
+                              }
+                            }
+                          }
+                        ]
+                      }
                     }
-                  ]
+                  }
+                },
+                {
+                  "key": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    }
+                  },
+                  "value": {
+                    "expr": {
+                      "List": {
+                        "elements": [
+                          {
+                            "expr": {
+                              "String": {
+                                "value": "\"c\""
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
-              },
-              "type_hint": null
+              ]
             }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Map": {
-        "key_type": "U32",
-        "value_type": {
-          "List": {
-            "element_type": "String"
+        },
+        "type_hint": {
+          "Map": {
+            "key_type": "U32",
+            "value_type": {
+              "List": {
+                "element_type": "String"
+              }
+            }
           }
         }
       }

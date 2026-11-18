@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0xFF"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0xFF"
+            }
+          }
+        },
+        "type_hint": "U8"
       }
-    },
-    "type_hint": "U8"
+    }
   },
   "diagnostics": [],
   "errors": [],

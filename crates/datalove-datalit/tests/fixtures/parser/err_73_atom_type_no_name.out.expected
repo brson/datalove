@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected name after 'atom'"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "expected name after 'atom'"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected name after 'atom'"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "expected name after 'atom'"
+          }
+        }
       }
     }
   },

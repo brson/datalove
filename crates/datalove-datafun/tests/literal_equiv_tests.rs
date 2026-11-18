@@ -486,7 +486,7 @@ fn checked<'db>(db: &'db Db, seed: u64) -> Case<'db> {
     let mut rng = SeededRng::derive(seed, "checked");
     let ty = ast_gen::gen_type_hint(db, &mut rng, &config, 0);
     let expr = ast_gen::gen_expr_matching_type(db, &mut rng, ty.C(), &config, 0);
-    Case { expr: ExprFull::new(None, None, expr), checked_as: Some(ty) }
+    Case { expr: ExprFull::new(None, expr), checked_as: Some(ty) }
 }
 
 /// The mutated text seed `seed` makes, and what was done to it, if any
@@ -510,7 +510,7 @@ fn mutated(db: &Db, seed: u64) -> Option<(String, String)> {
 /// `expr` with one element of one list, set, map or table in it dropped,
 /// every way that can be.
 fn smaller<'db>(expr: &ExprFull<'db>) -> Vec<ExprFull<'db>> {
-    let rebuild = |e: Expr<'db>| ExprFull::new(expr.local_index(), expr.type_hint(), e);
+    let rebuild = |e: Expr<'db>| ExprFull::new(expr.local_index(), e);
     // Each child replaced by each of its smaller forms, through `with`.
     fn within<'db, T: Clone>(
         items: &[T],
@@ -567,6 +567,7 @@ fn smaller<'db>(expr: &ExprFull<'db>) -> Vec<ExprFull<'db>> {
         Expr::Data(s) => one(&s.value, &|value| Expr::Data(datalove_datalit::ast::ExprData { value })),
         Expr::Error(s) => one(&s.value, &|value| Expr::Error(datalove_datalit::ast::ExprError { value })),
         Expr::Term(t) => one(&t.payload, &|payload| Expr::Term(datalove_datalit::ast::ExprTerm { name: t.name, payload })),
+        Expr::Hinted(h) => one(&h.inner, &|inner| Expr::Hinted(datalove_datalit::ast::ExprHinted { type_hint: h.type_hint.C(), inner })),
         Expr::AnonTuple(t) => within(&t.elements, |e| e.C(), |_, s| s,
             |elements| rebuild(Expr::AnonTuple(datalove_datalit::ast::ExprAnonTuple { elements }))),
         Expr::AnonStruct(t) => within(&t.fields, |f| f.value.C(),

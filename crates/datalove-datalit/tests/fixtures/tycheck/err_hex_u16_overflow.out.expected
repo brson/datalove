@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0x10000"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0x10000"
+            }
+          }
+        },
+        "type_hint": "U16"
       }
-    },
-    "type_hint": "U16"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             15
           ],
-          "text": ": u16 / 0x10000"
+          "text": "0x10000"
         }
       ],
       "message": "hex literal out of range for type u16"

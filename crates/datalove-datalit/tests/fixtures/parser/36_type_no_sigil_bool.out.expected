@@ -1,7 +1,13 @@
 {
   "ast": {
-    "expr": "True",
-    "type_hint": "Bool"
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": "True"
+        },
+        "type_hint": "Bool"
+      }
+    }
   },
   "diagnostics": []
 }

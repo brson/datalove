@@ -49,20 +49,15 @@ pub struct ExprFull<'db>(Arc<ExprNode<'db>>);
 struct ExprNode<'db> {
     hash: u64,
     local_index: Option<u32>,
-    type_hint: Option<TypeHint<'db>>,
     expr: Expr<'db>,
 }
 
 impl<'db> ExprFull<'db> {
-    pub fn new(
-        local_index: Option<u32>,
-        type_hint: Option<TypeHint<'db>>,
-        expr: Expr<'db>,
-    ) -> ExprFull<'db> {
+    pub fn new(local_index: Option<u32>, expr: Expr<'db>) -> ExprFull<'db> {
         let mut hasher = rmx::rustc_hash::FxHasher::default();
-        (local_index, &type_hint, &expr).hash(&mut hasher);
+        (local_index, &expr).hash(&mut hasher);
         let hash = hasher.finish();
-        ExprFull(Arc::new(ExprNode { hash, local_index, type_hint, expr }))
+        ExprFull(Arc::new(ExprNode { hash, local_index, expr }))
     }
 
     /// Position of this expression in the parse that produced it.
@@ -72,10 +67,6 @@ impl<'db> ExprFull<'db> {
     /// generator makes them up wholesale. Neither has a span to look up.
     pub fn local_index(&self) -> Option<u32> {
         self.0.local_index
-    }
-
-    pub fn type_hint(&self) -> Option<TypeHint<'db>> {
-        self.0.type_hint.C()
     }
 
     pub fn expr(&self) -> &Expr<'db> {
@@ -94,7 +85,6 @@ impl<'db> PartialEq for ExprFull<'db> {
         Arc::ptr_eq(&self.0, &other.0)
             || (self.0.hash == other.0.hash
                 && self.0.local_index == other.0.local_index
-                && self.0.type_hint == other.0.type_hint
                 && self.0.expr == other.0.expr)
     }
 }
@@ -347,7 +337,10 @@ pub enum Expr<'db> {
     Atom(ExprAtom<'db>),
     Term(ExprTerm<'db>),
     Enum(ExprEnum<'db>),
-    Group(ExprGroup<'db>),
+    /// An expression written under a type hint: `: type / expression`.
+    ///
+    /// The only way a hint is written on an expression, as it is in datafun.
+    Hinted(ExprHinted<'db>),
     ParseError(ExprParseError<'db>),
 }
 
@@ -488,14 +481,11 @@ pub struct ExprTerm<'db> {
     pub payload: ExprFull<'db>,
 }
 
-/// A parenthesized expression that keeps a hint of its own.
-///
-/// Parentheses group without meaning anything, so `(e)` is read as `e`,
-/// except where `e` has a hint and the parentheses are under another:
-/// `: u32 / (: u8 / 1)` has two hints, and an expression holds one.
+/// `: type / expression`.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprGroup<'db> {
+pub struct ExprHinted<'db> {
+    pub type_hint: TypeHint<'db>,
     pub inner: ExprFull<'db>,
 }
 

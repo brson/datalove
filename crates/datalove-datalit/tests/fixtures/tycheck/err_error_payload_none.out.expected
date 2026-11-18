@@ -3,12 +3,10 @@
     "expr": {
       "Error": {
         "value": {
-          "expr": "None",
-          "type_hint": null
+          "expr": "None"
         }
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0x10000000000000000"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0x10000000000000000"
+            }
+          }
+        },
+        "type_hint": "U64"
       }
-    },
-    "type_hint": "U64"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             27
           ],
-          "text": ": u64 / 0x10000000000000000"
+          "text": "0x10000000000000000"
         }
       ],
       "message": "hex literal out of range for type u64"

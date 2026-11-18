@@ -1,9 +1,15 @@
 {
   "ast": {
-    "expr": "None",
-    "type_hint": {
-      "Option": {
-        "inner_type": "U32"
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": "None"
+        },
+        "type_hint": {
+          "Option": {
+            "inner_type": "U32"
+          }
+        }
       }
     }
   },

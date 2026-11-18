@@ -1,52 +1,56 @@
 {
   "ast": {
     "expr": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "elt",
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "1"
-                }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "name": "next",
-            "value": {
-              "expr": "None",
-              "type_hint": null
-            }
-          }
-        ]
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "AnonStruct": {
-            "fields": [
-              {
-                "name": "elt",
-                "type_hint": "Int"
-              },
-              {
-                "name": "next",
-                "type_hint": {
-                  "Option": {
-                    "inner_type": {
-                      "Alias": "L"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "elt",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "1"
+                      }
                     }
                   }
+                },
+                {
+                  "name": "next",
+                  "value": {
+                    "expr": "None"
+                  }
                 }
-              }
-            ]
+              ]
+            }
           }
         },
-        "name": "L"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "AnonStruct": {
+                "fields": [
+                  {
+                    "name": "elt",
+                    "type_hint": "Int"
+                  },
+                  {
+                    "name": "next",
+                    "type_hint": {
+                      "Option": {
+                        "inner_type": {
+                          "Alias": "L"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "L"
+          }
+        }
       }
     }
   },

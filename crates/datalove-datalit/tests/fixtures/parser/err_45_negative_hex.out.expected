@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "a hex literal takes no sign"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

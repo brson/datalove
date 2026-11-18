@@ -1,89 +1,85 @@
 {
   "ast": {
     "expr": {
-      "List": {
-        "elements": [
-          {
-            "expr": {
-              "Some": {
-                "payload": {
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "List": {
+              "elements": [
+                {
                   "expr": {
-                    "List": {
-                      "elements": [
-                        {
-                          "expr": "None",
-                          "type_hint": null
-                        },
-                        {
-                          "expr": "None",
-                          "type_hint": null
-                        }
-                      ]
-                    }
-                  },
-                  "type_hint": null
-                }
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Some": {
-                "payload": {
-                  "expr": {
-                    "List": {
-                      "elements": [
-                        {
-                          "expr": {
-                            "Some": {
-                              "payload": {
-                                "expr": {
-                                  "List": {
-                                    "elements": [
-                                      {
-                                        "expr": "None",
-                                        "type_hint": null
-                                      }
-                                    ]
-                                  }
-                                },
-                                "type_hint": null
+                    "Some": {
+                      "payload": {
+                        "expr": {
+                          "List": {
+                            "elements": [
+                              {
+                                "expr": "None"
+                              },
+                              {
+                                "expr": "None"
                               }
-                            }
-                          },
-                          "type_hint": null
+                            ]
+                          }
                         }
-                      ]
+                      }
                     }
-                  },
-                  "type_hint": null
+                  }
+                },
+                {
+                  "expr": {
+                    "Some": {
+                      "payload": {
+                        "expr": {
+                          "List": {
+                            "elements": [
+                              {
+                                "expr": {
+                                  "Some": {
+                                    "payload": {
+                                      "expr": {
+                                        "List": {
+                                          "elements": [
+                                            {
+                                              "expr": "None"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "expr": "None"
                 }
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": "None",
-            "type_hint": null
-          }
-        ]
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "List": {
-            "element_type": {
-              "Option": {
-                "inner_type": {
-                  "Alias": "T"
-                }
-              }
+              ]
             }
           }
         },
-        "name": "T"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "List": {
+                "element_type": {
+                  "Option": {
+                    "inner_type": {
+                      "Alias": "T"
+                    }
+                  }
+                }
+              }
+            },
+            "name": "T"
+          }
+        }
       }
     }
   },

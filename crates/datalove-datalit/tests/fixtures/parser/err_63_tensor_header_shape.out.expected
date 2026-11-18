@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "the shape says `2 3`, and the body is shaped `3 2`"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0x40490FDB"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0x40490FDB"
+            }
+          }
+        },
+        "type_hint": "F32"
       }
-    },
-    "type_hint": "F32"
+    }
   },
   "diagnostics": [],
   "errors": [],

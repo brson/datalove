@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0x100"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0x100"
+            }
+          }
+        },
+        "type_hint": "U8"
       }
-    },
-    "type_hint": "U8"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            7,
             12
           ],
-          "text": ": u8 / 0x100"
+          "text": "0x100"
         }
       ],
       "message": "hex literal out of range for type u8"

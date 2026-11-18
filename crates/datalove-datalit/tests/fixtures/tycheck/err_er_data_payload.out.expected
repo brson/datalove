@@ -1,27 +1,31 @@
 {
   "ast": {
     "expr": {
-      "Er": {
-        "payload": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Data": {
-              "value": {
+            "Er": {
+              "payload": {
                 "expr": {
-                  "String": {
-                    "value": "\"x\""
+                  "Data": {
+                    "value": {
+                      "expr": {
+                        "String": {
+                          "value": "\"x\""
+                        }
+                      }
+                    }
                   }
-                },
-                "type_hint": null
+                }
               }
             }
-          },
-          "type_hint": null
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": "U32"
+          }
         }
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": "U32"
       }
     }
   },

@@ -1,41 +1,44 @@
 {
   "ast": {
     "expr": {
-      "Data": {
-        "value": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "AnonStruct": {
-              "fields": [
-                {
-                  "name": "x",
-                  "value": {
-                    "expr": {
-                      "Int": {
-                        "value": "42"
+            "Data": {
+              "value": {
+                "expr": {
+                  "AnonStruct": {
+                    "fields": [
+                      {
+                        "name": "x",
+                        "value": {
+                          "expr": {
+                            "Int": {
+                              "value": "42"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "name": "y",
+                        "value": {
+                          "expr": {
+                            "String": {
+                              "value": "\"hello\""
+                            }
+                          }
+                        }
                       }
-                    },
-                    "type_hint": null
-                  }
-                },
-                {
-                  "name": "y",
-                  "value": {
-                    "expr": {
-                      "String": {
-                        "value": "\"hello\""
-                      }
-                    },
-                    "type_hint": null
+                    ]
                   }
                 }
-              ]
+              }
             }
-          },
-          "type_hint": null
-        }
+          }
+        },
+        "type_hint": "Data"
       }
-    },
-    "type_hint": "Data"
+    }
   },
   "diagnostics": [],
   "errors": [],

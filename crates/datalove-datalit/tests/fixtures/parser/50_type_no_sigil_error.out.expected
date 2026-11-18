@@ -1,18 +1,23 @@
 {
   "ast": {
     "expr": {
-      "Error": {
-        "value": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "String": {
-              "value": "\"failed\""
+            "Error": {
+              "value": {
+                "expr": {
+                  "String": {
+                    "value": "\"failed\""
+                  }
+                }
+              }
             }
-          },
-          "type_hint": null
-        }
+          }
+        },
+        "type_hint": "Error"
       }
-    },
-    "type_hint": "Error"
+    }
   },
   "diagnostics": []
 }

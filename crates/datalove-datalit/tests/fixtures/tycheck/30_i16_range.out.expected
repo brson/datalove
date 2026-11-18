@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "32767"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "32767"
+            }
+          }
+        },
+        "type_hint": "I16"
       }
-    },
-    "type_hint": "I16"
+    }
   },
   "diagnostics": [],
   "errors": [],

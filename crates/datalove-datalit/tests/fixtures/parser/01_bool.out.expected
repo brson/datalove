@@ -1,7 +1,6 @@
 {
   "ast": {
-    "expr": "True",
-    "type_hint": null
+    "expr": "True"
   },
   "diagnostics": []
 }

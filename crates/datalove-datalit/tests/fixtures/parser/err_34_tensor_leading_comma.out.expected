@@ -8,16 +8,14 @@
               "Int": {
                 "value": "1"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "2"
               }
-            },
-            "type_hint": null
+            }
           }
         ],
         "header": false,
@@ -26,8 +24,7 @@
           2
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

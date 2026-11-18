@@ -1,56 +1,59 @@
 {
   "ast": {
     "expr": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "x",
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "1"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "x",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "1"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "y",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "z",
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "3"
+                      }
+                    }
+                  }
                 }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "name": "y",
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "2"
-                }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "name": "z",
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "3"
-                }
-              },
-              "type_hint": null
+              ]
             }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "x",
-            "type_hint": "U32"
-          },
-          {
-            "name": "y",
-            "type_hint": "U32"
+        },
+        "type_hint": {
+          "AnonStruct": {
+            "fields": [
+              {
+                "name": "x",
+                "type_hint": "U32"
+              },
+              {
+                "name": "y",
+                "type_hint": "U32"
+              }
+            ]
           }
-        ]
+        }
       }
     }
   },
@@ -61,10 +64,10 @@
         {
           "message": "expected 2 field(s), found 3",
           "span": [
-            0,
+            21,
             42
           ],
-          "text": ": {x: u32, y: u32} / {x = 1, y = 2, z = 3}"
+          "text": "{x = 1, y = 2, z = 3}"
         }
       ],
       "message": "struct has wrong number of fields"

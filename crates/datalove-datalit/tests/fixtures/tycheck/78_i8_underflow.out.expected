@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "-129"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "-129"
+            }
+          }
+        },
+        "type_hint": "I8"
       }
-    },
-    "type_hint": "I8"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            7,
             11
           ],
-          "text": ": i8 / -129"
+          "text": "-129"
         }
       ],
       "message": "integer literal out of range for type i8"

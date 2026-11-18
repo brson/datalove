@@ -8,48 +8,42 @@
               "Int": {
                 "value": "1"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "2"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "3"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "4"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "5"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "6"
               }
-            },
-            "type_hint": null
+            }
           }
         ],
         "header": true,
@@ -58,8 +52,7 @@
           3
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": []
 }

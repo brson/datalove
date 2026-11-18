@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected name after 'rec'"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "expected name after 'rec'"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected name after 'rec'"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "expected name after 'rec'"
+          }
+        }
       }
     }
   },

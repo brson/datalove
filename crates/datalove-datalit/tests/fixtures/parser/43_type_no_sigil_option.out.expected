@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "42"
-      }
-    },
-    "type_hint": {
-      "Option": {
-        "inner_type": "U32"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "42"
+            }
+          }
+        },
+        "type_hint": {
+          "Option": {
+            "inner_type": "U32"
+          }
+        }
       }
     }
   },

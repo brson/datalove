@@ -12,25 +12,21 @@
                     "Int": {
                       "value": "100"
                     }
-                  },
-                  "type_hint": null
+                  }
                 },
                 {
                   "expr": {
                     "Int": {
                       "value": "200"
                     }
-                  },
-                  "type_hint": null
+                  }
                 }
               ]
             }
-          },
-          "type_hint": null
+          }
         }
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": []
 }

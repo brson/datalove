@@ -1,29 +1,33 @@
 {
   "ast": {
     "expr": {
-      "Ok": {
-        "payload": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Some": {
+            "Ok": {
               "payload": {
                 "expr": {
-                  "Int": {
-                    "value": "42"
+                  "Some": {
+                    "payload": {
+                      "expr": {
+                        "Int": {
+                          "value": "42"
+                        }
+                      }
+                    }
                   }
-                },
-                "type_hint": null
+                }
               }
             }
-          },
-          "type_hint": null
-        }
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": {
-          "Option": {
-            "inner_type": "U32"
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": {
+              "Option": {
+                "inner_type": "U32"
+              }
+            }
           }
         }
       }

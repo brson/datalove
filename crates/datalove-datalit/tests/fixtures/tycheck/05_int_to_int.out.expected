@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "1234567890123456789"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "1234567890123456789"
+            }
+          }
+        },
+        "type_hint": "Int"
       }
-    },
-    "type_hint": "Int"
+    }
   },
   "diagnostics": [],
   "errors": [],

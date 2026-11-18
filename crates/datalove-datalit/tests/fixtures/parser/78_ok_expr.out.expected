@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "unexpected token in Parser expression"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

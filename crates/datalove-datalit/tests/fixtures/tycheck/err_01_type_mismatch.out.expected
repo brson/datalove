@@ -1,7 +1,13 @@
 {
   "ast": {
-    "expr": "True",
-    "type_hint": "U32"
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": "True"
+        },
+        "type_hint": "U32"
+      }
+    }
   },
   "diagnostics": [
     {
@@ -10,10 +16,10 @@
         {
           "message": "expected `u32`, found `bool`",
           "span": [
-            0,
+            8,
             12
           ],
-          "text": ": u32 / true"
+          "text": "true"
         }
       ],
       "message": "mismatched types"

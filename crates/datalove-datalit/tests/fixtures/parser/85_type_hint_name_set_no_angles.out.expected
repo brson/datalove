@@ -1,12 +1,18 @@
 {
   "ast": {
     "expr": {
-      "Set": {
-        "elements": []
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Set": {
+              "elements": []
+            }
+          }
+        },
+        "type_hint": {
+          "Alias": "set"
+        }
       }
-    },
-    "type_hint": {
-      "Alias": "set"
     }
   },
   "diagnostics": []

@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "a recursive type cannot be named `int`"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "a recursive type cannot be named `int`"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "a recursive type cannot be named `int`"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "a recursive type cannot be named `int`"
+          }
+        }
       }
     }
   },

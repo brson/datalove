@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "Atom": {
-        "name": "B"
-      }
-    },
-    "type_hint": {
-      "Atom": {
-        "name": "A"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Atom": {
+              "name": "B"
+            }
+          }
+        },
+        "type_hint": {
+          "Atom": {
+            "name": "A"
+          }
+        }
       }
     }
   },
@@ -18,10 +24,10 @@
         {
           "message": "expected `atom A`, found `atom B`",
           "span": [
-            0,
+            11,
             17
           ],
-          "text": ": atom A / atom B"
+          "text": "atom B"
         }
       ],
       "message": "mismatched types"

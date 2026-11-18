@@ -1,67 +1,69 @@
 {
   "ast": {
     "expr": {
-      "Table": {
-        "header": [
-          "x",
-          "y"
-        ],
-        "rows": [
-          {
-            "elements": [
-              {
-                "expr": {
-                  "Int": {
-                    "value": "1"
-                  }
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Table": {
+              "header": [
+                "x",
+                "y"
+              ],
+              "rows": [
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "1"
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "2"
+                        }
+                      }
+                    }
+                  ]
                 },
-                "type_hint": null
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "3"
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "4"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "type_hint": {
+          "Table": {
+            "columns": [
+              {
+                "name": "x",
+                "type_hint": "U32"
               },
               {
-                "expr": {
-                  "Int": {
-                    "value": "2"
-                  }
-                },
-                "type_hint": null
-              }
-            ]
-          },
-          {
-            "elements": [
-              {
-                "expr": {
-                  "Int": {
-                    "value": "3"
-                  }
-                },
-                "type_hint": null
-              },
-              {
-                "expr": {
-                  "Int": {
-                    "value": "4"
-                  }
-                },
-                "type_hint": null
+                "name": "y",
+                "type_hint": "U32"
               }
             ]
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Table": {
-        "columns": [
-          {
-            "name": "x",
-            "type_hint": "U32"
-          },
-          {
-            "name": "y",
-            "type_hint": "U32"
-          }
-        ]
+        }
       }
     }
   },

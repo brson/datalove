@@ -1,37 +1,41 @@
 {
   "ast": {
     "expr": {
-      "Enum": {
-        "variant": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Term": {
-              "name": "B",
-              "payload": {
+            "Enum": {
+              "variant": {
                 "expr": {
-                  "Int": {
-                    "value": "1"
+                  "Term": {
+                    "name": "B",
+                    "payload": {
+                      "expr": {
+                        "Int": {
+                          "value": "1"
+                        }
+                      }
+                    }
                   }
-                },
-                "type_hint": null
+                }
               }
             }
-          },
-          "type_hint": null
-        }
-      }
-    },
-    "type_hint": {
-      "Enum": {
-        "variants": [
-          {
-            "name": "A",
-            "payload": null
-          },
-          {
-            "name": "B",
-            "payload": "U32"
           }
-        ]
+        },
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "A",
+                "payload": null
+              },
+              {
+                "name": "B",
+                "payload": "U32"
+              }
+            ]
+          }
+        }
       }
     }
   },

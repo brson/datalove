@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "a tensor of shape `2 3` holds 6 elements, and 5 are written"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

@@ -4,8 +4,7 @@
       "Int": {
         "value": "42"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [],
   "errors": [],

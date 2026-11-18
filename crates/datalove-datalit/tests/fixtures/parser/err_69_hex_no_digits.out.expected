@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "expected the digits of a hex literal"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

@@ -173,10 +173,19 @@ fn write_expr<'db>(
             out.push_str(" }");
         }
 
-        Expr::Group(g) => {
-            out.push('(');
-            write_expr_full(db, &g.inner, out);
-            out.push(')');
+        // A hint directly under another is written in parentheses, which
+        // is how it is read back.
+        Expr::Hinted(h) => {
+            out.push_str(": ");
+            write_type_hint(db, &h.type_hint, out);
+            out.push_str(" / ");
+            if matches!(h.inner.expr(), Expr::Hinted(_)) {
+                out.push('(');
+                write_expr_full(db, &h.inner, out);
+                out.push(')');
+            } else {
+                write_expr_full(db, &h.inner, out);
+            }
         }
 
         Expr::ParseError(e) => {
@@ -212,11 +221,6 @@ fn write_expr_full<'db>(
     expr: &ExprFull<'db>,
     out: &mut String,
 ) {
-    if let Some(th) = expr.type_hint() {
-        out.push_str(": ");
-        write_type_hint(db, &th, out);
-        out.push_str(" / ");
-    }
     write_expr(db, &expr.expr(), out);
 }
 

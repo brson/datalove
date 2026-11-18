@@ -1,12 +1,18 @@
 {
   "ast": {
     "expr": {
-      "AnonTuple": {
-        "elements": []
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonTuple": {
+              "elements": []
+            }
+          }
+        },
+        "type_hint": {
+          "Alias": "tuple"
+        }
       }
-    },
-    "type_hint": {
-      "Alias": "tuple"
     }
   },
   "diagnostics": []

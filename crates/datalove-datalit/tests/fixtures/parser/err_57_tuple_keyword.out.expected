@@ -1,12 +1,18 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected '/' after type hint"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected '/' after type hint"
+            }
+          }
+        },
+        "type_hint": {
+          "Alias": "tuple"
+        }
       }
-    },
-    "type_hint": {
-      "Alias": "tuple"
     }
   },
   "diagnostics": [

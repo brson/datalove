@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected '->' between map key and value types"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "expected '->' between map key and value types"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected '->' between map key and value types"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "expected '->' between map key and value types"
+          }
+        }
       }
     }
   },

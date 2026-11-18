@@ -1,60 +1,61 @@
 {
   "ast": {
     "expr": {
-      "AnonTuple": {
-        "elements": [
-          {
-            "expr": {
-              "Int": {
-                "value": "0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Float": {
-                "value": "0.0"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonTuple": {
+              "elements": [
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "0.0"
+                    }
+                  }
+                }
+              ]
+            }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "AnonTuple": {
-        "fields": [
-          "U32",
-          "I32",
-          "U64",
-          "I64",
-          "F32"
-        ]
+        },
+        "type_hint": {
+          "AnonTuple": {
+            "fields": [
+              "U32",
+              "I32",
+              "U64",
+              "I64",
+              "F32"
+            ]
+          }
+        }
       }
     }
   },

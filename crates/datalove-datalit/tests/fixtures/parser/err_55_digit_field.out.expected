@@ -10,14 +10,12 @@
                 "ParseError": {
                   "message": "expected field name in struct expression"
                 }
-              },
-              "type_hint": null
+              }
             }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

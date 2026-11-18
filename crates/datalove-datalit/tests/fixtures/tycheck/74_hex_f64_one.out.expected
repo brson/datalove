@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0x3FF0000000000000"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0x3FF0000000000000"
+            }
+          }
+        },
+        "type_hint": "F64"
       }
-    },
-    "type_hint": "F64"
+    }
   },
   "diagnostics": [],
   "errors": [],

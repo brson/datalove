@@ -19,9 +19,9 @@ pub fn synthesize<'db>(
 ) -> Result<Type<'db>, TypeError> {
     // Rule: Syn-TypedExpr - a hint is the type, and the expression is checked
     // against it.
-    if let Some(type_hint) = expr.type_hint() {
-        let expected_type = ctx.convert_hint(expr, &type_hint)?;
-        check(ctx, expr, &expected_type)?;
+    if let Expr::Hinted(h) = expr.expr() {
+        let expected_type = ctx.convert_hint(expr, &h.type_hint)?;
+        check(ctx, &h.inner, &expected_type)?;
         return Ok(expected_type);
     }
 

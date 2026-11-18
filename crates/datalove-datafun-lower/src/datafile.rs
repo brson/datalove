@@ -48,7 +48,7 @@ impl<'db> Reader<'db> {
         let ty = ty.exposed();
         let ty = ty.as_ref();
         match (expr_kind, ty) {
-            (Expr::Group(group), _) => self.read(&group.inner, ty),
+            (Expr::Hinted(hinted), _) => self.read(&hinted.inner, ty),
             (Expr::Enum(literal), _) => self.read(&literal.variant, ty),
 
             (Expr::True, IrType::Bool) => ConstValue::Bool(true),

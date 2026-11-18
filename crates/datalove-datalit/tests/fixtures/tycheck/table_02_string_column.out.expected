@@ -1,67 +1,69 @@
 {
   "ast": {
     "expr": {
-      "Table": {
-        "header": [
-          "name",
-          "age"
-        ],
-        "rows": [
-          {
-            "elements": [
-              {
-                "expr": {
-                  "String": {
-                    "value": "\"Alice\""
-                  }
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Table": {
+              "header": [
+                "name",
+                "age"
+              ],
+              "rows": [
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "String": {
+                          "value": "\"Alice\""
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "25"
+                        }
+                      }
+                    }
+                  ]
                 },
-                "type_hint": null
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "String": {
+                          "value": "\"Bob\""
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "30"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "type_hint": {
+          "Table": {
+            "columns": [
+              {
+                "name": "name",
+                "type_hint": "String"
               },
               {
-                "expr": {
-                  "Int": {
-                    "value": "25"
-                  }
-                },
-                "type_hint": null
-              }
-            ]
-          },
-          {
-            "elements": [
-              {
-                "expr": {
-                  "String": {
-                    "value": "\"Bob\""
-                  }
-                },
-                "type_hint": null
-              },
-              {
-                "expr": {
-                  "Int": {
-                    "value": "30"
-                  }
-                },
-                "type_hint": null
+                "name": "age",
+                "type_hint": "U32"
               }
             ]
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Table": {
-        "columns": [
-          {
-            "name": "name",
-            "type_hint": "String"
-          },
-          {
-            "name": "age",
-            "type_hint": "U32"
-          }
-        ]
+        }
       }
     }
   },

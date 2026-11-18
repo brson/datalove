@@ -1,16 +1,22 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "1"
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "Alias": "L"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "1"
+            }
+          }
         },
-        "name": "L"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "Alias": "L"
+            },
+            "name": "L"
+          }
+        }
       }
     }
   },

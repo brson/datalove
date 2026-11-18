@@ -4,17 +4,14 @@
       "List": {
         "elements": [
           {
-            "expr": "None",
-            "type_hint": null
+            "expr": "None"
           },
           {
-            "expr": "None",
-            "type_hint": null
+            "expr": "None"
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

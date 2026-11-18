@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "numeric suffixes are not supported"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

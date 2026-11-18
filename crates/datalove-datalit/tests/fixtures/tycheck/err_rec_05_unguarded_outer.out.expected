@@ -1,49 +1,55 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "1"
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "AnonStruct": {
-            "fields": [
-              {
-                "name": "b",
-                "type_hint": {
-                  "Rec": {
-                    "body": {
-                      "AnonStruct": {
-                        "fields": [
-                          {
-                            "name": "a",
-                            "type_hint": {
-                              "Alias": "A"
-                            }
-                          },
-                          {
-                            "name": "bs",
-                            "type_hint": {
-                              "List": {
-                                "element_type": {
-                                  "Alias": "B"
-                                }
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    },
-                    "name": "B"
-                  }
-                }
-              }
-            ]
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "1"
+            }
           }
         },
-        "name": "A"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "AnonStruct": {
+                "fields": [
+                  {
+                    "name": "b",
+                    "type_hint": {
+                      "Rec": {
+                        "body": {
+                          "AnonStruct": {
+                            "fields": [
+                              {
+                                "name": "a",
+                                "type_hint": {
+                                  "Alias": "A"
+                                }
+                              },
+                              {
+                                "name": "bs",
+                                "type_hint": {
+                                  "List": {
+                                    "element_type": {
+                                      "Alias": "B"
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "name": "B"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "A"
+          }
+        }
       }
     }
   },

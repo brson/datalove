@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "a hex literal takes no sign"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "a hex literal takes no sign"
+            }
+          }
+        },
+        "type_hint": "I32"
       }
-    },
-    "type_hint": "I32"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "parse error occurred here",
           "span": [
-            0,
+            8,
             12
           ],
-          "text": ": i32 / -0x1"
+          "text": "-0x1"
         }
       ],
       "message": "cannot type-check expression with parse errors"

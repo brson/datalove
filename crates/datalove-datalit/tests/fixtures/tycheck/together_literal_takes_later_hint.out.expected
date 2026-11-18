@@ -8,21 +8,25 @@
               "Int": {
                 "value": "1"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
-              "Int": {
-                "value": "2"
+              "Hinted": {
+                "inner": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  }
+                },
+                "type_hint": "U8"
               }
-            },
-            "type_hint": "U8"
+            }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [],
   "errors": [],

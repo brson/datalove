@@ -14,16 +14,14 @@
                   "String": {
                     "value": "\"Alice\""
                   }
-                },
-                "type_hint": null
+                }
               },
               {
                 "expr": {
                   "Int": {
                     "value": "25"
                   }
-                },
-                "type_hint": null
+                }
               }
             ]
           },
@@ -34,23 +32,20 @@
                   "String": {
                     "value": "\"Bob\""
                   }
-                },
-                "type_hint": null
+                }
               },
               {
                 "expr": {
                   "Int": {
                     "value": "30"
                   }
-                },
-                "type_hint": null
+                }
               }
             ]
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [],
   "errors": [],

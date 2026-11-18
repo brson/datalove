@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "65536"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "65536"
+            }
+          }
+        },
+        "type_hint": "U16"
       }
-    },
-    "type_hint": "U16"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             13
           ],
-          "text": ": u16 / 65536"
+          "text": "65536"
         }
       ],
       "message": "integer literal out of range for type u16"

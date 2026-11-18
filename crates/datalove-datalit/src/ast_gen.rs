@@ -599,7 +599,7 @@ pub fn gen_expr_matching_type<'db>(
                 let error_inner_type = gen_type_hint(db, rng, config, depth + 1);
                 let error_inner_value = gen_expr_full_inner(db, rng, error_inner_type, config, depth + 1);
                 let error_expr = Expr::Error(ExprError { value: error_inner_value });
-                let er_payload = ExprFull::new(None, None, error_expr);
+                let er_payload = ExprFull::new(None, error_expr);
                 Expr::Er(ExprEr { payload: er_payload })
             }
         }
@@ -699,7 +699,7 @@ pub fn gen_expr_matching_type<'db>(
             if rng.random_bool(0.5) {
                 variant_expr
             } else {
-                Expr::Enum(ExprEnum { variant: ExprFull::new(None, None, variant_expr) })
+                Expr::Enum(ExprEnum { variant: ExprFull::new(None, variant_expr) })
             }
         }
     }
@@ -1038,13 +1038,12 @@ fn gen_expr_full_inner<'db>(
         TypeHint::Option(_) | TypeHint::Result(_) | TypeHint::Enum(_)
     );
 
-    let type_hint_opt = if config.include_type_hints || requires_hint {
-        Some(type_hint)
+    if config.include_type_hints || requires_hint {
+        let inner = ExprFull::new(None, expr);
+        ExprFull::new(None, Expr::Hinted(ExprHinted { type_hint, inner }))
     } else {
-        None
-    };
-
-    ExprFull::new(None, type_hint_opt, expr)
+        ExprFull::new(None, expr)
+    }
 }
 
 /// Generate an ExprFull for the entire expression tree.

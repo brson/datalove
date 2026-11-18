@@ -2,7 +2,7 @@
 //!
 //! Provides the main entry points for type checking datalit expressions.
 
-use crate::ast::ExprFull;
+use crate::ast::{Expr, ExprFull};
 use crate::resolve::ResolvedExpr;
 use super::context::TypeContext;
 use super::check::check;
@@ -79,7 +79,10 @@ pub fn type_check_with_expected<'db>(
                 // hint's type, which is what it says it is; its error is
                 // reported all the same. Converted quietly: a hint that does
                 // not convert has said so already.
-                expr.type_hint().and_then(|hint| convert_type_hint(db, &hint).ok())
+                match expr.expr() {
+                    Expr::Hinted(h) => convert_type_hint(db, &h.type_hint).ok(),
+                    _ => None,
+                }
             }
         }
     };

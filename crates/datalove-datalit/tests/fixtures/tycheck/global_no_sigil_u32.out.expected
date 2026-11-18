@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "unexpected token in type hint"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "unexpected token in type hint"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "unexpected token in type hint"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "unexpected token in type hint"
+          }
+        }
       }
     }
   },

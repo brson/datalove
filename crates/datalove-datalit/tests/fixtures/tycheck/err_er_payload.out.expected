@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "unexpected token in Parser expression"
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": "U32"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "unexpected token in Parser expression"
+            }
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": "U32"
+          }
+        }
       }
     }
   },
@@ -18,10 +24,10 @@
         {
           "message": "parse error occurred here",
           "span": [
-            0,
+            9,
             10
           ],
-          "text": ": !u32 / @"
+          "text": "@"
         }
       ],
       "message": "cannot type-check expression with parse errors"

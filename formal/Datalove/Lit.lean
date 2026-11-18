@@ -27,9 +27,8 @@ namespace Datalove.Lit
 
 /-! ## Expressions -/
 
-/-- A datalit expression. `hinted h e` is `: h / e`, an expression carrying a
-hint; `e` carries none, for two hints on one expression are written with a
-group between them. -/
+/-- A datalit expression. `hinted h e` is `: h / e`, the only way a hint is
+written on an expression; `: u32 / (: u8 / 1)` is one under another. -/
 inductive Expr where
   | tt | ff
   /-- An integer literal, by its value. -/
@@ -55,7 +54,6 @@ inductive Expr where
   | atom (a : String)
   | term (a : String) (e : Expr)
   | enum (e : Expr)
-  | group (e : Expr)
   | hinted (h : Hint) (e : Expr)
   deriving Inhabited
 
@@ -470,7 +468,6 @@ def inferF : Nat → Expr → InferM PTy
     | .atom a => fresh (.variant a none)
     | .term a e => do fresh (.variant a (some (← inferF n e)))
     | .enum _ => fresh .open_
-    | .group e => inferF n e
 
 def togetherF : Nat → List Expr → InferM PTy
   | 0, _ => throw "fuel"
@@ -555,13 +552,12 @@ def checkWith (env : CheckEnv) : Expr → Ty → Except Code Unit
   | .hinted h inner, expected => do
     let hinted ← convertHint h
     if !hinted.meet expected then throw "T040"
-    checkForm env inner expected
+    checkWith env inner expected
   | e, expected => checkForm env e expected
 
 /-- The rule for an expression's form and the expected type's head, with the
 expected type unrolled. -/
 def checkForm (env : CheckEnv) : Expr → Ty → Except Code Unit
-  | .group inner, expected => checkWith env inner expected
   | .none, expected => match expected.expose with
     | .option _ => pure ()
     | _ => throw "T032"

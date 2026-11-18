@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "unexpected identifier 'set'"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

@@ -113,16 +113,7 @@ fn pretty_expr_full<'db>(
     out: &mut String,
     indent: usize,
 ) {
-    // Print type hint if present.
-    if let Some(type_hint) = expr.type_hint() {
-        out.push_str(": ");
-        pretty_type_hint(db, type_hint.C(), out);
-        out.push_str(" / ");
-    }
-
-    // Print expression.
-    let expr_inner = expr.expr();
-    pretty_expr(db, expr_inner, out, indent);
+    pretty_expr(db, expr.expr(), out, indent);
 }
 
 fn pretty_type_hint<'db>(
@@ -291,10 +282,19 @@ fn pretty_expr<'db>(
             out.push_str(" }");
         }
 
-        Expr::Group(g) => {
-            out.push('(');
-            pretty_expr_full(db, &g.inner, out, indent);
-            out.push(')');
+        // A hint directly under another is written in parentheses, which
+        // is how it is read back.
+        Expr::Hinted(h) => {
+            out.push_str(": ");
+            pretty_type_hint(db, h.type_hint.C(), out);
+            out.push_str(" / ");
+            if matches!(h.inner.expr(), Expr::Hinted(_)) {
+                out.push('(');
+                pretty_expr_full(db, &h.inner, out, indent);
+                out.push(')');
+            } else {
+                pretty_expr_full(db, &h.inner, out, indent);
+            }
         }
 
         Expr::ParseError(e) => {

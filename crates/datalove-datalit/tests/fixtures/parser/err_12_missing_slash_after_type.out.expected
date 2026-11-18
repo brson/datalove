@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected '/' after type hint"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected '/' after type hint"
+            }
+          }
+        },
+        "type_hint": "U32"
       }
-    },
-    "type_hint": "U32"
+    }
   },
   "diagnostics": [
     {

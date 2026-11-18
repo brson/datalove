@@ -73,7 +73,7 @@ def eval : Expr → Val
   | .error _ => .error
   | .atom a => .atom a
   | .term a e => .term a (eval e)
-  | .enum e | .group e | .hinted _ e => eval e
+  | .enum e | .hinted _ e => eval e
 
 def evalAll : List Expr → List Val
   | [] => []
@@ -201,17 +201,14 @@ theorem checkWith_sound (env : CheckEnv) (hsub : ∀ e, env.sub e ≠ .ok ()) : 
     obtain ⟨_, -, hc⟩ := bind_ok hc
     split at hc
     · exact absurd hc throw_ne
-    · simpa [eval] using checkForm_sound env hsub inner t hc
+    · simpa [eval] using checkWith_sound env hsub inner t hc
   | .tt, t, hc | .ff, t, hc | .int _, t, hc | .hex _, t, hc | .float, t, hc | .str _, t, hc
   | .tuple _, t, hc | .struct _, t, hc | .list _, t, hc | .set _, t, hc | .map _, t, hc
   | .tensor _ _, t, hc | .table _ _, t, hc | .none, t, hc | .some _, t, hc | .ok _, t, hc
   | .er _, t, hc | .data _, t, hc | .error _, t, hc | .atom _, t, hc | .term _ _, t, hc
-  | .enum _, t, hc | .group _, t, hc => checkForm_sound env hsub _ t (by simpa [checkWith] using hc)
+  | .enum _, t, hc => checkForm_sound env hsub _ t (by simpa [checkWith] using hc)
 
 theorem checkForm_sound (env : CheckEnv) (hsub : ∀ e, env.sub e ≠ .ok ()) : ∀ (e : Expr) (t : Ty), checkForm env e t = .ok () → HasType (eval e) t
-  | .group inner, t, hc => by
-    simp only [checkForm] at hc
-    simpa [eval] using checkWith_sound env hsub inner t hc
   | .none, t, hc => by
     simp only [checkForm] at hc
     split at hc

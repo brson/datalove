@@ -8,32 +8,28 @@
               "Int": {
                 "value": "1"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "2"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "String": {
                 "value": "\"three\""
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Int": {
                 "value": "4"
               }
-            },
-            "type_hint": null
+            }
           }
         ],
         "header": false,
@@ -42,8 +38,7 @@
           2
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

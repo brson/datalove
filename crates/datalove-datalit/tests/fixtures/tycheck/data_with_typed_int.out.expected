@@ -1,18 +1,30 @@
 {
   "ast": {
     "expr": {
-      "Data": {
-        "value": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Int": {
-              "value": "1"
+            "Data": {
+              "value": {
+                "expr": {
+                  "Hinted": {
+                    "inner": {
+                      "expr": {
+                        "Int": {
+                          "value": "1"
+                        }
+                      }
+                    },
+                    "type_hint": "Int"
+                  }
+                }
+              }
             }
-          },
-          "type_hint": "Int"
-        }
+          }
+        },
+        "type_hint": "Data"
       }
-    },
-    "type_hint": "Data"
+    }
   },
   "diagnostics": [],
   "errors": [],

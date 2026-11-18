@@ -8,7 +8,6 @@ use rmx::serde as serde;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprFull {
-    pub type_hint: Option<TypeHint>,
     pub expr: Expr,
 }
 
@@ -156,7 +155,7 @@ pub enum Expr {
     Atom(ExprAtom),
     Term(ExprTerm),
     Enum(ExprEnum),
-    Group(ExprGroup),
+    Hinted(ExprHinted),
     ParseError(ExprParseError),
 }
 
@@ -273,7 +272,8 @@ pub struct ExprTerm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprGroup {
+pub struct ExprHinted {
+    pub type_hint: TypeHint,
     pub inner: Box<ExprFull>,
 }
 
@@ -296,7 +296,6 @@ pub struct ExprParseError {
 impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
         ExprFull {
-            type_hint: ast.type_hint().map(|th| TypeHint::from_ast(db, th)),
             expr: Expr::from_ast(db, ast.expr().C()),
         }
     }
@@ -466,7 +465,8 @@ impl Expr {
                 name: e.name.as_str(db).S(),
                 payload: Box::new(ExprFull::from_ast(db, e.payload)),
             }),
-            crate::ast::Expr::Group(e) => Expr::Group(ExprGroup {
+            crate::ast::Expr::Hinted(e) => Expr::Hinted(ExprHinted {
+                type_hint: TypeHint::from_ast(db, e.type_hint.C()),
                 inner: Box::new(ExprFull::from_ast(db, e.inner)),
             }),
             crate::ast::Expr::Enum(e) => Expr::Enum(ExprEnum {

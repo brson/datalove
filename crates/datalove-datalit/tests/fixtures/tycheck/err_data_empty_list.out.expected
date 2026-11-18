@@ -7,12 +7,10 @@
             "List": {
               "elements": []
             }
-          },
-          "type_hint": null
+          }
         }
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

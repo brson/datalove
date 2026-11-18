@@ -61,7 +61,7 @@ fn children<'a, 'db>(expr: &'a ExprFull<'db>) -> Vec<&'a ExprFull<'db>> {
         Expr::Error(e) => vec![&e.value],
         Expr::Term(t) => vec![&t.payload],
         Expr::Enum(e) => vec![&e.variant],
-        Expr::Group(g) => vec![&g.inner],
+        Expr::Hinted(h) => vec![&h.inner],
         _ => vec![],
     }
 }
@@ -116,10 +116,10 @@ fn rewrite<'db>(
         Expr::Error(e) => Expr::Error(ExprError { value: each(&e.value) }),
         Expr::Term(t) => Expr::Term(ExprTerm { name: t.name, payload: each(&t.payload) }),
         Expr::Enum(e) => Expr::Enum(ExprEnum { variant: each(&e.variant) }),
-        Expr::Group(g) => Expr::Group(ExprGroup { inner: each(&g.inner) }),
+        Expr::Hinted(h) => Expr::Hinted(ExprHinted { type_hint: h.type_hint.C(), inner: each(&h.inner) }),
         other => other.C(),
     };
-    ExprFull::new(expr.local_index(), expr.type_hint(), rebuilt)
+    ExprFull::new(expr.local_index(), rebuilt)
 }
 
 /// A literal of a type, at most `depth` collections deep, so that a recursive
@@ -128,7 +128,7 @@ fn rewrite<'db>(
 fn literal_of<'db>(db: &'db Db, rng: &mut SeededRng, ty: &Type<'db>, depth: u32) -> ExprFull<'db> {
     use datalove_datalit::tycheck::{expose, is_float_type, is_fixed_int_type};
     let text = |s: &str| InternedText::new(db, s.S());
-    let full = |e: Expr<'db>| ExprFull::new(None, None, e);
+    let full = |e: Expr<'db>| ExprFull::new(None, e);
     let many = |rng: &mut SeededRng| if depth == 0 { 0 } else { rng.random_range(0..3) };
     let ty = expose(ty).into_owned();
     let expr = match &ty {
@@ -210,7 +210,7 @@ fn start<'db>(db: &'db Db, rng: &mut SeededRng) -> ExprFull<'db> {
         // A hint that is not a type is a test too; what it is on matters less.
         Err(_) => gen_expr_full_seeded(db, rng.random(), AstGenConfig { max_depth: 1, ..AstGenConfig::default() }),
     };
-    ExprFull::new(None, Some(hint), body.expr().C())
+    with_hint(Some(hint), split_hint(&body).1)
 }
 
 fn config(rng: &mut SeededRng) -> AstGenConfig {
@@ -233,29 +233,30 @@ fn mutate<'db>(db: &'db Db, rng: &mut SeededRng, expr: &ExprFull<'db>) -> ExprFu
     let int = INTS[rng.random_range(0..INTS.len())];
     let hex = HEXES[rng.random_range(0..HEXES.len())];
     rewrite(expr, target, &mut 0, &mut |e| match kind {
-        0 => ExprFull::new(None, None, e.expr().C()),
+        0 => with_hint(None, split_hint(e).1),
         1 => {
             let small = AstGenConfig { max_depth: 1, ..hint_config.C() };
             gen_expr_full_seeded(db, seed, small)
         }
-        2 => ExprFull::new(None, e.type_hint(), Expr::Int(ExprInt { value: text(int) })),
-        3 => ExprFull::new(None, e.type_hint(), Expr::Hex(ExprHex { value: text(hex) })),
+        2 => with_hint(split_hint(e).0, Expr::Int(ExprInt { value: text(int) })),
+        3 => with_hint(split_hint(e).0, Expr::Hex(ExprHex { value: text(hex) })),
         // A variant renamed, or made the other kind under its own name.
-        4 => match (e.expr(), seed % 2 == 0) {
-            (Expr::Atom(_), true) => ExprFull::new(None, e.type_hint(), Expr::Atom(ExprAtom { name: text("Zz") })),
-            (Expr::Atom(a), false) => ExprFull::new(None, e.type_hint(), Expr::Term(ExprTerm {
+        4 => match (split_hint(e).1, seed % 2 == 0) {
+            (Expr::Atom(_), true) => with_hint(split_hint(e).0, Expr::Atom(ExprAtom { name: text("Zz") })),
+            (Expr::Atom(a), false) => with_hint(split_hint(e).0, Expr::Term(ExprTerm {
                 name: a.name,
-                payload: ExprFull::new(None, None, Expr::Int(ExprInt { value: text("1") })),
+                payload: ExprFull::new(None, Expr::Int(ExprInt { value: text("1") })),
             })),
-            (Expr::Term(t), true) => ExprFull::new(None, e.type_hint(), Expr::Term(ExprTerm { name: text("Zz"), payload: t.payload.C() })),
-            (Expr::Term(t), false) => ExprFull::new(None, e.type_hint(), Expr::Atom(ExprAtom { name: t.name })),
+            (Expr::Term(t), true) => with_hint(split_hint(e).0, Expr::Term(ExprTerm { name: text("Zz"), payload: t.payload.C() })),
+            (Expr::Term(t), false) => with_hint(split_hint(e).0, Expr::Atom(ExprAtom { name: t.name })),
             _ => e.C(),
         },
-        5 => ExprFull::new(None, Some(hint.C()), e.expr().C()),
+        5 => with_hint(Some(hint.C()), split_hint(e).1),
         // The shape of an aggregate: a field dropped or renamed, an element
         // added, a column renamed.
         6 => {
-            let reshaped = match e.expr() {
+            let (kept, unhinted) = split_hint(e);
+            let reshaped = match unhinted {
                 Expr::AnonStruct(st) if !st.fields.is_empty() => {
                     let mut fields = st.fields.C();
                     if seed % 2 == 0 {
@@ -267,7 +268,7 @@ fn mutate<'db>(db: &'db Db, rng: &mut SeededRng, expr: &ExprFull<'db>) -> ExprFu
                 }
                 Expr::AnonTuple(t) => {
                     let mut elements = t.elements.C();
-                    elements.push(ExprFull::new(None, None, Expr::Int(ExprInt { value: text("1") })));
+                    elements.push(ExprFull::new(None, Expr::Int(ExprInt { value: text("1") })));
                     Expr::AnonTuple(ExprAnonTuple { elements })
                 }
                 Expr::Table(t) if !t.header.is_empty() => {
@@ -277,11 +278,11 @@ fn mutate<'db>(db: &'db Db, rng: &mut SeededRng, expr: &ExprFull<'db>) -> ExprFu
                 }
                 other => other.C(),
             };
-            ExprFull::new(None, e.type_hint(), reshaped)
+            with_hint(kept, reshaped)
         }
         7 => {
             let other = HintGen::new(db, seed).top(3);
-            ExprFull::new(None, Some(other), e.expr().C())
+            with_hint(Some(other), split_hint(e).1)
         }
         // Every hint in the part gone, so that inference types all of it.
         _ => strip_hints(e),
@@ -309,17 +310,52 @@ fn hint_has_parse_error(hint: &TypeHint<'_>) -> bool {
 
 /// An expression with no hint anywhere in it.
 fn strip_hints<'db>(expr: &ExprFull<'db>) -> ExprFull<'db> {
-    let mut stripped = ExprFull::new(None, None, expr.expr().C());
-    for i in 1..count(&stripped) {
-        stripped = rewrite(&stripped, i, &mut 0, &mut |e| ExprFull::new(None, None, e.expr().C()));
+    let mut stripped = expr.C();
+    while let Some(i) = first_hinted(&stripped) {
+        stripped = rewrite(&stripped, i, &mut 0, &mut |e| match e.expr() {
+            Expr::Hinted(h) => h.inner.C(),
+            _ => unreachable!("first_hinted found a hint here"),
+        });
     }
     stripped
+}
+
+/// Where the first hinted part of an expression is, in pre-order.
+fn first_hinted(expr: &ExprFull<'_>) -> Option<usize> {
+    fn walk(expr: &ExprFull<'_>, at: &mut usize) -> Option<usize> {
+        let here = *at;
+        *at += 1;
+        if matches!(expr.expr(), Expr::Hinted(_)) {
+            return Some(here);
+        }
+        children(expr).into_iter().find_map(|c| walk(c, at))
+    }
+    walk(expr, &mut 0)
+}
+
+/// The hint on an expression, if it has one, and what it is on.
+fn split_hint<'db>(expr: &ExprFull<'db>) -> (Option<TypeHint<'db>>, Expr<'db>) {
+    match expr.expr() {
+        Expr::Hinted(h) => (Some(h.type_hint.C()), h.inner.expr().C()),
+        e => (None, e.C()),
+    }
+}
+
+/// An expression under a hint, or under none.
+fn with_hint<'db>(hint: Option<TypeHint<'db>>, expr: Expr<'db>) -> ExprFull<'db> {
+    match hint {
+        Some(type_hint) => {
+            let inner = ExprFull::new(None, expr);
+            ExprFull::new(None, Expr::Hinted(ExprHinted { type_hint, inner }))
+        }
+        None => ExprFull::new(None, expr),
+    }
 }
 
 /// Whether a parse of an expression failed anywhere in it.
 fn has_parse_error(expr: &ExprFull<'_>) -> bool {
     matches!(expr.expr(), Expr::ParseError(_))
-        || expr.type_hint().is_some_and(|h| hint_has_parse_error(&h))
+        || matches!(expr.expr(), Expr::Hinted(h) if hint_has_parse_error(&h.type_hint))
         || children(expr).into_iter().any(has_parse_error)
 }
 

@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "1000"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "1000"
+            }
+          }
+        },
+        "type_hint": "U16"
       }
-    },
-    "type_hint": "U16"
+    }
   },
   "diagnostics": [],
   "errors": [],

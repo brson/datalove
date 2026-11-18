@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "an exponent is written without spaces in it"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "unexpected minus sign"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

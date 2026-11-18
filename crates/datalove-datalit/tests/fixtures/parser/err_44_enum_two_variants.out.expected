@@ -1,29 +1,34 @@
 {
   "ast": {
     "expr": {
-      "Enum": {
-        "variant": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Atom": {
-              "name": "A"
+            "Enum": {
+              "variant": {
+                "expr": {
+                  "Atom": {
+                    "name": "A"
+                  }
+                }
+              }
             }
-          },
-          "type_hint": null
-        }
-      }
-    },
-    "type_hint": {
-      "Enum": {
-        "variants": [
-          {
-            "name": "A",
-            "payload": null
-          },
-          {
-            "name": "B",
-            "payload": null
           }
-        ]
+        },
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "A",
+                "payload": null
+              },
+              {
+                "name": "B",
+                "payload": null
+              }
+            ]
+          }
+        }
       }
     }
   },

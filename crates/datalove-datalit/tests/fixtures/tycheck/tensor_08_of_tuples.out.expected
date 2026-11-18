@@ -1,127 +1,121 @@
 {
   "ast": {
     "expr": {
-      "Tensor": {
-        "elements": [
-          {
-            "expr": {
-              "AnonTuple": {
-                "elements": [
-                  {
-                    "expr": {
-                      "Int": {
-                        "value": "1"
-                      }
-                    },
-                    "type_hint": null
-                  },
-                  {
-                    "expr": {
-                      "Float": {
-                        "value": "1.0"
-                      }
-                    },
-                    "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Tensor": {
+              "elements": [
+                {
+                  "expr": {
+                    "AnonTuple": {
+                      "elements": [
+                        {
+                          "expr": {
+                            "Int": {
+                              "value": "1"
+                            }
+                          }
+                        },
+                        {
+                          "expr": {
+                            "Float": {
+                              "value": "1.0"
+                            }
+                          }
+                        }
+                      ]
+                    }
                   }
-                ]
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "AnonTuple": {
-                "elements": [
-                  {
-                    "expr": {
-                      "Int": {
-                        "value": "2"
-                      }
-                    },
-                    "type_hint": null
-                  },
-                  {
-                    "expr": {
-                      "Float": {
-                        "value": "2.0"
-                      }
-                    },
-                    "type_hint": null
+                },
+                {
+                  "expr": {
+                    "AnonTuple": {
+                      "elements": [
+                        {
+                          "expr": {
+                            "Int": {
+                              "value": "2"
+                            }
+                          }
+                        },
+                        {
+                          "expr": {
+                            "Float": {
+                              "value": "2.0"
+                            }
+                          }
+                        }
+                      ]
+                    }
                   }
-                ]
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "AnonTuple": {
-                "elements": [
-                  {
-                    "expr": {
-                      "Int": {
-                        "value": "3"
-                      }
-                    },
-                    "type_hint": null
-                  },
-                  {
-                    "expr": {
-                      "Float": {
-                        "value": "3.0"
-                      }
-                    },
-                    "type_hint": null
+                },
+                {
+                  "expr": {
+                    "AnonTuple": {
+                      "elements": [
+                        {
+                          "expr": {
+                            "Int": {
+                              "value": "3"
+                            }
+                          }
+                        },
+                        {
+                          "expr": {
+                            "Float": {
+                              "value": "3.0"
+                            }
+                          }
+                        }
+                      ]
+                    }
                   }
-                ]
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "AnonTuple": {
-                "elements": [
-                  {
-                    "expr": {
-                      "Int": {
-                        "value": "4"
-                      }
-                    },
-                    "type_hint": null
-                  },
-                  {
-                    "expr": {
-                      "Float": {
-                        "value": "4.0"
-                      }
-                    },
-                    "type_hint": null
+                },
+                {
+                  "expr": {
+                    "AnonTuple": {
+                      "elements": [
+                        {
+                          "expr": {
+                            "Int": {
+                              "value": "4"
+                            }
+                          }
+                        },
+                        {
+                          "expr": {
+                            "Float": {
+                              "value": "4.0"
+                            }
+                          }
+                        }
+                      ]
+                    }
                   }
-                ]
-              }
-            },
-            "type_hint": null
-          }
-        ],
-        "header": false,
-        "shape": [
-          2,
-          2
-        ]
-      }
-    },
-    "type_hint": {
-      "Tensor": {
-        "element_type": {
-          "AnonTuple": {
-            "fields": [
-              "U32",
-              "F32"
-            ]
+                }
+              ],
+              "header": false,
+              "shape": [
+                2,
+                2
+              ]
+            }
           }
         },
-        "rank": 2
+        "type_hint": {
+          "Tensor": {
+            "element_type": {
+              "AnonTuple": {
+                "fields": [
+                  "U32",
+                  "F32"
+                ]
+              }
+            },
+            "rank": 2
+          }
+        }
       }
     }
   },

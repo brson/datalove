@@ -1,18 +1,24 @@
 {
   "ast": {
     "expr": {
-      "Group": {
+      "Hinted": {
         "inner": {
           "expr": {
-            "Int": {
-              "value": "1"
+            "Hinted": {
+              "inner": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                }
+              },
+              "type_hint": "U8"
             }
-          },
-          "type_hint": "U8"
-        }
+          }
+        },
+        "type_hint": "U8"
       }
-    },
-    "type_hint": "U8"
+    }
   },
   "diagnostics": [],
   "errors": [],

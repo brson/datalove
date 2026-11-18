@@ -1,20 +1,25 @@
 {
   "ast": {
     "expr": {
-      "Error": {
-        "value": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "String": {
-              "value": "\"operation failed\""
+            "Error": {
+              "value": {
+                "expr": {
+                  "String": {
+                    "value": "\"operation failed\""
+                  }
+                }
+              }
             }
-          },
-          "type_hint": null
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": "U32"
+          }
         }
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": "U32"
       }
     }
   },
@@ -25,10 +30,10 @@
         {
           "message": "expected `!u32`, found `error`",
           "span": [
-            0,
+            9,
             33
           ],
-          "text": ": !u32 / error \"operation failed\""
+          "text": "error \"operation failed\""
         }
       ],
       "message": "mismatched types"

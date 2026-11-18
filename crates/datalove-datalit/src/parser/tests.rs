@@ -19,7 +19,9 @@ fn test_parse_bool_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": bool / true"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint().X();
+    let ast::Expr::Hinted(hinted) = ast.expr() else { panic!("expected a hint") };
+    let type_hint = hinted.type_hint.C();
+    let ast = hinted.inner.C();
     assert!(matches!(type_hint, ast::TypeHint::Bool));
     let expr = ast.expr().C();
     assert!(matches!(expr, ast::Expr::True));
@@ -147,7 +149,9 @@ fn test_parse_float_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": f32 / 1.0"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint().X();
+    let ast::Expr::Hinted(hinted) = ast.expr() else { panic!("expected a hint") };
+    let type_hint = hinted.type_hint.C();
+    let ast = hinted.inner.C();
     assert!(matches!(type_hint, ast::TypeHint::F32));
     let expr = ast.expr().C();
     match expr {
@@ -162,7 +166,8 @@ fn test_parse_string() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(r#": string / "hello world""#));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr().C();
+    let ast::Expr::Hinted(hinted) = ast.expr() else { panic!("expected a hint") };
+    let expr = hinted.inner.expr().C();
     match expr {
         ast::Expr::String(s) => {
             assert_eq!(s.value.as_str(db), r#""hello world""#);
@@ -176,7 +181,9 @@ fn test_parse_map() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": %{u32 -> u32} / %{ 0 -> 5, 2 -> 2 }"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint().X();
+    let ast::Expr::Hinted(hinted) = ast.expr() else { panic!("expected a hint") };
+    let type_hint = hinted.type_hint.C();
+    let ast = hinted.inner.C();
     match type_hint {
         ast::TypeHint::Map(_) => {}
         _ => panic!("expected map type hint"),
@@ -195,7 +202,9 @@ fn test_parse_set() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": #{u32} / #{ 1, 2, 3 }"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint().X();
+    let ast::Expr::Hinted(hinted) = ast.expr() else { panic!("expected a hint") };
+    let type_hint = hinted.type_hint.C();
+    let ast = hinted.inner.C();
     match type_hint {
         ast::TypeHint::Set(_) => {}
         _ => panic!("expected set type hint"),

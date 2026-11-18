@@ -1,41 +1,44 @@
 {
   "ast": {
     "expr": {
-      "AnonTuple": {
-        "elements": [
-          {
-            "expr": {
-              "Int": {
-                "value": "1"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "2"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "3"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonTuple": {
+              "elements": [
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "3"
+                    }
+                  }
+                }
+              ]
+            }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "AnonTuple": {
-        "fields": [
-          "U32",
-          "U32"
-        ]
+        },
+        "type_hint": {
+          "AnonTuple": {
+            "fields": [
+              "U32",
+              "U32"
+            ]
+          }
+        }
       }
     }
   },
@@ -46,10 +49,10 @@
         {
           "message": "expected 2 element(s), found 3",
           "span": [
-            0,
+            15,
             24
           ],
-          "text": ": (u32, u32) / (1, 2, 3)"
+          "text": "(1, 2, 3)"
         }
       ],
       "message": "tuple has wrong number of elements"

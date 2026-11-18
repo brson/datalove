@@ -194,6 +194,9 @@ fn test_max_collection_size_enforced() {
             Expr::Error(e) => {
                 check_collection_size(db, &e.value.expr().C(), max_size);
             }
+            Expr::Hinted(h) => {
+                check_collection_size(db, &h.inner.expr().C(), max_size);
+            }
             _ => {}
         }
     }
@@ -232,7 +235,7 @@ fn test_numeric_corner_cases_generated() {
     for seed in 0..1000 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.C());
 
-        match expr_full.expr().C() {
+        match unhinted(&expr_full) {
             Expr::Float(f) => {
                 let val_str = f.value.as_str(&db);
                 // Note: NaN and infinity not tested because parser doesn't support them yet.
@@ -318,7 +321,7 @@ fn test_type_weight_configuration() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.C());
-        match expr_full.expr().C() {
+        match unhinted(&expr_full) {
             Expr::True | Expr::False => bool_count += 1,
             _ => other_count += 1,
         }
@@ -383,11 +386,14 @@ fn test_result_error_case_generation() {
                 Expr::Data(d) => {
                     check_for_er(db, &d.value.expr().C(), seen);
                 }
+                Expr::Hinted(h) => {
+                    check_for_er(db, &h.inner.expr().C(), seen);
+                }
                 _ => {}
             }
         }
 
-        if matches!(expr_full.expr().C(), Expr::Er(_)) {
+        if matches!(unhinted(&expr_full), Expr::Er(_)) {
             seen_er = true;
         } else {
             seen_ok = true;
@@ -398,4 +404,15 @@ fn test_result_error_case_generation() {
 
     assert!(seen_er, "Should generate at least one Result error case (Expr::Er)");
     assert!(seen_ok, "Should generate at least one Result success case (non-Er)");
+}
+
+/// What an expression is, under its hint if it has one.
+fn unhinted<'db>(
+    expr: &datalove_datalit::ast::ExprFull<'db>,
+) -> datalove_datalit::ast::Expr<'db> {
+    use datalove_datalit::ast::Expr;
+    match expr.expr() {
+        Expr::Hinted(h) => h.inner.expr().C(),
+        e => e.C(),
+    }
 }

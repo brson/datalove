@@ -1,20 +1,25 @@
 {
   "ast": {
     "expr": {
-      "Ok": {
-        "payload": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Int": {
-              "value": "42"
+            "Ok": {
+              "payload": {
+                "expr": {
+                  "Int": {
+                    "value": "42"
+                  }
+                }
+              }
             }
-          },
-          "type_hint": null
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": "U32"
+          }
         }
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": "U32"
       }
     }
   },

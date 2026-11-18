@@ -1,7 +1,13 @@
 {
   "ast": {
-    "expr": "None",
-    "type_hint": "U32"
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": "None"
+        },
+        "type_hint": "U32"
+      }
+    }
   },
   "diagnostics": [
     {
@@ -10,10 +16,10 @@
         {
           "message": "expected `u32`, found `?_`",
           "span": [
-            0,
+            8,
             12
           ],
-          "text": ": u32 / none"
+          "text": "none"
         }
       ],
       "message": "mismatched types"

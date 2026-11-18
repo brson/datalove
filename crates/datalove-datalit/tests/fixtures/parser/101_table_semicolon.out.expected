@@ -14,16 +14,14 @@
                   "Int": {
                     "value": "1"
                   }
-                },
-                "type_hint": null
+                }
               },
               {
                 "expr": {
                   "Int": {
                     "value": "2"
                   }
-                },
-                "type_hint": null
+                }
               }
             ]
           },
@@ -34,23 +32,20 @@
                   "Int": {
                     "value": "3"
                   }
-                },
-                "type_hint": null
+                }
               },
               {
                 "expr": {
                   "Int": {
                     "value": "4"
                   }
-                },
-                "type_hint": null
+                }
               }
             ]
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": []
 }

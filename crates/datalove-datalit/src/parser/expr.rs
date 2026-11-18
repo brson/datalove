@@ -17,47 +17,22 @@ use super::state::{EmitTo, Parser};
 
 impl<'db> Parser<'db> {
     pub(super) fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
+        if self.peek_sigil(Sigil::Colon) {
+            self.numbered(|p| p.parse_hinted())
+        } else {
+            self.numbered(|p| p.parse_expr())
+        }
+    }
+
+    /// Parse an expression with `parse`, numbered and spanned.
+    fn numbered(&mut self, parse: impl FnOnce(&mut Self) -> ast::Expr<'db>) -> ast::ExprFull<'db> {
         // Capture span before parsing.
         let ts = self.peek_text_span();
 
         // Taken before parsing, so that an expression is numbered before the
         // ones nested inside it.
         let local_index = self.next_expr_index();
-
-        // Check for `: type / expr` pattern.
-        let expr_full = if self.peek_sigil(Sigil::Colon) {
-            self.eat_sigil(Sigil::Colon);
-            let type_hint = self.parse_type_hint();
-            if let ast::TypeHint::ParseError(e) = &type_hint {
-                // The type was reported, and what follows it is whatever the
-                // writer meant by it; a missing `/` would say the same thing
-                // twice.
-                let error_expr = ast::Expr::ParseError(ast::ExprParseError {
-                    source: e.source, span: e.span.C(), message: e.message,
-                });
-                self.eat_sigil(Sigil::SlashForward);
-                ast::ExprFull::new(Some(local_index), Some(type_hint.C()), error_expr)
-            } else if !self.eat_sigil(Sigil::SlashForward) {
-                let ts = self.peek_text_span();
-                let error_expr = self.emit_expr_error(ts,
-                    "expected '/' after type hint",
-                    DCode::HintWithoutSlash,
-                    "expected '/' separator between type hint and expression"
-                );
-                ast::ExprFull::new(Some(local_index), Some(type_hint), error_expr)
-            } else {
-                let expr = self.parse_expr();
-                ast::ExprFull::new(Some(local_index), Some(type_hint), expr)
-            }
-        } else {
-            // No type hint, just parse expression. Parentheses around a hinted
-            // expression are the hinted expression, there being no second
-            // hint for them to keep apart.
-            match self.parse_expr() {
-                ast::Expr::Group(group) => return group.inner,
-                expr => ast::ExprFull::new(Some(local_index), None, expr),
-            }
-        };
+        let expr = parse(self);
 
         // Record span for this expression, from its hint if it has one to the
         // end of the expression.
@@ -68,7 +43,37 @@ impl<'db> Parser<'db> {
             ts.span.start..end,
         ));
 
-        expr_full
+        ast::ExprFull::new(Some(local_index), expr)
+    }
+
+    /// Parse `: type / expression`.
+    ///
+    /// What is under the hint has no hint of its own: two on one expression
+    /// are written with parentheses between them, `: u32 / (: u8 / 1)`.
+    fn parse_hinted(&mut self) -> ast::Expr<'db> {
+        self.eat_sigil(Sigil::Colon);
+        let type_hint = self.parse_type_hint();
+        let inner = if let ast::TypeHint::ParseError(e) = &type_hint {
+            // The type was reported, and what follows it is whatever the
+            // writer meant by it; a missing `/` would say the same thing
+            // twice.
+            let error_expr = ast::Expr::ParseError(ast::ExprParseError {
+                source: e.source, span: e.span.C(), message: e.message,
+            });
+            self.eat_sigil(Sigil::SlashForward);
+            ast::ExprFull::new(None, error_expr)
+        } else if !self.eat_sigil(Sigil::SlashForward) {
+            let ts = self.peek_text_span();
+            let error_expr = self.emit_expr_error(ts,
+                "expected '/' after type hint",
+                DCode::HintWithoutSlash,
+                "expected '/' separator between type hint and expression"
+            );
+            ast::ExprFull::new(None, error_expr)
+        } else {
+            self.numbered(|p| p.parse_expr())
+        };
+        ast::Expr::Hinted(ast::ExprHinted { type_hint, inner })
     }
 
     /// Build the expression for a number, or report how it was written.
@@ -108,7 +113,7 @@ impl<'db> Parser<'db> {
                 DCode::MapEntryWithoutArrow,
                 "expected '->' after key"
             );
-            let error_value = ast::ExprFull::new(None, None, error_expr);
+            let error_value = ast::ExprFull::new(None, error_expr);
             return ast::ExprMapEntry { key, value: error_value };
         }
         let value = self.parse_expr_full();
@@ -281,11 +286,7 @@ impl<'db> Parser<'db> {
                 self.merge_spans_from(&mut sub_parser);
                 // Single element without comma is grouping parens, not a 1-tuple.
                 if elements.len() == 1 && !had_comma {
-                    let inner = elements.into_iter().next().X();
-                    match inner.type_hint() {
-                        Some(_) => ast::Expr::Group(ast::ExprGroup { inner }),
-                        None => inner.expr().C(),
-                    }
+                    elements.into_iter().next().X().expr().C()
                 } else {
                     ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
                 }
@@ -418,7 +419,7 @@ impl<'db> Parser<'db> {
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let error_value = ast::ExprFull::new(None, None, error_expr);
+                let error_value = ast::ExprFull::new(None, error_expr);
                 return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
@@ -429,7 +430,7 @@ impl<'db> Parser<'db> {
                 DCode::StructFieldSyntax,
                 "expected '=' after field name"
             );
-            let error_value = ast::ExprFull::new(None, None, error_expr);
+            let error_value = ast::ExprFull::new(None, error_expr);
             return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();

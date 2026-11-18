@@ -190,7 +190,10 @@ mod tests {
             let parsed = crate::parser::parse_for_test(&db, source);
             let errors = crate::parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
             assert!(errors.is_empty(), "{written} does not parse");
-            let hint = parsed.type_hint().unwrap_or_else(|| panic!("{written} is not read as a hint"));
+            let crate::ast::Expr::Hinted(hinted) = parsed.expr() else {
+                panic!("{written} is not read as a hint")
+            };
+            let hint = hinted.type_hint.C();
             assert_eq!(hint.syntax(&db).S(), written);
         }
     }

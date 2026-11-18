@@ -1,30 +1,42 @@
 {
   "ast": {
     "expr": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "a",
-            "value": {
-              "expr": {
-                "Float": {
-                  "value": "1.0"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "a",
+                  "value": {
+                    "expr": {
+                      "Hinted": {
+                        "inner": {
+                          "expr": {
+                            "Float": {
+                              "value": "1.0"
+                            }
+                          }
+                        },
+                        "type_hint": "F32"
+                      }
+                    }
+                  }
                 }
-              },
-              "type_hint": "F32"
+              ]
             }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "AnonStruct": {
-        "fields": [
-          {
-            "name": "a",
-            "type_hint": "F64"
+        },
+        "type_hint": {
+          "AnonStruct": {
+            "fields": [
+              {
+                "name": "a",
+                "type_hint": "F64"
+              }
+            ]
           }
-        ]
+        }
       }
     }
   },

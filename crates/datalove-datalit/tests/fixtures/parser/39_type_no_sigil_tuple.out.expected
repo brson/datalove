@@ -1,29 +1,33 @@
 {
   "ast": {
     "expr": {
-      "AnonTuple": {
-        "elements": [
-          {
-            "expr": "True",
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Int": {
-                "value": "1"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "AnonTuple": {
+              "elements": [
+                {
+                  "expr": "True"
+                },
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  }
+                }
+              ]
+            }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "AnonTuple": {
-        "fields": [
-          "Bool",
-          "U32"
-        ]
+        },
+        "type_hint": {
+          "AnonTuple": {
+            "fields": [
+              "Bool",
+              "U32"
+            ]
+          }
+        }
       }
     }
   },

@@ -1,21 +1,27 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": []
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "Map": {
-            "key_type": {
-              "Alias": "L"
-            },
-            "value_type": "Int"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Map": {
+              "entries": []
+            }
           }
         },
-        "name": "L"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "Map": {
+                "key_type": {
+                  "Alias": "L"
+                },
+                "value_type": "Int"
+              }
+            },
+            "name": "L"
+          }
+        }
       }
     }
   },

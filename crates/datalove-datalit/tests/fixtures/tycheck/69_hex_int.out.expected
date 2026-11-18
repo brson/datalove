@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0xFFFFFFFF"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0xFFFFFFFF"
+            }
+          }
+        },
+        "type_hint": "Int"
       }
-    },
-    "type_hint": "Int"
+    }
   },
   "diagnostics": [],
   "errors": [],

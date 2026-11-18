@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "4294967296"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "4294967296"
+            }
+          }
+        },
+        "type_hint": "U32"
       }
-    },
-    "type_hint": "U32"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             18
           ],
-          "text": ": u32 / 4294967296"
+          "text": "4294967296"
         }
       ],
       "message": "integer literal out of range for type u32"

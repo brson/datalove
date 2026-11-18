@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "String": {
-        "value": "\"hello\""
-      }
-    },
-    "type_hint": {
-      "Result": {
-        "inner_type": "String"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "String": {
+              "value": "\"hello\""
+            }
+          }
+        },
+        "type_hint": {
+          "Result": {
+            "inner_type": "String"
+          }
+        }
       }
     }
   },

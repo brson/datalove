@@ -10,8 +10,7 @@
                 "Int": {
                   "value": "42"
                 }
-              },
-              "type_hint": null
+              }
             }
           },
           {
@@ -21,8 +20,7 @@
                 "Float": {
                   "value": "3.14"
                 }
-              },
-              "type_hint": null
+              }
             }
           },
           {
@@ -32,14 +30,12 @@
                 "String": {
                   "value": "\"test\""
                 }
-              },
-              "type_hint": null
+              }
             }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [],
   "errors": [],

@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "invalid escape in string literal"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

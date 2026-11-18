@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "Set": {
-        "elements": []
-      }
-    },
-    "type_hint": {
-      "Set": {
-        "element_type": "U32"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Set": {
+              "elements": []
+            }
+          }
+        },
+        "type_hint": {
+          "Set": {
+            "element_type": "U32"
+          }
+        }
       }
     }
   },

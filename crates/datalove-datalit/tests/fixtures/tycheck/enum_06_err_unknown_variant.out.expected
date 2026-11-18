@@ -1,18 +1,24 @@
 {
   "ast": {
     "expr": {
-      "Atom": {
-        "name": "Nope"
-      }
-    },
-    "type_hint": {
-      "Enum": {
-        "variants": [
-          {
-            "name": "Ready",
-            "payload": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Atom": {
+              "name": "Nope"
+            }
           }
-        ]
+        },
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "Ready",
+                "payload": null
+              }
+            ]
+          }
+        }
       }
     }
   },
@@ -23,10 +29,10 @@
         {
           "message": "expected `enum { atom Ready }`, found `atom Nope`",
           "span": [
-            0,
+            24,
             33
           ],
-          "text": ": enum { atom Ready } / atom Nope"
+          "text": "atom Nope"
         }
       ],
       "message": "mismatched types"

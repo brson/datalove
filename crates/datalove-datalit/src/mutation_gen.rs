@@ -301,6 +301,14 @@ fn apply_extra_closing_bracket(source: &str, rng: &mut SeededRng) -> Option<Muta
     })
 }
 
+/// The hint written on an expression, if it has one, and what it is on.
+fn split_hint<'a, 'db>(expr: &'a ExprFull<'db>) -> (Option<TypeHint<'db>>, &'a Expr<'db>) {
+    match expr.expr() {
+        Expr::Hinted(h) => (Some(h.type_hint.C()), h.inner.expr()),
+        e => (None, e),
+    }
+}
+
 // ============================================================================
 // AST-level mutation implementations
 // ============================================================================
@@ -312,7 +320,8 @@ fn apply_out_of_range_int<'db>(
     _rng: &mut SeededRng,
 ) -> Option<MutationResult> {
     // Check if the expression has a type hint for a fixed-width integer type.
-    let th = expr.type_hint()?;
+    let (th, inner_expr) = split_hint(&expr);
+    let th = th?;
 
     // Determine the out-of-range value based on type.
     let (out_of_range_value, error_code) = match th {
@@ -328,7 +337,6 @@ fn apply_out_of_range_int<'db>(
     };
 
     // Check if the expression is an integer literal.
-    let inner_expr = expr.expr();
     match inner_expr {
         Expr::Int(_) | Expr::Hex(_) => {}
         _ => return None,
@@ -356,7 +364,7 @@ fn apply_wrong_element_type<'db>(
     expr: ExprFull<'db>,
     _rng: &mut SeededRng,
 ) -> Option<MutationResult> {
-    let inner_expr = expr.expr();
+    let (hint, inner_expr) = split_hint(&expr);
     
 
     // Check if this is a list with at least one element.
@@ -402,7 +410,7 @@ fn apply_wrong_element_type<'db>(
         all_elems.push(wrong_elem_str);
         let list_body = format!("{}[{}]", "", all_elems.join(", "));
 
-        let source = if let Some(th) = expr.type_hint() {
+        let source = if let Some(th) = hint.C() {
             let mut type_str = String::new();
             pretty_type_hint(db, th, &mut type_str);
             format!(": {} / {}", type_str, list_body)
@@ -428,8 +436,8 @@ fn apply_arity_mismatch<'db>(
     expr: ExprFull<'db>,
     _rng: &mut SeededRng,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint()?;
-    let inner_expr = expr.expr();
+    let (type_hint, inner_expr) = split_hint(&expr);
+    let type_hint = type_hint?;
     
 
     
@@ -503,8 +511,8 @@ fn apply_arity_mismatch<'db>(
 fn apply_remove_type_hint<'db>(
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let _type_hint = expr.type_hint()?;
-    let inner_expr = expr.expr();
+    let (_type_hint, inner_expr) = split_hint(&expr);
+    let _type_hint = _type_hint?;
     
 
     // Check if this is an expression that requires a type hint.
@@ -563,8 +571,8 @@ fn apply_duplicate_field<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint()?;
-    let inner_expr = expr.expr();
+    let (type_hint, inner_expr) = split_hint(&expr);
+    let type_hint = type_hint?;
     
 
     
@@ -609,8 +617,8 @@ fn apply_wrong_field_name<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint()?;
-    let inner_expr = expr.expr();
+    let (type_hint, inner_expr) = split_hint(&expr);
+    let type_hint = type_hint?;
     
 
     
@@ -654,8 +662,8 @@ fn apply_swap_map_key_value<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint()?;
-    let inner_expr = expr.expr();
+    let (type_hint, inner_expr) = split_hint(&expr);
+    let type_hint = type_hint?;
     
 
     // Check if this is a map with at least one entry where key/value types differ.

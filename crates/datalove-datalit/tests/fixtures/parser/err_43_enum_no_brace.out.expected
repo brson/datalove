@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "expected '{' after 'enum'"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

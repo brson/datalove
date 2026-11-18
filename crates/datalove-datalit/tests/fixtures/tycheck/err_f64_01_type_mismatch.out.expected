@@ -1,7 +1,13 @@
 {
   "ast": {
-    "expr": "True",
-    "type_hint": "F64"
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": "True"
+        },
+        "type_hint": "F64"
+      }
+    }
   },
   "diagnostics": [
     {
@@ -10,10 +16,10 @@
         {
           "message": "expected `f64`, found `bool`",
           "span": [
-            0,
+            8,
             12
           ],
-          "text": ": f64 / true"
+          "text": "true"
         }
       ],
       "message": "mismatched types"

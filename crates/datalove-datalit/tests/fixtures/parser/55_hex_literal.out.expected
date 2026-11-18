@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0xABABABAB"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0xABABABAB"
+            }
+          }
+        },
+        "type_hint": "F32"
       }
-    },
-    "type_hint": "F32"
+    }
   },
   "diagnostics": []
 }

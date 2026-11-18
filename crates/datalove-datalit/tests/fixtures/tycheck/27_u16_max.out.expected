@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "65535"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "65535"
+            }
+          }
+        },
+        "type_hint": "U16"
       }
-    },
-    "type_hint": "U16"
+    }
   },
   "diagnostics": [],
   "errors": [],

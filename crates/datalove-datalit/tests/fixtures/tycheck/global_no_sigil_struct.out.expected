@@ -1,23 +1,28 @@
 {
   "ast": {
     "expr": {
-      "Set": {
-        "elements": [
-          {
-            "expr": {
-              "ParseError": {
-                "message": "unexpected identifier 'x'"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Set": {
+              "elements": [
+                {
+                  "expr": {
+                    "ParseError": {
+                      "message": "unexpected identifier 'x'"
+                    }
+                  }
+                }
+              ]
+            }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Set": {
-        "element_type": {
-          "Alias": "x"
+        },
+        "type_hint": {
+          "Set": {
+            "element_type": {
+              "Alias": "x"
+            }
+          }
         }
       }
     }

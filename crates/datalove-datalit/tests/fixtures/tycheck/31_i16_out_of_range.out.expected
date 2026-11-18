@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "32768"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "32768"
+            }
+          }
+        },
+        "type_hint": "I16"
       }
-    },
-    "type_hint": "I16"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             13
           ],
-          "text": ": i16 / 32768"
+          "text": "32768"
         }
       ],
       "message": "integer literal out of range for type i16"

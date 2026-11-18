@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "255"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "255"
+            }
+          }
+        },
+        "type_hint": "U8"
       }
-    },
-    "type_hint": "U8"
+    }
   },
   "diagnostics": [],
   "errors": [],

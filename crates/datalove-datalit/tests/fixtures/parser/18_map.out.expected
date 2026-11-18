@@ -1,69 +1,76 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": [
-          {
-            "key": {
-              "expr": {
-                "Int": {
-                  "value": "0"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Map": {
+              "entries": [
+                {
+                  "key": {
+                    "expr": {
+                      "Int": {
+                        "value": "0"
+                      }
+                    }
+                  },
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "5"
+                      }
+                    }
+                  }
+                },
+                {
+                  "key": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    }
+                  },
+                  "value": {
+                    "expr": {
+                      "Int": {
+                        "value": "2"
+                      }
+                    }
+                  }
+                },
+                {
+                  "key": {
+                    "expr": {
+                      "Int": {
+                        "value": "3"
+                      }
+                    }
+                  },
+                  "value": {
+                    "expr": {
+                      "Hinted": {
+                        "inner": {
+                          "expr": {
+                            "Int": {
+                              "value": "2"
+                            }
+                          }
+                        },
+                        "type_hint": "U32"
+                      }
+                    }
+                  }
                 }
-              },
-              "type_hint": null
-            },
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "5"
-                }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "key": {
-              "expr": {
-                "Int": {
-                  "value": "2"
-                }
-              },
-              "type_hint": null
-            },
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "2"
-                }
-              },
-              "type_hint": null
-            }
-          },
-          {
-            "key": {
-              "expr": {
-                "Int": {
-                  "value": "3"
-                }
-              },
-              "type_hint": null
-            },
-            "value": {
-              "expr": {
-                "Int": {
-                  "value": "2"
-                }
-              },
-              "type_hint": "U32"
+              ]
             }
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Map": {
-        "key_type": "U32",
-        "value_type": "U32"
+        },
+        "type_hint": {
+          "Map": {
+            "key_type": "U32",
+            "value_type": "U32"
+          }
+        }
       }
     }
   },

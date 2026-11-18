@@ -1,83 +1,85 @@
 {
   "ast": {
     "expr": {
-      "Table": {
-        "header": [
-          "name",
-          "sub"
-        ],
-        "rows": [
-          {
-            "elements": [
-              {
-                "expr": {
-                  "String": {
-                    "value": "\"a\""
-                  }
-                },
-                "type_hint": null
-              },
-              {
-                "expr": {
-                  "Table": {
-                    "header": [
-                      "name",
-                      "sub"
-                    ],
-                    "rows": [
-                      {
-                        "elements": [
-                          {
-                            "expr": {
-                              "String": {
-                                "value": "\"b\""
-                              }
-                            },
-                            "type_hint": null
-                          },
-                          {
-                            "expr": {
-                              "Table": {
-                                "header": [
-                                  "name",
-                                  "sub"
-                                ],
-                                "rows": []
-                              }
-                            },
-                            "type_hint": null
-                          }
-                        ]
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Table": {
+              "header": [
+                "name",
+                "sub"
+              ],
+              "rows": [
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "String": {
+                          "value": "\"a\""
+                        }
                       }
-                    ]
-                  }
-                },
-                "type_hint": null
-              }
-            ]
-          }
-        ]
-      }
-    },
-    "type_hint": {
-      "Rec": {
-        "body": {
-          "Table": {
-            "columns": [
-              {
-                "name": "name",
-                "type_hint": "String"
-              },
-              {
-                "name": "sub",
-                "type_hint": {
-                  "Alias": "T"
+                    },
+                    {
+                      "expr": {
+                        "Table": {
+                          "header": [
+                            "name",
+                            "sub"
+                          ],
+                          "rows": [
+                            {
+                              "elements": [
+                                {
+                                  "expr": {
+                                    "String": {
+                                      "value": "\"b\""
+                                    }
+                                  }
+                                },
+                                {
+                                  "expr": {
+                                    "Table": {
+                                      "header": [
+                                        "name",
+                                        "sub"
+                                      ],
+                                      "rows": []
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 }
-              }
-            ]
+              ]
+            }
           }
         },
-        "name": "T"
+        "type_hint": {
+          "Rec": {
+            "body": {
+              "Table": {
+                "columns": [
+                  {
+                    "name": "name",
+                    "type_hint": "String"
+                  },
+                  {
+                    "name": "sub",
+                    "type_hint": {
+                      "Alias": "T"
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "T"
+          }
+        }
       }
     }
   },

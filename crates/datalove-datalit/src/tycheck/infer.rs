@@ -620,8 +620,8 @@ pub fn infer<'db>(
 ) -> Result<PType<'db>, TypeError> {
     // Rule: Inf-TypedExpr - a hint is the type, and what is under it is
     // typed by checking against the hint.
-    if let Some(hint) = expr.type_hint() {
-        return Ok(PType::Known(ctx.convert_hint(expr, &hint)?));
+    if let Expr::Hinted(h) = expr.expr() {
+        return Ok(PType::Known(ctx.convert_hint(expr, &h.type_hint)?));
     }
     infer_unhinted(ctx, uni, expr)
 }
@@ -710,7 +710,7 @@ pub fn infer_unhinted<'db>(
         // the value is checked.
         Expr::Data(_) => PType::Known(Type::Data),
         Expr::Error(_) => PType::Known(Type::Error),
-        Expr::Group(g) => infer(ctx, uni, &g.inner)?,
+        Expr::Hinted(h) => infer_unhinted(ctx, uni, &h.inner)?,
         // Rule: Inf-Atom
         Expr::Atom(a) => uni.fresh(Class::Variant { name: a.name, payload: None }, Origin::None),
         // Rule: Inf-Term

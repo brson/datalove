@@ -17,7 +17,7 @@ whose first element names it:
 ["list", [E, ...]]  ["set", [E, ...]]  ["map", [[K, V], ...]]
 ["tensor", [d, ...], [E, ...]]  ["table", ["x", ...], [[E, ...], ...]]
 ["some", E]  ["ok", E]  ["er", E]  ["data", E]  ["error", E]
-["atom", "A"]  ["term", "A", E]  ["enum", E]  ["group", E]
+["atom", "A"]  ["term", "A", E]  ["enum", E]
 ["hint", H, E]                                 a hint, in the encoding of Json.lean
 ```
 -/
@@ -119,7 +119,6 @@ partial def Expr.fromJson (j : Json) : Except String Expr := do
   | "atom" => .atom <$> (← arg 0).getStr?
   | "term" => .term <$> (← arg 0).getStr? <*> Expr.fromJson (← arg 1)
   | "enum" => .enum <$> Expr.fromJson (← arg 0)
-  | "group" => .group <$> Expr.fromJson (← arg 0)
   | "hint" => .hinted <$> Hint.fromJson (← arg 0) <*> Expr.fromJson (← arg 1)
   | _ => throw s!"unknown expression constructor {tag}"
 

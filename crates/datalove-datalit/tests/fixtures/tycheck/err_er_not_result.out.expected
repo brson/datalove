@@ -1,25 +1,29 @@
 {
   "ast": {
     "expr": {
-      "Er": {
-        "payload": {
+      "Hinted": {
+        "inner": {
           "expr": {
-            "Error": {
-              "value": {
+            "Er": {
+              "payload": {
                 "expr": {
-                  "String": {
-                    "value": "\"x\""
+                  "Error": {
+                    "value": {
+                      "expr": {
+                        "String": {
+                          "value": "\"x\""
+                        }
+                      }
+                    }
                   }
-                },
-                "type_hint": null
+                }
               }
             }
-          },
-          "type_hint": null
-        }
+          }
+        },
+        "type_hint": "U32"
       }
-    },
-    "type_hint": "U32"
+    }
   },
   "diagnostics": [
     {
@@ -28,10 +32,10 @@
         {
           "message": "expected `u32`, found `!_`",
           "span": [
-            0,
+            8,
             20
           ],
-          "text": ": u32 / er error \"x\""
+          "text": "er error \"x\""
         }
       ],
       "message": "mismatched types"

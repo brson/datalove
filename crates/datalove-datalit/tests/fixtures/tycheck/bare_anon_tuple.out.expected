@@ -4,29 +4,25 @@
       "AnonTuple": {
         "elements": [
           {
-            "expr": "True",
-            "type_hint": null
+            "expr": "True"
           },
           {
             "expr": {
               "Int": {
                 "value": "42"
               }
-            },
-            "type_hint": null
+            }
           },
           {
             "expr": {
               "Float": {
                 "value": "3.14"
               }
-            },
-            "type_hint": null
+            }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [],
   "errors": [],

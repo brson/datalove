@@ -1,47 +1,51 @@
 {
   "ast": {
     "expr": {
-      "Table": {
-        "header": [
-          "a",
-          "b"
-        ],
-        "rows": [
-          {
-            "elements": [
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Table": {
+              "header": [
+                "a",
+                "b"
+              ],
+              "rows": [
+                {
+                  "elements": [
+                    {
+                      "expr": {
+                        "Int": {
+                          "value": "42"
+                        }
+                      }
+                    },
+                    {
+                      "expr": {
+                        "String": {
+                          "value": "\"hello\""
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "type_hint": {
+          "Table": {
+            "columns": [
               {
-                "expr": {
-                  "Int": {
-                    "value": "42"
-                  }
-                },
-                "type_hint": null
+                "name": "a",
+                "type_hint": "U32"
               },
               {
-                "expr": {
-                  "String": {
-                    "value": "\"hello\""
-                  }
-                },
-                "type_hint": null
+                "name": "b",
+                "type_hint": "String"
               }
             ]
           }
-        ]
-      }
-    },
-    "type_hint": {
-      "Table": {
-        "columns": [
-          {
-            "name": "a",
-            "type_hint": "U32"
-          },
-          {
-            "name": "b",
-            "type_hint": "String"
-          }
-        ]
+        }
       }
     }
   },

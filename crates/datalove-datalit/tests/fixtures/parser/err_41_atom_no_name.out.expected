@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "expected name after 'atom'"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

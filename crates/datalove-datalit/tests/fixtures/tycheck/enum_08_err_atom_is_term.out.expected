@@ -1,18 +1,24 @@
 {
   "ast": {
     "expr": {
-      "Atom": {
-        "name": "Custom"
-      }
-    },
-    "type_hint": {
-      "Enum": {
-        "variants": [
-          {
-            "name": "Custom",
-            "payload": "String"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Atom": {
+              "name": "Custom"
+            }
           }
-        ]
+        },
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "Custom",
+                "payload": "String"
+              }
+            ]
+          }
+        }
       }
     }
   },
@@ -23,10 +29,10 @@
         {
           "message": "expected `enum { term Custom string }`, found `atom Custom`",
           "span": [
-            0,
+            32,
             43
           ],
-          "text": ": enum { term Custom string } / atom Custom"
+          "text": "atom Custom"
         }
       ],
       "message": "mismatched types"

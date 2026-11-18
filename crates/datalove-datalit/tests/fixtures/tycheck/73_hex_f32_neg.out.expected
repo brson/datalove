@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Hex": {
-        "value": "0xBF800000"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Hex": {
+              "value": "0xBF800000"
+            }
+          }
+        },
+        "type_hint": "F32"
       }
-    },
-    "type_hint": "F32"
+    }
   },
   "diagnostics": [],
   "errors": [],

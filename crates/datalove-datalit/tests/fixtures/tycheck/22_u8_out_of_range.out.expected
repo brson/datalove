@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "256"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "256"
+            }
+          }
+        },
+        "type_hint": "U8"
       }
-    },
-    "type_hint": "U8"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            7,
             10
           ],
-          "text": ": u8 / 256"
+          "text": "256"
         }
       ],
       "message": "integer literal out of range for type u8"

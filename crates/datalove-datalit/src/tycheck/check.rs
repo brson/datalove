@@ -20,36 +20,34 @@ pub fn check<'db>(
     let db = ctx.db;
     let expr_inner = expr.expr();
 
-    // Rule: Check-Hinted - a hint says what the expression is, and it has to
-    // be what is expected, up to a recursive type at the head (Meet-Head).
-    // Nothing converts on the way from one to the other.
-    if let Some(type_hint) = expr.type_hint() {
-        let hinted = ctx.convert_hint(expr, &type_hint)?;
-        if !types_equivalent_at_head(db, &hinted, expected) {
-            if let Some(ts) = ctx.get_span(expr) {
-                DiagnosticBuilder::error(db, "mismatched types")
-                    .code(TCode::HintMismatch.as_str())
-                    .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
-                        type_to_string(db, expected),
-                        type_to_string(db, &hinted)))
-                    .note("the type hint disagrees with the expected type")
-                    .emit_type();
-            }
-            return Err(TypeError::TypeMismatch {
-                expected: type_to_string(db, expected),
-                actual: type_to_string(db, &hinted),
-            });
-        }
-    }
-
     // Rule: Check-Roll - a value of a recursive type is written as a value
     // of the type's unfolding. What is reported is the type as it was
     // expected, which is shorter.
     let exposed = expose(expected);
 
     match (expr_inner, exposed.as_ref()) {
-        // Rule: Check-Group
-        (Expr::Group(g), _) => check(ctx, &g.inner, expected),
+        // Rule: Check-Hinted - a hint says what the expression is, and it
+        // has to be what is expected, up to a recursive type at the head
+        // (Meet-Head). Nothing converts on the way from one to the other.
+        (Expr::Hinted(h), _) => {
+            let hinted = ctx.convert_hint(expr, &h.type_hint)?;
+            if !types_equivalent_at_head(db, &hinted, expected) {
+                if let Some(ts) = ctx.get_span(expr) {
+                    DiagnosticBuilder::error(db, "mismatched types")
+                        .code(TCode::HintMismatch.as_str())
+                        .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
+                            type_to_string(db, expected),
+                            type_to_string(db, &hinted)))
+                        .note("the type hint disagrees with the expected type")
+                        .emit_type();
+                }
+                return Err(TypeError::TypeMismatch {
+                    expected: type_to_string(db, expected),
+                    actual: type_to_string(db, &hinted),
+                });
+            }
+            check(ctx, &h.inner, expected)
+        }
 
         // Rule: Check-None
         (Expr::None, Type::Option(_)) => Ok(()),

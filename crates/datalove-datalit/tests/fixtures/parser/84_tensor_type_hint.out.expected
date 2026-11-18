@@ -1,68 +1,68 @@
 {
   "ast": {
     "expr": {
-      "Tensor": {
-        "elements": [
-          {
-            "expr": {
-              "Float": {
-                "value": "1.0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Float": {
-                "value": "2.0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Float": {
-                "value": "3.0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Float": {
-                "value": "4.0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Float": {
-                "value": "5.0"
-              }
-            },
-            "type_hint": null
-          },
-          {
-            "expr": {
-              "Float": {
-                "value": "6.0"
-              }
-            },
-            "type_hint": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Tensor": {
+              "elements": [
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "1.0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "2.0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "3.0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "4.0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "5.0"
+                    }
+                  }
+                },
+                {
+                  "expr": {
+                    "Float": {
+                      "value": "6.0"
+                    }
+                  }
+                }
+              ],
+              "header": false,
+              "shape": [
+                2,
+                3
+              ]
+            }
           }
-        ],
-        "header": false,
-        "shape": [
-          2,
-          3
-        ]
-      }
-    },
-    "type_hint": {
-      "Tensor": {
-        "element_type": "F32",
-        "rank": 2
+        },
+        "type_hint": {
+          "Tensor": {
+            "element_type": "F32",
+            "rank": 2
+          }
+        }
       }
     }
   },

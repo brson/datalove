@@ -4,8 +4,7 @@
       "ParseError": {
         "message": "a float is written without spaces in it"
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

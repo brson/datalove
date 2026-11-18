@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "1234"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "1234"
+            }
+          }
+        },
+        "type_hint": "U32"
       }
-    },
-    "type_hint": "U32"
+    }
   },
   "diagnostics": [],
   "errors": [],

@@ -9,16 +9,14 @@
                 "Int": {
                   "value": "1"
                 }
-              },
-              "type_hint": null
+              }
             },
             "value": {
               "expr": {
                 "String": {
                   "value": "\"a\""
                 }
-              },
-              "type_hint": null
+              }
             }
           },
           {
@@ -27,22 +25,19 @@
                 "String": {
                   "value": "\"two\""
                 }
-              },
-              "type_hint": null
+              }
             },
             "value": {
               "expr": {
                 "String": {
                   "value": "\"b\""
                 }
-              },
-              "type_hint": null
+              }
             }
           }
         ]
       }
-    },
-    "type_hint": null
+    }
   },
   "diagnostics": [
     {

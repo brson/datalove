@@ -1,22 +1,28 @@
 {
   "ast": {
     "expr": {
-      "Atom": {
-        "name": "A"
-      }
-    },
-    "type_hint": {
-      "Enum": {
-        "variants": [
-          {
-            "name": "A",
-            "payload": null
-          },
-          {
-            "name": "<error>",
-            "payload": null
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Atom": {
+              "name": "A"
+            }
           }
-        ]
+        },
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "A",
+                "payload": null
+              },
+              {
+                "name": "<error>",
+                "payload": null
+              }
+            ]
+          }
+        }
       }
     }
   },

@@ -121,8 +121,8 @@ differ from it here. A tensor's shape is written in the abstract syntax as a
 header, though the concrete syntax usually gives it by separators
 (`[| 1 2, 3 4 |]` is `[| 2 2 | 1 2 3 4 |]`). Parentheses around a single
 expression are not a node: `(e)` is `e`, and `: T / (: U / e)` is two nested
-hints. (The AST keeps a `Group` node only to hold the inner of two such
-hints apart; inference and `Check-Group` pass straight through it.)
+hints, a `Hinted` node under another. A hint is a node of its own in the AST,
+as it is in datafun's, and no other node carries one.
 
 ## Type equivalence
 

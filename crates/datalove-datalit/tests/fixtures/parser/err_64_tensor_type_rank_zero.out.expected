@@ -1,13 +1,19 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "a tensor has at least one axis"
-      }
-    },
-    "type_hint": {
-      "ParseError": {
-        "message": "a tensor has at least one axis"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "a tensor has at least one axis"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "a tensor has at least one axis"
+          }
+        }
       }
     }
   },

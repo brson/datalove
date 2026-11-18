@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "String": {
-        "value": "\"hello\""
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "String": {
+              "value": "\"hello\""
+            }
+          }
+        },
+        "type_hint": "String"
       }
-    },
-    "type_hint": "String"
+    }
   },
   "diagnostics": []
 }

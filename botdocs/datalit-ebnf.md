@@ -155,8 +155,9 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
   open is D054, and an open never closed is D055.
 - **A hint is a hint on one expression.** What follows `: T /` is a bare
   `expr`, so `: u8 / : u8 / 1` is D020. Only parentheses put a hint under a
-  hint, `: u32 / (: u8 / 1)`, which the AST keeps as a `Group` and the type
-  checker reads as two hints that must agree (`Check-Hinted`, T040).
+  hint, `: u32 / (: u8 / 1)`, which the AST keeps as one `Hinted` node under
+  another and the type checker reads as two hints that must agree
+  (`Check-Hinted`, T040).
 - **Grouping is not a node.** `(e)` is `e`, and `(: T / e)` with no hint
   outside it is the hinted `e`. A one-tuple needs its comma: `(1,)`.
   `(,)` and `(1,,)` are D020.

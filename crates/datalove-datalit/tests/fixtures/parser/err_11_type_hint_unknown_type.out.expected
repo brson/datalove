@@ -1,12 +1,18 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "42"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "42"
+            }
+          }
+        },
+        "type_hint": {
+          "Alias": "Foobar"
+        }
       }
-    },
-    "type_hint": {
-      "Alias": "Foobar"
     }
   },
   "diagnostics": []

@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "9223372036854775808"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "9223372036854775808"
+            }
+          }
+        },
+        "type_hint": "I64"
       }
-    },
-    "type_hint": "I64"
+    }
   },
   "diagnostics": [
     {
@@ -14,10 +20,10 @@
         {
           "message": "value out of range",
           "span": [
-            0,
+            8,
             27
           ],
-          "text": ": i64 / 9223372036854775808"
+          "text": "9223372036854775808"
         }
       ],
       "message": "integer literal out of range for type i64"

@@ -1,11 +1,17 @@
 {
   "ast": {
     "expr": {
-      "Int": {
-        "value": "-10000000000"
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "-10000000000"
+            }
+          }
+        },
+        "type_hint": "I64"
       }
-    },
-    "type_hint": "I64"
+    }
   },
   "diagnostics": [],
   "errors": [],

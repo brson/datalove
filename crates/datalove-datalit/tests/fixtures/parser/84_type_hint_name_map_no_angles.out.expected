@@ -1,12 +1,18 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": []
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Map": {
+              "entries": []
+            }
+          }
+        },
+        "type_hint": {
+          "Alias": "map"
+        }
       }
-    },
-    "type_hint": {
-      "Alias": "map"
     }
   },
   "diagnostics": []
