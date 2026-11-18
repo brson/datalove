@@ -721,13 +721,14 @@ pub fn infer_unhinted<'db>(
         // Rule: Inf-Enum
         Expr::Enum(_) => uni.fresh(Class::Open, Origin::Expr(expr.C())),
         Expr::ParseError(_) => {
-            if let Some(ts) = ctx.get_span(expr) {
-                DiagnosticBuilder::error(ctx.db, "cannot type-check expression with parse errors")
-                    .code(TCode::ParseErrorInExpr.as_str())
-                    .primary_label(ts, "parse error occurred here")
-                    .note("fix the parse error before type checking")
-                    .emit_type();
-            }
+            // The parser numbers every expression it builds, an error among
+            // them, so one without a span came from somewhere else.
+            let ts = ctx.get_span(expr).expect("a parse error has the span the parser gave it");
+            DiagnosticBuilder::error(ctx.db, "cannot type-check expression with parse errors")
+                .code(TCode::ParseErrorInExpr.as_str())
+                .primary_label(ts, "parse error occurred here")
+                .note("fix the parse error before type checking")
+                .emit_type();
             return Err(TypeError::CannotSynthesize);
         }
     })

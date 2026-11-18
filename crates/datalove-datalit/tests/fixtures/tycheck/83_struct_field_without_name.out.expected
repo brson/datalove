@@ -1,0 +1,42 @@
+{
+  "ast": {
+    "expr": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "<error>",
+            "value": {
+              "expr": {
+                "ParseError": {
+                  "message": "expected field name in struct expression"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "parse error occurred here",
+          "span": [
+            1,
+            2
+          ],
+          "text": "="
+        }
+      ],
+      "message": "cannot type-check expression with parse errors"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

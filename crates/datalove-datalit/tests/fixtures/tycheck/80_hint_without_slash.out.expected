@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected '/' after type hint"
+            }
+          }
+        },
+        "type_hint": "U8"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "parse error occurred here",
+          "span": [
+            5,
+            6
+          ],
+          "text": "5"
+        }
+      ],
+      "message": "cannot type-check expression with parse errors"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": "u8"
+}

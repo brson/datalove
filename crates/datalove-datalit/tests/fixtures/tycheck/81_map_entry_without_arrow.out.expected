@@ -1,0 +1,48 @@
+{
+  "ast": {
+    "expr": {
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              }
+            },
+            "value": {
+              "expr": {
+                "ParseError": {
+                  "message": "expected '->' between map key and value"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "parse error occurred here",
+          "span": [
+            4,
+            5
+          ],
+          "text": "2"
+        }
+      ],
+      "message": "cannot type-check expression with parse errors"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

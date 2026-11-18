@@ -60,16 +60,18 @@ impl<'db> Parser<'db> {
             let error_expr = ast::Expr::ParseError(ast::ExprParseError {
                 source: e.source, span: e.span.C(), message: e.message,
             });
+            let inner = self.numbered(|_| error_expr);
             self.eat_sigil(Sigil::SlashForward);
-            ast::ExprFull::new(None, error_expr)
+            inner
         } else if !self.eat_sigil(Sigil::SlashForward) {
-            let ts = self.peek_text_span();
-            let error_expr = self.emit_expr_error(ts,
-                "expected '/' after type hint",
-                DCode::HintWithoutSlash,
-                "expected '/' separator between type hint and expression"
-            );
-            ast::ExprFull::new(None, error_expr)
+            self.numbered(|p| {
+                let ts = p.peek_text_span();
+                p.emit_expr_error(ts,
+                    "expected '/' after type hint",
+                    DCode::HintWithoutSlash,
+                    "expected '/' separator between type hint and expression"
+                )
+            })
         } else {
             self.numbered(|p| p.parse_expr())
         };
@@ -107,13 +109,14 @@ impl<'db> Parser<'db> {
     pub(super) fn parse_map_entry(&mut self) -> ast::ExprMapEntry<'db> {
         let key = self.parse_expr_full();
         if !self.eat_sigil(Sigil::Arrow) {
-            let ts = self.peek_text_span();
-            let error_expr = self.emit_expr_error(ts,
-                "expected '->' between map key and value",
-                DCode::MapEntryWithoutArrow,
-                "expected '->' after key"
-            );
-            let error_value = ast::ExprFull::new(None, error_expr);
+            let error_value = self.numbered(|p| {
+                let ts = p.peek_text_span();
+                p.emit_expr_error(ts,
+                    "expected '->' between map key and value",
+                    DCode::MapEntryWithoutArrow,
+                    "expected '->' after key"
+                )
+            });
             return ast::ExprMapEntry { key, value: error_value };
         }
         let value = self.parse_expr_full();
@@ -412,25 +415,27 @@ impl<'db> Parser<'db> {
             }
             None => {
                 // No name found - emit error and create placeholder.
-                let ts = self.peek_text_span();
-                let error_expr = self.emit_expr_error(ts.C(),
-                    "expected field name in struct expression",
-                    DCode::StructFieldSyntax,
-                    "expected field name"
-                );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let error_value = ast::ExprFull::new(None, error_expr);
+                let error_value = self.numbered(|p| {
+                    let ts = p.peek_text_span();
+                    p.emit_expr_error(ts,
+                        "expected field name in struct expression",
+                        DCode::StructFieldSyntax,
+                        "expected field name"
+                    )
+                });
                 return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
         if !self.eat_sigil(Sigil::Equals) {
-            let ts = self.peek_text_span();
-            let error_expr = self.emit_expr_error(ts,
-                "expected '=' after field name in struct expression",
-                DCode::StructFieldSyntax,
-                "expected '=' after field name"
-            );
-            let error_value = ast::ExprFull::new(None, error_expr);
+            let error_value = self.numbered(|p| {
+                let ts = p.peek_text_span();
+                p.emit_expr_error(ts,
+                    "expected '=' after field name in struct expression",
+                    DCode::StructFieldSyntax,
+                    "expected '=' after field name"
+                )
+            });
             return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();
