@@ -610,14 +610,16 @@ Four things are proved of it:
   was given, or calls nested deeper than they were given, and at what the
   model does not run, each a case of `Gap` in `FunEval.lean`: a call with a
   type argument that has a `rec` in it, a comparison or map key of a float,
-  `data` or `error`, whose contents the model does not carry, a `for` with
-  an index over more elements than `index` counts, and a temporary passed
-  `mut` or `out`, which the ownership analysis refuses (O012). Nothing else:
+  `data` or `error`, whose contents the model does not carry, and a `for`
+  with an index over more elements than `index` counts. Nothing else:
   the theorems allow `Stop.unsupported` only with a `Gap`, so a gap added to
   the model is a case added to `Gap` and shows up in what they say. A `set`
   through a tensor's slice, `set t[i]![j]! = v`, writes the slice back into
   the tensor, and a call has a function in the table for every signature
-  (`Fun.funDefs_covers`); both used to stop.
+  (`Fun.funDefs_covers`); both used to stop. So did a temporary passed
+  `mut` or `out`, `f(mut g())`, which the ownership analysis refuses
+  (O012) as a write nothing can read: copied in and out, what its parameter
+  came to is dropped with it, and the model now says so.
   It breaks only where the block has a `break` of its own (`hasBreak`), and
   ends normally only where control can reach its end (`completes`). As with expressions, running follows the checker
   one function for one, asking it for the context after each statement, and

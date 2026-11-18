@@ -1130,7 +1130,7 @@ theorem writeBack_sound {env : InferEnv} : ∀ (n : Nat) (Γ : Ctx) (ρ : VEnv) 
       unfold ArgKeys at hk1
       generalize hx : placeOf e = p at hk1 ⊢
       rcases p with _ | ⟨x, _ | ⟨st, rest⟩⟩
-      · rcases a with _ | v <;> first | exact trivial | exact Sound.unsupported
+      · exact writeBack_sound n Γ ρ args ps kvss after hr hb hρ hk2 hrest
       · rcases a with _ | v
         · exact trivial
         · obtain ⟨u, k, u', hl, ⟨keys, hp, -, -⟩, hu⟩ := hk1 hmode

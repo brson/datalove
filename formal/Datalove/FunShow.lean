@@ -57,7 +57,6 @@ def Gap.name : Gap → String
   | .recTypeArg => "recTypeArg"
   | .opaque => "opaque"
   | .bigFor => "bigFor"
-  | .temporary => "temporary"
 
 /-- How a run ended, by name. -/
 def Stop.name : Stop → String

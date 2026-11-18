@@ -59,9 +59,6 @@ inductive Gap where
   /-- A `for` with an index over more elements than `index` counts, which no
   collection in memory holds. -/
   | bigFor
-  /-- A temporary passed `mut` or `out`, which has no place to be written
-  back to. The ownership analysis refuses it (O012), not the checker. -/
-  | temporary
 
 /-- Why evaluation gave no value. -/
 inductive Stop where
@@ -401,20 +398,22 @@ a variable, or a part of one through its steps, with the keys' values the
 argument was evaluated with (`kvss`), as the pointer the Rust passes was
 taken then. A hint says what type a place is and nothing of where it is, so
 `mut : T / x` writes back to `x`, and `mut (: R / r).a` to `r.a`
-(`placeOf`). -/
+(`placeOf`). A temporary, `mut f()`, has no place, and what its parameter
+came to is dropped with it: the ownership analysis refuses one (O012), as a
+write nothing can read, but its meaning is that. -/
 def writeBack (Γ : Ctx) : VEnv → List (Option Mode × Expr) → List (Mode × Ty) → List (List Val) →
     List (Option Val) → EvalM VEnv
   | ρ, (_, e) :: args, (mode, _) :: params, kvs :: kvss, a :: after =>
     if mode == .mut || mode == .out then
       match placeOf e, a with
+      | none, _ => writeBack Γ ρ args params kvss after
       | some (x, []), some v => writeBack Γ (setVar x v ρ) args params kvss after
       | some (x, steps), some v => match Γ.lookup x, ρ.lookup x with
         | some (u, _), some old => do
           let w ← writeSteps none u old steps kvs v
           writeBack Γ (setVar x w ρ) args params kvss after
         | _, _ => throw .wrong
-      | _, none => throw .uninit
-      | _, _ => throw (.unsupported .temporary)
+      | some _, none => throw .uninit
     else writeBack Γ ρ args params kvss after
   | ρ, _, _, _, _ => pure ρ
 
