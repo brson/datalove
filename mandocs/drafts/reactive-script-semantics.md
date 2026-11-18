@@ -328,6 +328,8 @@ For the full rules see the
 [Datalove literate reactive test suite](../../botdocs/script-reactivity-cases.md).
 
 
+
+
 ## Experiments
 
 <!--
@@ -356,6 +358,8 @@ These are refinements, could be optional:
 -->
 
 
+
+
 ## Forward reruns
 
 ```datalove
@@ -382,6 +386,8 @@ let c = a + b
 
 Fresh-run result: `c == 101`.
 Unit 1, 3 rerun. Unit 2 does not rerun.
+
+
 
 
 ## Backward reruns
@@ -414,6 +420,8 @@ Without the backward rerun: `b == 2111`.
 <!-- any time we see a digit other than 1 or 0 in the result we know its an error -->
 
 
+
+
 ## Chained backwards rerun
 
 ```datalove
@@ -444,8 +452,41 @@ Unit 3 reruns because it reads `a`.
 Unit 2 reruns because unit 3 updates `b`.
 Without the backward rerun: `b == 11102`.
 
----
 
+## Changing the access type
+
+To start, unit 2 update `a` and unit 3 reads it.
+
+```datalove
+// unit 1
+var a = 100
+// unit 2
+var b = 10
+// unit 3
+set a = a + 1
+// unit 4
+let c = b
+```
+
+Fresh-run result: `a == 101`, `b == 10`, `c == 10`.
+
+Edit unit 3 to update `b` instead of `a`.
+
+// unit 1
+var a = 100
+// unit 2
+var b = 10
+// unit 3
+set b = b + 1
+// unit 4
+let c = b
+```
+
+Fresh run result: `a == 100`, `b == 11`, `c == `11`.
+Unit 1, 3, 4 rerun.
+Unit 1 reruns because _the old version of unit 3_ updated `a`.
+Unit 4 reruns because _the new version of unit 3_ updated `b`.
+Without the reruns: `a == 101`, `b == 11`, `c == 10`.
 
 
 
