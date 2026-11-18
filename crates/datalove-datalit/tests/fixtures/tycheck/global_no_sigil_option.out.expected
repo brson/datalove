@@ -8,7 +8,7 @@
               "payload": {
                 "expr": {
                   "ParseError": {
-                    "message": "unexpected token in Parser expression"
+                    "message": "unexpected token in expression"
                   }
                 }
               }

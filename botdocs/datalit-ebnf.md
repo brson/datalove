@@ -154,7 +154,8 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
 - **Brackets match.** Every bracket is closed by its partner: a close with no
   open is D054, and an open never closed is D055.
 - **A hint is a hint on one expression.** What follows `: T /` is a bare
-  `expr`, so `: u8 / : u8 / 1` is D020. Only parentheses put a hint under a
+  `expr`, so `: u8 / : u8 / 1` is D020, which says to parenthesize the inner
+  hint, as datafun's P080 does. Only parentheses put a hint under a
   hint, `: u32 / (: u8 / 1)`, which the AST keeps as one `Hinted` node under
   another and the type checker reads as two hints that must agree
   (`Check-Hinted`, T040).
@@ -209,9 +210,9 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | Code | Refuses | Where |
 |---|---|---|
 | D017 | Map entry without `->` | `expr.rs:107` |
-| D018 | End of input or a bracket where an expression is expected | `expr.rs:394` |
+| D018 | End of input or a bracket where an expression is expected | `expr.rs:418,426` |
 | D019 | A malformed number | `expr.rs:81` |
-| D020 | An unexpected sigil or error token | `expr.rs:264` |
+| D020 | An unexpected sigil or error token, or a hint directly under another | `expr.rs:292,69` |
 | D021 | Tokens left after an expression | `state.rs:286` |
 | D022 | Tokens left inside a type's brackets | `state.rs:275` |
 | D023 | Tensor groups of different shapes | `expr.rs:541`, `chunk.rs:334` |
@@ -234,7 +235,7 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D046 | Unexpected token in a type | `type_hint.rs:294` |
 | D047 | Tensor type without its `,` | `type_hint.rs:236` |
 | D048 | Struct or table type field without its name or `:` | `type_hint.rs:413,426` |
-| D049 | Hint without its `/` | `expr.rs:43` |
+| D049 | Hint without its `/` | `expr.rs:93` |
 | D050 | `-` not glued to a decimal number | `expr.rs:141` |
 | D051 | Atom type with no name | `type_hint.rs:100,356` |
 | D052 | Term type with no name | `type_hint.rs:115,376` |

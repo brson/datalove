@@ -57,9 +57,29 @@ impl<'db> Parser<'db> {
         if broken {
             self.skip_broken_hint_type();
         }
-        let inner = if self.eat_sigil(Sigil::SlashForward) {
+        let inner = if !self.eat_sigil(Sigil::SlashForward) {
+            self.hint_without_slash(&type_hint)
+        } else if self.peek_sigil(Sigil::Colon) {
+            // Two hints on one expression would have to agree, and the
+            // second says nothing the first does not.
+            self.numbered(|p| {
+                let ts = p.peek_text_span();
+                p.next();
+                p.emit_expr_error(ts,
+                    "a type hint cannot be written directly under another",
+                    DCode::UnexpectedToken,
+                    "parenthesize the inner hint"
+                )
+            })
+        } else {
             self.numbered(|p| p.parse_expr())
-        } else if let ast::TypeHint::ParseError(e) = &type_hint {
+        };
+        ast::Expr::Hinted(ast::ExprHinted { type_hint, inner })
+    }
+
+    /// What is under a hint written without its `/`.
+    fn hint_without_slash(&mut self, type_hint: &ast::TypeHint<'db>) -> ast::ExprFull<'db> {
+        if let ast::TypeHint::ParseError(e) = type_hint {
             // With no `/` there is no telling where the type was meant to
             // end, and a missing `/` would say the same thing twice.
             let error_expr = ast::Expr::ParseError(ast::ExprParseError {
@@ -75,8 +95,7 @@ impl<'db> Parser<'db> {
                     "expected '/' separator between type hint and expression"
                 )
             })
-        };
-        ast::Expr::Hinted(ast::ExprHinted { type_hint, inner })
+        }
     }
 
     /// Build the expression for a number, or report how it was written.
@@ -270,7 +289,7 @@ impl<'db> Parser<'db> {
                         let ts = self.peek_text_span();
                         self.next(); // Consume unexpected token to prevent infinite loop.
                         self.emit_expr_error(ts,
-                            "unexpected token in Parser expression",
+                            "unexpected token in expression",
                             DCode::UnexpectedToken,
                             "unexpected token"
                         )
@@ -392,13 +411,21 @@ impl<'db> Parser<'db> {
                 };
                 self.parse_tensor_expr(inner)
             }
-            _ => {
+            Some(TreeToken::Branch { .. }) => {
                 let ts = self.peek_text_span();
                 self.next(); // Consume unexpected token to prevent infinite loop.
                 self.emit_expr_error(ts,
-                    "unexpected tree node in Parser expression",
+                    "unexpected bracket in expression",
                     DCode::ExpectedExpression,
                     "unexpected token"
+                )
+            }
+            None => {
+                let ts = self.peek_text_span();
+                self.emit_expr_error(ts,
+                    "expected expression",
+                    DCode::ExpectedExpression,
+                    "expected an expression here"
                 )
             }
         }

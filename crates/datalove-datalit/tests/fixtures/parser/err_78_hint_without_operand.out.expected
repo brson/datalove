@@ -1,0 +1,32 @@
+{
+  "ast": {
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "expected expression"
+            }
+          }
+        },
+        "type_hint": "U8"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D018",
+      "labels": [
+        {
+          "message": "expected an expression here",
+          "span": [
+            6,
+            6
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected expression"
+    }
+  ]
+}

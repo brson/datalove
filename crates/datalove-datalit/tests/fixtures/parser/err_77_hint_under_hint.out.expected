@@ -1,0 +1,32 @@
+{
+  "ast": {
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "ParseError": {
+              "message": "a type hint cannot be written directly under another"
+            }
+          }
+        },
+        "type_hint": "U8"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D020",
+      "labels": [
+        {
+          "message": "parenthesize the inner hint",
+          "span": [
+            7,
+            8
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "a type hint cannot be written directly under another"
+    }
+  ]
+}
