@@ -132,9 +132,13 @@ Under `formal/Datalove/Proofs/`:
 
 The build fails on any warning, and a `sorry` is one, so a proof left
 unfinished cannot pass for a finished one. Every theorem rests on Lean's
-three standard axioms and nothing else: `#print axioms` on any of them shows
-no `sorryAx`, and no `Lean.ofReduceBool`, which `native_decide` would bring
-in. The finite case splits use `decide +kernel`, which the kernel checks.
+three standard axioms, `propext`, `Classical.choice` and `Quot.sound`, and
+nothing else, and the build checks it: `formal/AxiomCheck.lean` collects the
+axioms of every theorem and definition in a `Datalove` module, about six
+thousand, and fails on any other, a `sorryAx` that got past the warning, a
+`Lean.ofReduceBool` that `native_decide` would bring in, or an `axiom` the
+model declared. The finite case splits use `decide +kernel`, which the kernel
+checks.
 
 ## What ties the model to the code
 
@@ -726,8 +730,8 @@ Four things are proved of it:
   hint reads the same under the substituted aliases, failures included
   (`Fun.convertIn_inst`), and a call's signature instantiates the same,
   being well formed, so that no `rec` in it holds a type parameter
-  (`Fun.instantiate_inst`). Nothing is assumed: `#print axioms` shows only
-  Lean's three.
+  (`Fun.instantiate_inst`). Nothing is assumed: it rests on Lean's three
+  axioms alone, as every theorem here does.
 
 To make these provable, checking was made total: it takes inference as a
 parameter (`InferEnv`), which only says what types are and so cannot move an
@@ -746,7 +750,8 @@ they were, which `fun_tests` confirms.
 Lean comes through elan; `formal/lean-toolchain` pins the version, which
 `lake` fetches on first use.
 
-- `just formal-build` builds the model and the oracle, checking every proof.
+- `just formal-build` builds the model and the oracle, checking every proof
+  and the axioms each rests on.
   About twenty seconds from clean.
 - `just test-formal SEED COUNT` builds, then runs `oracle_tests`,
   `lit_tests` and `fun_tests` over `COUNT` seeds from `SEED` (`random` draws one), as every generative suite takes its

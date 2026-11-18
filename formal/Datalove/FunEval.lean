@@ -53,9 +53,10 @@ inductive Stop where
   /-- An operation met an operand of the wrong kind, or a form a checked
   expression never has. -/
   | wrong
-  /-- A form not evaluated yet: a call that writes back or has a recursive
-  type argument, or a `set` through a tensor's
-  slice. -/
+  /-- A form not evaluated yet: a call with a recursive type argument, a
+  `set` through a tensor's slice, a `for` over more elements than `index`
+  counts, or a comparison or map key the model carries too little of to
+  answer, a float, `data` or `error`. -/
   | unsupported
   /-- A variable read before it was set, which the ownership analysis refuses
   (O005), not the checker. -/

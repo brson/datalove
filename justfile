@@ -95,7 +95,8 @@ test-generative-random COUNT='100':
 
 # Build the Lean model of the type system in formal/, which checks its
 # proofs, and the oracle the Rust is tested against. Any warning fails it, a
-# `sorry` among them. Needs Lean through elan; see botdocs/formal.md.
+# `sorry` among them, as does a declaration resting on an axiom beyond Lean's
+# three (formal/AxiomCheck.lean). Needs Lean through elan; see botdocs/formal.md.
 formal-build:
     cd formal && lake build --wfail
 

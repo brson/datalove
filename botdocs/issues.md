@@ -467,7 +467,7 @@ orders over twenty thousand generated pairs found nothing else that
 depended on order.
 
 So the typing rules' claim that the solution does not depend on order holds
-only without `rec`, and is proved only for that (`formal.md`). The fix that
+only without `rec`, and is tested only for that, not proved (`formal.md`). The fix that
 keeps equality simple is a canonical form: fold every type, when it is
 built, to one spelling of each recursive type, so that `==` is equivalence
 up to unfolding and the two lists have one type. The cost is one

@@ -1,8 +1,13 @@
 name = "datalove-formal"
-defaultTargets = ["Datalove", "datalove-oracle"]
+defaultTargets = ["Datalove", "AxiomCheck", "datalove-oracle"]
 
 [[lean_lib]]
 name = "Datalove"
+
+# Fails the build if a declaration of the model rests on an axiom other than
+# Lean's three standard ones.
+[[lean_lib]]
+name = "AxiomCheck"
 
 [[lean_exe]]
 name = "datalove-oracle"
