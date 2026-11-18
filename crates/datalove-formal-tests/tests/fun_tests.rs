@@ -1874,3 +1874,199 @@ fn held_agrees() {
     }
     assert!(mismatches.is_empty(), "the Rust and the model decide O017 differently on {} statements", mismatches.len());
 }
+
+/// What `init_script` declares before the function it generates: an enum to
+/// match on, and functions that write an `out` parameter, one returning a
+/// value too, one taking a `mut` one, and one giving an option to unwrap,
+/// which `?` leaves through where it is none.
+const INIT_PRELUDE: &str = "type E = enum { atom A, atom B }\n\
+    fun put(out q: int)\n  set q = 1\nend fun\n\
+    fun get(out q: int): int\n  set q = 2\n  ret 3\nend fun\n\
+    fun bump(mut q: int)\n  set q = q + 1\nend fun\n\
+    fun maybe(c: bool): ?int\n  if c\n    ret some 1\n  end if\n  ret none\nend fun\n";
+
+/// A function's body of statements that give, read and pass on variables
+/// declared with no value and an `out` parameter, across branches, loops,
+/// `match` arms and early returns: what O005, O006 and O009 decide.
+fn init_block(rng: &mut SeededRng, depth: usize, in_loop: bool, out: &mut String) {
+    let indent = "  ".repeat(depth + 1);
+    let count = rng.random_range(1..=4);
+    for _ in 0..count {
+        let t = ["x", "y", "p", "x", "p"][rng.random_range(0..5)];
+        let nested = depth < 3;
+        let pick = rng.random_range(0..if nested { 24 } else { 15 });
+        let line = match pick {
+            0 | 1 => fmt!("set {t} = 1"),
+            2 => fmt!("debuglog {t}"),
+            3 => fmt!("let r = {t} + 1"),
+            4 => fmt!("call put(out {t})"),
+            5 => fmt!("call bump(mut {t})"),
+            6 => fmt!("let r = get(out {t}) + 1"),
+            7 => fmt!("let r = maybe(c)? + get(out {t})"),
+            8 => fmt!("set {t} += 1"),
+            9 => fmt!("let r = (get(out {t}), 1)"),
+            10 => ["set s.a = 1", "debuglog s.a", "set s = {a = 1}", "call bump(mut s.a)"][rng.random_range(0..4)].S(),
+            // A way out ends the block: what follows it would be dead.
+            11 => {
+                let line = if rng.random_bool(0.5) { "ret none".S() } else { fmt!("ret some {t}") };
+                out.push_str(&fmt!("{indent}{line}\n"));
+                return;
+            }
+            12 => "let r = maybe(c)?".S(),
+            13 if in_loop => {
+                out.push_str(&fmt!("{indent}{}\n", ["break", "continue"][rng.random_range(0..2)]));
+                return;
+            }
+            14 => ["var x: int", "let x = 5", "var y: int"][rng.random_range(0..3)].S(),
+            13 => fmt!("set {t} = 2"),
+            15..=17 => {
+                out.push_str(&fmt!("{indent}if c\n"));
+                init_block(rng, depth + 1, in_loop, out);
+                if rng.random_bool(0.6) {
+                    out.push_str(&fmt!("{indent}else\n"));
+                    init_block(rng, depth + 1, in_loop, out);
+                }
+                out.push_str(&fmt!("{indent}end if\n"));
+                continue;
+            }
+            18 => {
+                out.push_str(&fmt!("{indent}if maybe(c) |v|\n"));
+                init_block(rng, depth + 1, in_loop, out);
+                out.push_str(&fmt!("{indent}else\n"));
+                init_block(rng, depth + 1, in_loop, out);
+                out.push_str(&fmt!("{indent}end if\n"));
+                continue;
+            }
+            19 => {
+                out.push_str(&fmt!("{indent}loop while c\n"));
+                init_block(rng, depth + 1, true, out);
+                out.push_str(&fmt!("{indent}end loop\n"));
+                continue;
+            }
+            20 => {
+                out.push_str(&fmt!("{indent}loop\n"));
+                init_block(rng, depth + 1, true, out);
+                out.push_str(&fmt!("{indent}  if c\n{indent}    break\n{indent}  end if\n{indent}end loop\n"));
+                continue;
+            }
+            21 => {
+                out.push_str(&fmt!("{indent}for w in ref l\n"));
+                init_block(rng, depth + 1, true, out);
+                out.push_str(&fmt!("{indent}end for\n"));
+                continue;
+            }
+            _ => {
+                out.push_str(&fmt!("{indent}match e\n{indent}case atom A\n"));
+                init_block(rng, depth + 1, in_loop, out);
+                if rng.random_bool(0.5) {
+                    out.push_str(&fmt!("{indent}case atom B\n"));
+                } else {
+                    out.push_str(&fmt!("{indent}case default\n"));
+                }
+                init_block(rng, depth + 1, in_loop, out);
+                out.push_str(&fmt!("{indent}end match\n"));
+                continue;
+            }
+        };
+        out.push_str(&fmt!("{indent}{line}\n"));
+    }
+}
+
+/// A script for `init_agrees`: `INIT_PRELUDE`, then a function with an
+/// `out` parameter and variables declared with no value, which nothing
+/// calls, so that only the analysis runs.
+fn init_script(rng: &mut SeededRng) -> String {
+    let mut body = String::new();
+    body.push_str("  var x: int\n");
+    body.push_str(if rng.random_bool(0.5) { "  var y: int\n" } else { "  var y: int = 0\n" });
+    body.push_str(if rng.random_bool(0.5) { "  var s: {a: int}\n" } else { "  var s: {a: int} = {a = 0}\n" });
+    init_block(rng, 0, false, &mut body);
+    body.push_str("  ret some 0\n");
+    fmt!("{INIT_PRELUDE}fun f(out p: int, c: bool, o: ?int, e: E, l: [int]): ?int\n{body}end fun\n")
+}
+
+/// The ownership codes the CLI reports for a script, in order, or what it
+/// printed where it panicked.
+fn rust_ownership_codes(text: &str) -> Result<Vec<String>, String> {
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let binary = workspace.join("target").join(profile).join("datalove");
+    assert!(binary.exists(), "{} not built; `just test-formal` builds it", binary.display());
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("script.dl");
+    std::fs::write(&path, text).X();
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.arg("script").arg(&path);
+    let (_, lines) = run_bounded(cmd, std::time::Duration::from_secs(5));
+    if lines.iter().any(|l| l.contains("panicked at")) {
+        return Err(lines.join("\n"));
+    }
+    let code = rmx::regex::Regex::new(r"^\[(O[0-9]+)\] Error:").X();
+    Ok(lines.iter().filter_map(|l| code.captures(l).map(|c| c[1].S())).collect())
+}
+
+/// O005, O006 and O009 as the model decides them (`formal/Datalove/FunInit.lean`)
+/// held to the Rust's, on functions that give, read and pass on variables
+/// with no value and an `out` parameter: the model refuses a function where,
+/// and only where, the CLI reports one of the three. A script the checker
+/// refuses, or the Rust refuses with another code, is counted and skipped.
+#[test]
+fn init_agrees() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the init tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let mut cases = Vec::new();
+    for seed in seeds.iter() {
+        let mut rng = SeededRng::derive(seed, "init");
+        let text = init_script(&mut rng);
+        let (codes, script, _) = rust_side(&text);
+        cases.push((fmt!("seed {seed}"), text, script, codes));
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script, _)| json!({ "init": script })).collect();
+    let answers = ask_oracle(&queries);
+    const INIT_CODES: [&str; 3] = ["O005", "O006", "O009"];
+
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    let mut mismatches = Vec::new();
+    for ((what, text, _, rust_types), oracle) in cases.iter().zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
+            continue;
+        }
+        let codes = oracle["codes"].as_array().X();
+        if !codes.is_empty() || !rust_types.is_empty() {
+            assert_eq!(codes.len(), rust_types.len(), "the checkers differ:\n{text}");
+            *outcomes.entry(fmt!("checker refuses {}", codes[0].as_str().X())).or_default() += 1;
+            continue;
+        }
+        let model = oracle["init"].as_str().map(|c| c.S());
+        let rust = match rust_ownership_codes(text) {
+            Ok(codes) => codes,
+            Err(_) => {
+                *outcomes.entry("rust panics".S()).or_default() += 1;
+                continue;
+            }
+        };
+        if let Some(other) = rust.iter().find(|c| !INIT_CODES.contains(&c.as_str())) {
+            *outcomes.entry(fmt!("rust refuses {other}")).or_default() += 1;
+            continue;
+        }
+        *outcomes.entry(match &model {
+            Some(c) => c.C(),
+            None => "accepted".S(),
+        }).or_default() += 1;
+        if model.is_some() != !rust.is_empty() {
+            mismatches.push(fmt!("{what}:\n{text}    rust: {rust:?}, model: {model:?}"));
+        }
+    }
+    println!(
+        "{} functions over seeds {}..{}: {} differ; {outcomes:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model decide what holds a value differently on {} functions", mismatches.len());
+}

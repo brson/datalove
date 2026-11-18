@@ -1629,7 +1629,7 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (ch
         · simp at h
         rename_i hlen
         simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hlen
-        exact SoundT.map' (evalPairs_sound n Γ es _ h hb) (fun vs ⟨hl, hvs⟩ =>
+        exact SoundT.map' (evalPairs_sound n Γ es _ h hb hlen) (fun vs ⟨hl, hvs⟩ =>
           roll_of hx (.tuple (by rw [hl, hlen, Nat.min_self]) hvs))
       · simp at h
     case struct fs =>
@@ -1641,7 +1641,7 @@ theorem evalForm_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (ch
         · simp at h
         rename_i hlen
         simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hlen
-        exact SoundT.map' (evalFields_sound n Γ fs _ h hb) (fun vs ⟨hl, hvs⟩ =>
+        exact SoundT.map' (evalFields_sound n Γ fs _ h hb hlen) (fun vs ⟨hl, hvs⟩ =>
           roll_of hx (.struct (by
             rw [hl, show (fun x : (String × Expr) × (String × Ty) => x.2.1) = Prod.fst ∘ Prod.snd from rfl,
               ← List.map_map, List.map_snd_zip (by omega)]) hvs))
@@ -2139,31 +2139,32 @@ theorem evalSub_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (sub
         (fun v hv => roll_of (Ty.meet_iff.mp (by simpa using hm)).symm hv.expose)
 
 theorem evalPairs_sound : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (ts : List Ty),
-    Quiet (pairsF env n Γ es ts) () → Γ.Runs sigs →
+    Quiet (pairsF env n Γ es ts) () → Γ.Runs sigs → es.length = ts.length →
     SoundT Γ.vars Γ.ret (fun vs => vs.length = min es.length ts.length ∧ ∀ p ∈ vs.zip ts, HasType p.1 p.2)
       (evalPairs env call n Γ es ts)
-  | 0, _, _, _, h, _ => by simp [pairsF] at h
-  | n + 1, Γ, e :: es, t :: ts, h, hb => by
+  | 0, _, _, _, h, _, _ => by simp [pairsF] at h
+  | n + 1, Γ, e :: es, t :: ts, h, hb, hlen => by
     simp only [pairsF] at h
     obtain ⟨_, he, h⟩ := h.bind_inv
     simp only [evalPairs]
     exact SoundT.bind' (evalC_sound n Γ e t he hb) (fun v hv =>
-      SoundT.bind' (evalPairs_sound n Γ es ts h hb) (fun vs ⟨hl, hvs⟩ =>
+      SoundT.bind' (evalPairs_sound n Γ es ts h hb (by simpa using hlen)) (fun vs ⟨hl, hvs⟩ =>
         SoundT.pure' ⟨by simp [hl, Nat.succ_min_succ], by
           intro p hp
           simp only [List.zip_cons_cons, List.mem_cons] at hp
           rcases hp with rfl | hp
           · exact hv
           · exact hvs p hp⟩))
-  | n + 1, Γ, [], _, h, hb => by simp only [evalPairs]; exact SoundT.pure' ⟨by simp, by simp⟩
-  | n + 1, Γ, _ :: _, [], h, hb => by simp only [evalPairs]; exact SoundT.pure' ⟨by simp, by simp⟩
+  | n + 1, Γ, [], [], h, hb, _ => by simp only [evalPairs]; exact SoundT.pure' ⟨by simp, by simp⟩
+  | n + 1, Γ, [], _ :: _, _, _, hlen => by simp at hlen
+  | n + 1, Γ, _ :: _, [], _, _, hlen => by simp at hlen
 
 theorem evalFields_sound : ∀ (n : Nat) (Γ : Ctx) (fs : List (String × Expr)) (ts : List (String × Ty)),
-    Quiet (fieldsF env n Γ fs ts) () → Γ.Runs sigs →
+    Quiet (fieldsF env n Γ fs ts) () → Γ.Runs sigs → fs.length = ts.length →
     SoundT Γ.vars Γ.ret (fun vs => vs.map (·.1) = (fs.zip ts).map (·.2.1) ∧ ∀ p ∈ vs.zip ts, HasType p.1.2 p.2.2)
       (evalFields env call n Γ fs ts)
-  | 0, _, _, _, h, _ => by simp [fieldsF] at h
-  | n + 1, Γ, (m, e) :: fs, (k, t) :: ts, h, hb => by
+  | 0, _, _, _, h, _, _ => by simp [fieldsF] at h
+  | n + 1, Γ, (m, e) :: fs, (k, t) :: ts, h, hb, hlen => by
     simp only [fieldsF] at h
     split at h
     · simp at h
@@ -2171,15 +2172,16 @@ theorem evalFields_sound : ∀ (n : Nat) (Γ : Ctx) (fs : List (String × Expr))
     obtain ⟨_, he, h⟩ := h.bind_inv
     simp only [evalFields]
     exact SoundT.bind' (evalC_sound n Γ e t he hb) (fun v hv =>
-      SoundT.bind' (evalFields_sound n Γ fs ts h hb) (fun vs ⟨hl, hvs⟩ =>
+      SoundT.bind' (evalFields_sound n Γ fs ts h hb (by simpa using hlen)) (fun vs ⟨hl, hvs⟩ =>
         SoundT.pure' ⟨by simp_all, by
           intro p hp
           simp only [List.zip_cons_cons, List.mem_cons] at hp
           rcases hp with rfl | hp
           · exact hv
           · exact hvs p hp⟩))
-  | n + 1, Γ, [], _, h, hb => by simp only [evalFields]; exact SoundT.pure' ⟨by simp, by simp⟩
-  | n + 1, Γ, _ :: _, [], h, hb => by simp only [evalFields]; exact SoundT.pure' ⟨by simp, by simp⟩
+  | n + 1, Γ, [], [], h, hb, _ => by simp only [evalFields]; exact SoundT.pure' ⟨by simp, by simp⟩
+  | n + 1, Γ, [], _ :: _, _, _, hlen => by simp at hlen
+  | n + 1, Γ, _ :: _, [], _, _, hlen => by simp at hlen
 
 theorem evalAll_sound : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (t : Ty),
     Quiet (allF env n Γ es t) () → Γ.Runs sigs →
@@ -2232,7 +2234,7 @@ theorem evalRows_sound : ∀ (n : Nat) (Γ : Ctx) (rows : List (List Expr)) (col
     rename_i hlen
     obtain ⟨_, hr, h⟩ := h.bind_inv
     simp only [evalRows]
-    exact SoundT.bind' (evalPairs_sound n Γ r _ hr hb) (fun vs ⟨hl, hvs⟩ =>
+    exact SoundT.bind' (evalPairs_sound n Γ r _ hr hb (by simpa using hlen)) (fun vs ⟨hl, hvs⟩ =>
       SoundT.bind' (evalRows_sound n Γ rs cols h hb) (fun rest hrest =>
         SoundT.pure' (by
           intro w hw

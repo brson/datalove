@@ -729,13 +729,16 @@ def evalPair (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → Expr �
     let vb ← evalC env call n Γ.borrow b t
     pure (t, va, vb)
 
+/-- Elements against their types, which a checked literal has as many of as
+elements, so that every element of one that ends is evaluated. -/
 def evalPairs (env : InferEnv) (call : CallFn) : Nat → Ctx → List Expr → List Ty → EvalT (List Val)
   | 0, _, _, _ => throw .fuel
   | n + 1, Γ, e :: es, t :: ts => do
     let v ← evalC env call n Γ e t
     let vs ← evalPairs env call n Γ es ts
     pure (v :: vs)
-  | _ + 1, _, _, _ => pure []
+  | _ + 1, _, [], [] => pure []
+  | _ + 1, _, _, _ => throw .wrong
 
 def evalFields (env : InferEnv) (call : CallFn) : Nat → Ctx → List (String × Expr) → List (String × Ty) →
     EvalT (List (String × Val))
@@ -744,7 +747,8 @@ def evalFields (env : InferEnv) (call : CallFn) : Nat → Ctx → List (String �
     let v ← evalC env call n Γ e t
     let vs ← evalFields env call n Γ fs ts
     pure ((m, v) :: vs)
-  | _ + 1, _, _, _ => pure []
+  | _ + 1, _, [], [] => pure []
+  | _ + 1, _, _, _ => throw .wrong
 
 def evalAll (env : InferEnv) (call : CallFn) : Nat → Ctx → List Expr → Ty → EvalT (List Val)
   | 0, _, _, _ => throw .fuel

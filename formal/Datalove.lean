@@ -41,3 +41,4 @@ import Datalove.FunAlias
 import Datalove.Proofs.AliasSound
 import Datalove.FunHeld
 import Datalove.Proofs.HeldSound
+import Datalove.FunInit

@@ -33,6 +33,14 @@ def restore (ρ ρ' : VEnv) : VEnv := ρ'.drop (ρ'.length - ρ.length)
 def bindVals (ρ : VEnv) (vals : List (String × Option Val)) : VEnv :=
   vals.foldl (fun ρ (x, o) => (x, o) :: ρ) ρ
 
+/-- The names a pattern binds, in order. -/
+def patNames : Pat → List String
+  | .name x => [x]
+  | .tuple xs => xs
+  | .struct fs => fs.map (·.2)
+  | .atom _ => []
+  | .term _ x => [x]
+
 /-- What a pattern takes out of a value, name by name, as `patBindings`
 names them. -/
 def patValues (p : Pat) (v : Val) : EvalM (List (String × Val)) :=
@@ -129,6 +137,9 @@ def execBind (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (
       | .error _ => throw .wrong
     | none => (evalS env call n Γ e).run ρ
   let vals ← patValues p v
+  -- A value of the pattern's type has a part for each name; one that has
+  -- not is no value of it.
+  if vals.map (·.1) != patNames p then throw .wrong
   pure (bindVals ρ (vals.map fun (x, w) => (x, some w)))
 
 /-- `ret` or `ret e`, as `checkRet` types it: the body's return, with the
@@ -176,7 +187,8 @@ def execStmt (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv →
       match ct.expose, v with
       | .option p, .some w =>
         return restore ρ (← execBlock env call n k (bindOpt Γ thenB p) (bindVals ρ (thenB.toList.map (·, some w))) t)
-      | .option _, .none => execElse env call n k Γ ρ e
+      -- An option has no error for the `else` to bind (F094).
+      | .option _, .none => if elseB.isSome then throw .wrong else execElse env call n k Γ ρ e
       | .result p, .ok w =>
         return restore ρ (← execBlock env call n k (bindOpt Γ thenB p) (bindVals ρ (thenB.toList.map (·, some w))) t)
       | .result _, .er w =>
@@ -211,7 +223,8 @@ def execStmt (env : InferEnv) (call : CallFn) : Nat → Nat → Ctx → VEnv →
         | some a => do
           match ← execCases env call n k Γ ρ vs.toList a v cases with
           | some ρ' => return restore ρ ρ'
-          | none => execElse env call n k Γ ρ dflt
+          -- With no default, a case for every variant (F100).
+          | none => if dflt.isNone then throw .wrong else execElse env call n k Γ ρ dflt
         | none => throw .wrong
       | _ => throw .wrong
     | .for_ names coll body => match forBindings env n Γ names coll |>.run #[] with

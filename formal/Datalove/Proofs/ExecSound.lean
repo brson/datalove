@@ -535,12 +535,84 @@ theorem bindPat_sound {Γ : Ctx} {p : Pat} {t : Ty} {k : Kind} {Γ' : Ctx} (h : 
     exact ⟨Δ, rfl, h.symm⟩
 
 /-- Binding a pattern to a value of the type it takes apart. -/
+theorem Fits.names : ∀ {Δ : List (String × Ty)} {vals : List (String × Option Val)}, Fits Δ vals →
+    vals.map (·.1) = Δ.map (·.1)
+  | _, _, .nil => rfl
+  | _, _, .cons _ h => by simp [Fits.names h]
+
+theorem filterMap_names {tl : List (String × Ty)} : ∀ (fs : List (String × String)),
+    (∀ q ∈ fs, ¬ tl.lookup q.1 = none) →
+    (fs.filterMap fun (f, x) => (tl.lookup f).map (x, ·)).map (·.1) = fs.map (·.2)
+  | [], _ => rfl
+  | (f, x) :: fs, h => by
+    obtain ⟨u, hu⟩ := Option.ne_none_iff_exists'.mp (h (f, x) List.mem_cons_self)
+    simp only [List.filterMap_cons, hu, Option.map_some, List.map_cons]
+    exact congrArg _ (filterMap_names fs (fun r hr => h r (List.mem_cons_of_mem _ hr)))
+
+/-- The names a pattern binds are the ones it is written with. -/
+theorem patBindings_names {p : Pat} {t : Ty} {Δ : List (String × Ty)} (h : patBindings p t = .ok Δ) :
+    Δ.map (·.1) = patNames p := by
+  cases p with
+  | name x => simp only [patBindings, pure, Except.pure, Except.ok.injEq] at h; subst h; rfl
+  | tuple xs =>
+    unfold patBindings at h
+    generalize t.expose = T at h
+    cases T
+    case tuple ts =>
+      simp only at h
+      split at h
+      · rename_i hl
+        simp only [pure, Except.pure, Except.ok.injEq] at h; subst h
+        simp only [beq_iff_eq] at hl
+        simp [patNames, List.map_fst_zip, hl]
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
+    all_goals simp [throw, throwThe, MonadExceptOf.throw] at h
+  | struct fs =>
+    unfold patBindings at h
+    generalize t.expose = T at h
+    cases T
+    case struct ts =>
+      simp only at h
+      split at h
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
+      rename_i hany
+      split at h
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
+      simp only [pure, Except.pure, Except.ok.injEq] at h; subst h
+      simp only [Bool.not_eq_true, List.any_eq_false, Option.isNone_iff_eq_none] at hany
+      exact filterMap_names fs hany
+    all_goals simp [throw, throwThe, MonadExceptOf.throw] at h
+  | atom a =>
+    unfold patBindings at h
+    generalize t.expose = T at h
+    cases T
+    case atom b =>
+      simp only at h
+      split at h
+      · simp only [pure, Except.pure, Except.ok.injEq] at h; subst h; rfl
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
+    all_goals simp [throw, throwThe, MonadExceptOf.throw] at h
+  | term a x =>
+    unfold patBindings at h
+    generalize t.expose = T at h
+    cases T
+    case term b q =>
+      simp only at h
+      split at h
+      · simp only [pure, Except.pure, Except.ok.injEq] at h; subst h; rfl
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
+    all_goals simp [throw, throwThe, MonadExceptOf.throw] at h
+
 theorem bindPat_vals {Γ : Ctx} {ρ : VEnv} (hρ : Agree Γ.vars ρ) {p : Pat} {t : Ty} {k : Kind} {Δ : List (String × Ty)}
     (hp : patBindings p t = .ok Δ) {v : Val} (hv : HasType v t) :
     SoundS Γ B (Agree (Γ.bindAllAs Δ k).vars)
-      (patValues p v >>= fun vals => pure (bindVals ρ (vals.map fun (x, w) => (x, some w)))) := by
+      (patValues p v >>= fun vals => if vals.map (·.1) != patNames p then throw .wrong
+        else pure (bindVals ρ (vals.map fun (x, w) => (x, some w)))) := by
   obtain ⟨vals, he, hf⟩ := patValues_fits hp hv
   rw [he]
+  have hn : vals.map (·.1) = patNames p := by
+    rw [← patBindings_names hp, ← hf.names]; simp
+  simp only [bind, Except.bind, hn, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
   exact bindAllAs_agree hρ k hf
 
 /-- An expression run from variables that line up, as a statement runs it:
@@ -1002,9 +1074,12 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
         · rename_i p hp
           rw [hp] at hve
           obtain ⟨_, hbt, hm⟩ := SQuiet.bind_inv (by app_cont env n) hm
-          obtain ⟨_, -, he⟩ := SQuiet.bind_inv (by app_cont env n) hm
+          obtain ⟨_, h94, he⟩ := SQuiet.bind_inv (by app_cont env n) hm
+          rw [SQuiet.reportIf_iff] at h94
           rcases hve.option_inv with rfl | ⟨w, rfl, hw⟩
           · simp only [hp]
+            split
+            · rename_i hs; simp_all
             exact ((execElse_sound n k Γ ρ e he hb hρ).weakenB (fun h => by simp [hasBreakS, h])).weaken
               (fun _ h => ⟨h.1, if_completes_else h.2⟩)
           · simp only [hp]
@@ -1060,7 +1135,8 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
               (fun ρ' => Agree Γ.vars ρ' ∧ completesS (.match_ e cs dflt) = true)
               (execCases env call n k Γ ρ vs.toList a v cs >>= fun o => match o with
                 | some ρ' => pure (restore ρ ρ')
-                | none => execElse env call n k Γ ρ dflt) := fun a ⟨o, hl⟩ ha =>
+                | none => if dflt.isNone then throw .wrong else execElse env call n k Γ ρ dflt) :=
+            fun a ⟨o, hl⟩ ha =>
           SoundS.bind' ((execCases_sound n k Γ ρ vs.toList a v cs [] cov hcs hb hρ ha).weakenB
               (fun h => by simp [hasBreakS, h])) (fun r ⟨hsome, hnone⟩ => by
             cases r with
@@ -1068,11 +1144,9 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
               obtain ⟨h1, h2⟩ := hsome ρ' rfl
               exact ⟨restore_agree hρ h1, by simp [completesS, h2]⟩
             | none =>
-              refine ((execElse_sound n k Γ ρ dflt hd hb hρ).weakenB (fun h => by simp [hasBreakS, h])).weaken
-                (fun _ h => ⟨h.1, ?_⟩)
-              rcases h.2 with hn | hc
-              · exfalso
-                subst hn
+              cases dflt with
+              | none =>
+                exfalso
                 simp only [Option.isNone_none, Bool.true_and, List.any_eq_false, Bool.not_eq_eq_eq_not,
                   Bool.not_true, Bool.not_eq_false] at h100
                 have := h100 (a, o) (lookup_some_mem hl)
@@ -1080,7 +1154,13 @@ theorem execStmt_sound : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (Γ' 
                 simp only [List.nil_append, List.contains_iff_mem, List.mem_map] at this
                 obtain ⟨c, hc, hn'⟩ := this
                 exact hnone rfl c hc hn'
-              · simp [completesS, hc])
+              | some d =>
+                simp only [Option.isNone_some, Bool.false_eq_true, ↓reduceIte]
+                refine ((execElse_sound n k Γ ρ (some d) hd hb hρ).weakenB
+                  (fun h => by simp [hasBreakS, h])).weaken (fun _ h => ⟨h.1, ?_⟩)
+                rcases h.2 with hn | hc
+                · cases hn
+                · simp [completesS, hc])
         rcases hve.enum_inv with ⟨a, rfl, hl⟩ | ⟨a, w, p, rfl, hl, hw⟩
         · exact finish a ⟨_, hl⟩ (.inl ⟨rfl, hl⟩)
         · exact finish a ⟨_, hl⟩ (.inr ⟨w, p, rfl, hl, hw⟩)

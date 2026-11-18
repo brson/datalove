@@ -15,6 +15,7 @@ line, and writes one answer per line to stdout, in order:
 {"fun": S}       →  {"codes": [code, ...], "inits": [T or null, ...]} or {"unsupported": what}
 {"alias": S}     →  {"codes": [code, ...], "calls": [b, ...]} or {"unsupported": what}
 {"held": S}      →  {"codes": [code, ...], "held": [b, ...]} or {"unsupported": what}
+{"init": S}      →  {"codes": [code, ...], "init": code or null} or {"unsupported": what}
 ```
 
 A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
@@ -28,7 +29,9 @@ what it returned early, which the CLI prints after its logs.
 An `alias` is the script checked, and for each top-level `call`, in order,
 whether its arguments are O010 (`Fun.aliasScript`). A `held` is the script
 checked, and for each top-level `debuglog`, `call` and `set`, in order,
-whether it is O017 (`Fun.heldScript`).
+whether it is O017 (`Fun.heldScript`). An `init` is the script checked,
+and what the analysis of what holds a value refuses first, O005, O006 or
+O009, if anything (`Fun.initScript`).
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -85,6 +88,13 @@ def answer (q : Json) : Except String Json := do
     return match Fun.scriptFromSerde script with
       | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str)),
           ("held", Json.arr ((Fun.heldScript ss).toArray.map Json.bool))]
+      | .error e => Json.mkObj [("unsupported", e)]
+  if let .ok script := q.getObjVal? "init" then
+    return match Fun.scriptFromSerde script with
+      | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str)),
+          ("init", match Fun.initScript ss with
+            | .some c => Json.str c
+            | .none => Json.null)]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok script := q.getObjVal? "run" then
     return match Fun.scriptFromSerde script with

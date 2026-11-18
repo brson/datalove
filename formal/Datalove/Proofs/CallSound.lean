@@ -141,7 +141,8 @@ theorem runCall_ok (h : ProgOk env sigs funs) (k : Nat) : ∀ d, CallOk sigs (ru
     have after : ∀ ρ', Ext ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ).vars ρ' →
         ArgsFit θ (paramsAfter fi.params (restore (argVals fi.params vals fi.cvals) ρ')) sig.params :=
       fun ρ' he => paramsAfter_fit hpl (restore_agree hρ he)
-    simp only [runCall, hs, hfi]
+    simp only [runCall, hs, hfi, show (vals.length != fi.params.length) = false by simp [hv.1, hpl],
+      Bool.false_eq_true, ↓reduceIte]
     generalize execBlock _ _ _ _ _ _ _ = r at hr ⊢
     cases r with
     | ok ρ' =>

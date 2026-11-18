@@ -54,6 +54,7 @@ def runCall (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String 
   | d + 1 => fun f θ vals =>
     match sigs.lookup f, funs.lookup f with
     | some sig, some fi =>
+      if vals.length != fi.params.length then throw .wrong else
       let ρ := argVals fi.params vals fi.cvals
       match execBlock env (runCall env sigs funs k d) fuel k
           ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ) ρ fi.body with
@@ -62,6 +63,8 @@ def runCall (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String 
         | .ty _ => throw .wrong
       | .error (.returned (some v) ρ') => pure (v, paramsAfter fi.params (restore ρ ρ'))
       | .error (.returned none ρ') => pure (unitVal, paramsAfter fi.params (restore ρ ρ'))
+      -- A body runs outside any loop (F050, F051).
+      | .error (.brk _) | .error (.cont _) => throw .wrong
       | .error s => throw s
     | some _, none => throw .wrong
     | none, _ => throw .wrong
