@@ -39,3 +39,5 @@ import Datalove.Proofs.PassBy
 import Datalove.FunShow
 import Datalove.FunAlias
 import Datalove.Proofs.AliasSound
+import Datalove.FunHeld
+import Datalove.Proofs.HeldSound

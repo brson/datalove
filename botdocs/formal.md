@@ -715,6 +715,29 @@ Four things are proved of it:
   a hinted place as all of the place under the hint; now the parser folds a
   hinted place into the place, `(: R / r).s` is `r.s` to every pass after
   the type checker, and the model's `placeOf` takes it the same way.
+- **Where O017 accepts, a held operand read late reads what it read
+  early** (`Fun.held_reads_agree`, in `Proofs/HeldSound.lean`, of O017 as
+  `FunHeld.lean` models it). The model reads every operand where it is
+  written; the compiled code reads some through a pointer once what follows
+  them has run: an argument passed `ref`, `mut` or `out` until its call, an
+  operator's operand that is not a copy while the other runs, an index's
+  base while its key does, a place while its keys do, and a `set`'s key
+  looked up and compound value that are not copies while the later keys do.
+  The walk follows `analyze_expr_moves` and `analyze_set` case for case,
+  keeping what is held, and pairs every write it meets, a place taken `mut`
+  or `out` or a variable moved, with each place held over it (`clashes`),
+  leaving out the arguments of the write's own call, which O010 compares;
+  O017 is a pair that overlaps. Abstracting what runs between to writes that
+  each change some locations and leave the rest (`Late.Write`), a location
+  none of them changes reads the same after as before
+  (`Late.late_eq_early`), so where O017 accepts and two places share a
+  location only where they overlap (`PlaceLocs`), a held place read late
+  reads what the model read early. `held_agrees` in `fun_tests` holds the
+  Rust's O017 to the model's on statements that hold a place while they
+  write or move one beside it, a field of it, the variable it is of or the
+  one it reads: over a thousand seeds none differ, 351 O017 and 2323
+  accepted. Breaking one of the walk's rules, an operator's left operand not
+  held, makes 32 of 900 differ.
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by

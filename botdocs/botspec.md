@@ -2535,6 +2535,12 @@ being live from its operand to its use. Rust also reads a `Copy` operand
 into a temporary where it is written. A call's arguments one after another
 (`f(mut a) + f(mut a)`) borrow in turn, and are allowed.
 
+`formal/Datalove/FunHeld.lean` models this rule as the ownership analysis
+decides it, and `held_agrees` in `datalove-formal-tests` holds the two to
+each other. `Proofs/HeldSound.lean` proves what the rule buys: where it
+accepts, a held operand read late reads what it read where it was written
+(`held_reads_agree`).
+
 ### 11.4 Loop Restrictions
 
 Moving an outer-scoped linear value inside a loop is an error:

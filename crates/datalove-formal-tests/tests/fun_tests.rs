@@ -1594,3 +1594,283 @@ fn aliasing_agrees() {
     }
     assert!(mismatches.is_empty(), "the Rust and the model decide O010 differently on {} calls", mismatches.len());
 }
+
+/// The declarations every `held_agrees` script starts with: functions that
+/// write a `u8`, an `index`, a list or a string through `mut` or `out`, read
+/// one by `ref`, or take one, and variables of those types and of a struct of
+/// them.
+const HELD_PRELUDE: &str = "\
+type R = {x: u8, s: string, l: [u8], t: (u8, string)}
+fun set9(mut x: u8): u8
+  set x = : u8 / 9
+  ret : u8 / 0
+end fun
+fun put(out x: u8): u8
+  set x = : u8 / 7
+  ret : u8 / 0
+end fun
+fun grow(mut xs: [u8]): index
+  set xs = [: u8 / 1]
+  ret : index / 0
+end fun
+fun ms(mut s: string): string
+  set s = \"m\"
+  ret \"r\"
+end fun
+fun eat(s: string): index
+  ret : index / 0
+end fun
+fun look(ref s: string): index
+  ret : index / 0
+end fun
+fun seti(mut i: index): index
+  set i = : index / 0
+  ret : index / 0
+end fun
+fun pick(ref a: string, b: u8): u8
+  ret b
+end fun
+fun keep(ref a: string, b: string): string
+  ret b
+end fun
+fun add9(mut a: u8, b: u8): u8
+  set a = : u8 / 9
+  ret b
+end fun
+fun mr(mut q: R): u8
+  set q.x = : u8 / 5
+  ret : u8 / 0
+end fun
+fun lr(ref q: R, b: u8): u8
+  ret b
+end fun
+var n: u8 = : u8 / 1
+var i: index = : index / 0
+var s: string = \"a\"
+var r: R = {x = : u8 / 1, s = \"b\", l = [: u8 / 2, : u8 / 3], t = (: u8 / 4, \"c\")}
+var xs: [u8] = [: u8 / 1, : u8 / 2]
+var ls: [string] = [\"a\", \"b\"]
+";
+
+/// An expression for `held_agrees` of one of the prelude's types, `depth`
+/// calls or operators deep at most: places of the type, and calls that take
+/// a place `mut`, `out` or `ref`, or take a value, inside operators,
+/// indexes and other calls.
+fn held_expr(rng: &mut SeededRng, ty: &str, depth: u32) -> String {
+    let pick = |rng: &mut SeededRng, xs: &[&str]| xs[rng.random_range(0..xs.len())].S();
+    let compound = depth > 0 && rng.random_range(0..3) != 0;
+    let d = depth.saturating_sub(1);
+    match (ty, compound) {
+        ("u8", false) => match rng.random_range(0..4) {
+            0 => fmt!("xs[{}]!", held_expr(rng, "index", d)),
+            1 => fmt!("r.l[{}]!", held_expr(rng, "index", d)),
+            _ => pick(rng, &["n", "n", "r.x", "r.t.0", "(: u8 / n)", "(: R / r).x"]),
+        },
+        ("u8", true) => match rng.random_range(0..4) {
+            0 => fmt!("set9(mut {})", held_place(rng, "u8", d)),
+            1 => fmt!("put(out {})", held_place(rng, "u8", d)),
+            2 => fmt!("{} +! {}", held_expr(rng, "u8", d), held_expr(rng, "u8", d)),
+            _ => fmt!("pick(ref {}, {})", held_place(rng, "string", d), held_expr(rng, "u8", d)),
+        },
+        ("index", false) => pick(rng, &["i", "i", "(: index / 0)", "(: index / 1)"]),
+        ("index", true) => match rng.random_range(0..4) {
+            0 => fmt!("grow(mut {})", held_place(rng, "list", d)),
+            1 => fmt!("eat({})", held_expr(rng, "string", d)),
+            2 => fmt!("look(ref {})", held_place(rng, "string", d)),
+            _ => "seti(mut i)".S(),
+        },
+        ("string", false) => match rng.random_range(0..4) {
+            0 => fmt!("ls[{}]!", held_expr(rng, "index", d)),
+            _ => pick(rng, &["s", "s", "s", "r.s", "r.t.1", "(: R / r).s"]),
+        },
+        ("string", true) => match rng.random_range(0..3) {
+            0 => fmt!("ms(mut {})", held_place(rng, "string", d)),
+            1 => fmt!("keep(ref {}, {})", held_place(rng, "string", d), held_expr(rng, "string", d)),
+            _ => fmt!("{}@", held_expr(rng, "string", d)),
+        },
+        ("bool", _) => match rng.random_range(0..2) {
+            0 => fmt!("{} == {}", held_expr(rng, "string", depth), held_expr(rng, "string", depth)),
+            _ => fmt!("{} == {}", held_expr(rng, "u8", depth), held_expr(rng, "u8", depth)),
+        },
+        ("list", _) => pick(rng, &["xs", "r.l"]),
+        _ => unreachable!("no expression of type {ty}"),
+    }
+}
+
+/// A place of one of the prelude's types, its keys `depth` deep at most.
+fn held_place(rng: &mut SeededRng, ty: &str, depth: u32) -> String {
+    if ty == "u8" && rng.random_range(0..5) == 0 {
+        return "(: R / r).x".S();
+    }
+    held_target(rng, ty, depth)
+}
+
+/// A place a `set` may write, which starts from a variable: one of
+/// `held_place`'s but a hinted one.
+fn held_target(rng: &mut SeededRng, ty: &str, depth: u32) -> String {
+    let pick = |rng: &mut SeededRng, xs: &[&str]| xs[rng.random_range(0..xs.len())].S();
+    match ty {
+        "u8" => match rng.random_range(0..4) {
+            0 => fmt!("xs[{}]!", held_expr(rng, "index", depth)),
+            1 => fmt!("r.l[{}]!", held_expr(rng, "index", depth)),
+            _ => pick(rng, &["n", "n", "r.x", "r.t.0"]),
+        },
+        "string" => match rng.random_range(0..4) {
+            0 => fmt!("ls[{}]!", held_expr(rng, "index", depth)),
+            _ => pick(rng, &["s", "s", "s", "r.s", "r.t.1"]),
+        },
+        "list" => pick(rng, &["xs", "xs", "r.l"]),
+        _ => unreachable!("no place of type {ty}"),
+    }
+}
+
+/// A place of `r` or of a variable, of `ty` or of all of `R`, near the
+/// places the others name.
+fn held_near(rng: &mut SeededRng, ty: &str) -> String {
+    let pick = |rng: &mut SeededRng, xs: &[&str]| xs[rng.random_range(0..xs.len())].S();
+    match ty {
+        "string" => pick(rng, &["s", "r.s", "r.t.1", "ls[(: index / 0)]!", "ls[i]!"]),
+        "u8" => pick(rng, &["n", "r.x", "r.t.0", "r.l[(: index / 0)]!", "xs[i]!"]),
+        "list" => pick(rng, &["xs", "r.l"]),
+        _ => unreachable!("no place of type {ty}"),
+    }
+}
+
+/// An expression that writes a place near `held_near`'s, or moves one.
+fn held_write(rng: &mut SeededRng, ty: &str) -> String {
+    match (ty, rng.random_range(0..3)) {
+        ("u8", 0) => fmt!("set9(mut {})", held_near(rng, "u8")),
+        ("u8", 1) => fmt!("put(out {})", held_near(rng, "u8")),
+        ("u8", _) => "mr(mut r)".S(),
+        ("string", 0) => "s".S(),
+        ("string", _) => fmt!("ms(mut {})", held_near(rng, "string")),
+        ("index", 0) => fmt!("grow(mut {})", held_near(rng, "list")),
+        ("index", 1) => "eat(s)".S(),
+        ("index", _) => "seti(mut i)".S(),
+        _ => unreachable!("no write of type {ty}"),
+    }
+}
+
+/// A statement that holds a place while it writes or moves one near it: an
+/// operator's operand, a `ref` or `mut` argument, an index's base, a place's
+/// keys, or a `set`'s keys and compound value, each held over a write.
+fn held_pair(rng: &mut SeededRng) -> String {
+    match rng.random_range(0..9) {
+        0 => fmt!("debuglog {} == {}", held_near(rng, "string"), held_write(rng, "string")),
+        1 => fmt!("debuglog keep(ref {}, {})", held_near(rng, "string"), held_write(rng, "string")),
+        2 => fmt!("debuglog pick(ref {}, {})", held_near(rng, "string"), held_write(rng, "u8")),
+        3 => fmt!("debuglog add9(mut {}, {})", held_near(rng, "u8"), held_write(rng, "u8")),
+        4 => fmt!("debuglog lr(ref r, {})", held_write(rng, "u8")),
+        5 => fmt!("debuglog {}[{}]!", held_near(rng, "list"), held_write(rng, "index")),
+        6 => fmt!("debuglog ls[{}]! == {}", held_write(rng, "index"), held_write(rng, "string")),
+        7 => fmt!("set {}[{}]! = {}", held_near(rng, "list"), held_write(rng, "index"), held_write(rng, "u8")),
+        _ => fmt!("set ls[{}]! = {}", held_write(rng, "index"), held_write(rng, "string")),
+    }
+}
+
+/// A script for `held_agrees`: the prelude and one statement, a `debuglog`
+/// of an expression or a `set`, plain or compound, through keys, or one made
+/// to hold a place while it writes one near it.
+fn held_script(rng: &mut SeededRng) -> String {
+    if rng.random_range(0..2) == 0 {
+        return fmt!("{HELD_PRELUDE}{}\n", held_pair(rng));
+    }
+    let depth = rng.random_range(1..=3);
+    let stmt = match rng.random_range(0..6) {
+        0 | 1 => {
+            let ty = ["u8", "string", "index", "bool"][rng.random_range(0..4)];
+            fmt!("debuglog {}", held_expr(rng, ty, depth))
+        }
+        2 => fmt!("set {} = {}", held_target(rng, "u8", depth), held_expr(rng, "u8", depth)),
+        3 => fmt!("set {} +!= {}", held_target(rng, "u8", depth), held_expr(rng, "u8", depth)),
+        4 => fmt!("set {} = {}", held_target(rng, "string", depth), held_expr(rng, "string", depth)),
+        _ => fmt!("set ls[{}]! = {}", held_expr(rng, "index", depth), held_expr(rng, "string", depth)),
+    };
+    fmt!("{HELD_PRELUDE}{stmt}\n")
+}
+
+/// The ownership codes the CLI reports of a script, in order, or none if it
+/// ran.
+fn ownership_codes(text: &str) -> Vec<String> {
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let binary = workspace.join("target").join(profile).join("datalove");
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("script.dl");
+    std::fs::write(&path, text).X();
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.arg("script").arg(&path);
+    let (status, lines) = run_bounded(cmd, std::time::Duration::from_secs(5));
+    assert!(status.is_some(), "a script of empty functions timed out:\n{text}");
+    lines.iter()
+        .filter(|l| l.starts_with("[O") && l.contains("] Error:"))
+        .map(|l| l[1..l.find(']').X()].S())
+        .collect()
+}
+
+/// O017 as the model decides it (`formal/Datalove/FunHeld.lean`) held to the
+/// Rust's, on statements whose operands and arguments read places that later
+/// ones take `mut`, `out` or move: the model says a statement is O017 where,
+/// and only where, the CLI reports O017 among its errors. A script the
+/// model's checker refuses, or the Rust refuses with other codes alone, is
+/// counted and skipped.
+#[test]
+fn held_agrees() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the held operand tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let mut cases = Vec::new();
+    for seed in seeds.iter() {
+        // Three statements a seed, since each is a single line.
+        for k in 0..3 {
+            let mut rng = SeededRng::derive(seed, &fmt!("held {k}"));
+            let text = held_script(&mut rng);
+            let (_, script, _) = rust_side(&text);
+            cases.push((fmt!("seed {seed}.{k}"), text, script));
+        }
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script)| json!({ "held": script })).collect();
+    let answers = ask_oracle(&queries);
+
+    let checked: Vec<usize> = (0..cases.len()).filter(|&n| {
+        answers[n].get("unsupported").is_none() && answers[n]["codes"].as_array().X().is_empty()
+    }).collect();
+    let rust: Vec<Vec<String>> = {
+        use rmx::rayon::prelude::*;
+        checked.par_iter().map(|&n| ownership_codes(&cases[n].1)).collect()
+    };
+
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    for oracle in &answers {
+        if let Some(why) = oracle.get("unsupported") {
+            *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
+        } else if !oracle["codes"].as_array().X().is_empty() {
+            *outcomes.entry("model checker refuses".S()).or_default() += 1;
+        }
+    }
+    let mut mismatches = Vec::new();
+    for (&n, codes) in checked.iter().zip(&rust) {
+        let (what, text, _) = &cases[n];
+        let model = answers[n]["held"].as_array().X().last().X().as_bool().X();
+        let rust_held = codes.iter().any(|c| c == "O017");
+        if !rust_held && !codes.is_empty() {
+            *outcomes.entry(fmt!("rust refuses {}", codes[0])).or_default() += 1;
+            continue;
+        }
+        *outcomes.entry(if rust_held { "O017" } else { "accepted" }.S()).or_default() += 1;
+        if model != rust_held {
+            let stmt = text.lines().last().X();
+            mismatches.push(fmt!("{what}: {stmt}\n    rust {codes:?}, model O017: {model}"));
+        }
+    }
+    println!(
+        "{} statements over seeds {}..{}: {} differ; {outcomes:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(15) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model decide O017 differently on {} statements", mismatches.len());
+}
