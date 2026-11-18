@@ -1,0 +1,21 @@
+// A `break` written after a `ret` is never reached, and what the loop holds
+// is as the `ret` left it, not given away.
+//
+// Ownership marked every binding a `ret` drops as moved, so a dead `break`
+// after it left its loop with them all moved. A `for` around that loop then
+// read its borrowed list as moved at the end of its body, and asked where it
+// was moved, which nothing had recorded: the analysis panicked. Dead code
+// reading what a `ret` drops was refused as a use after a move it is not.
+fun first(l: [u8], s: string): u8
+  for w in ref l
+    loop
+      debuglog s
+      ret w
+      debuglog s
+      break
+    end loop
+  end for
+  ret : u8 / 0
+end fun
+debuglog first([7, 8], "looped")
+debuglog first([], "never")

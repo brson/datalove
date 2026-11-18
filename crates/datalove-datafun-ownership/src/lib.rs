@@ -2348,12 +2348,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx:
     let drops = ctx.live_bindings_for_return();
     // Recorded even when empty: a var a loop turns out to give a value
     // joins it afterwards (`maybe_held`).
-    ctx.schedule.before_return.insert(stmt_idx, drops.C());
-
-    // Mark dropped bindings as Moved so they're not included in scope exit drops.
-    for id in drops {
-        ctx.set_state(id, BindingState::Moved);
-    }
+    ctx.schedule.before_return.insert(stmt_idx, drops);
 }
 
 fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx: usize) {

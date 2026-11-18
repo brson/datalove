@@ -1985,9 +1985,8 @@ fn init_script(rng: &mut SeededRng) -> String {
     fmt!("{INIT_PRELUDE}fun f(out p: int, c: bool, o: ?int, e: E, l: [int]): ?int\n{body}end fun\n")
 }
 
-/// The ownership codes the CLI reports for a script, in order, or what it
-/// printed where it panicked.
-fn rust_ownership_codes(text: &str) -> Result<Vec<String>, String> {
+/// The ownership codes the CLI reports for a script, in order.
+fn rust_ownership_codes(text: &str) -> Vec<String> {
     let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
     let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
     let binary = workspace.join("target").join(profile).join("datalove");
@@ -1998,11 +1997,9 @@ fn rust_ownership_codes(text: &str) -> Result<Vec<String>, String> {
     let mut cmd = std::process::Command::new(&binary);
     cmd.arg("script").arg(&path);
     let (_, lines) = run_bounded(cmd, std::time::Duration::from_secs(5));
-    if lines.iter().any(|l| l.contains("panicked at")) {
-        return Err(lines.join("\n"));
-    }
+    assert!(!lines.iter().any(|l| l.contains("panicked at")), "the Rust panics on:\n{text}\n{}", lines.join("\n"));
     let code = rmx::regex::Regex::new(r"^\[(O[0-9]+)\] Error:").X();
-    Ok(lines.iter().filter_map(|l| code.captures(l).map(|c| c[1].S())).collect())
+    lines.iter().filter_map(|l| code.captures(l).map(|c| c[1].S())).collect()
 }
 
 /// O005, O006 and O009 as the model decides them (`formal/Datalove/FunInit.lean`)
@@ -2042,13 +2039,7 @@ fn init_agrees() {
             continue;
         }
         let model = oracle["init"].as_str().map(|c| c.S());
-        let rust = match rust_ownership_codes(text) {
-            Ok(codes) => codes,
-            Err(_) => {
-                *outcomes.entry("rust panics".S()).or_default() += 1;
-                continue;
-            }
-        };
+        let rust = rust_ownership_codes(text);
         if let Some(other) = rust.iter().find(|c| !INIT_CODES.contains(&c.as_str())) {
             *outcomes.entry(fmt!("rust refuses {other}")).or_default() += 1;
             continue;
