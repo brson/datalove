@@ -486,7 +486,7 @@ Fresh run result: `a == 100`, `b == 11`, `c == `11`.
 Unit 1, 3, 4 rerun.
 Unit 1 reruns because _the old version of unit 3_ updated `a`.
 Unit 4 reruns because _the new version of unit 3_ updated `b`.
-Without the reruns: `a == 101`, `b == 11`, `c == 10`.
+Without the reruns: `a == 101`, `b == 11`, `c == 10`. (would be nice to have a 2 here).
 
 
 
