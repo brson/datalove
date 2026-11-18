@@ -1,0 +1,14 @@
+// A script that returns early from its top level keeps its bindings, as one
+// that ends does, and an AOT program destroys them before it returns.
+//
+// The session keeps a unit's frame when it returns early, so ownership takes
+// the bindings kept at the unit's end out of what its early exits drop. The
+// AOT backends returned from the script without destroying them, leaking
+// every `var` and every `let` still held there.
+var xs: [u8] = [1, 2]
+let s: string = "kept"
+let r: !u8 = er error "stop"
+debuglog xs
+debuglog s
+let z = r!
+debuglog z

@@ -25,6 +25,8 @@ Analysis(
                         v5 = const "index out of bounds"
                         v6 = error_from v5
                         v7 = err v6
+                        unit_end_drop v0
+                        unit_end_drop v1
                         unit_early_return v7
                     block2:
                         v8 = listelementref *v2[v3]

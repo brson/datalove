@@ -25,6 +25,7 @@ Analysis(
                         v4 = const "arithmetic overflow"
                         v5 = error_from v4
                         v6 = err v5
+                        unit_end_drop.tracked s1
                         unit_early_return v6
                     block2:
                         v7 = const 7int

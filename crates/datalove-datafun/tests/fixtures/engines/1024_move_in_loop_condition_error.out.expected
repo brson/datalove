@@ -41,6 +41,8 @@ Analysis(
                         branch v6, block3, block2
                     block2:
                         v7 = err v5
+                        unit_end_drop.tracked s0
+                        unit_end_drop.tracked s1
                         unit_early_return v7
                     block3:
                         v8 = const "b"

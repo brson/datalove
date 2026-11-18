@@ -1476,6 +1476,7 @@ impl<'db> LowerCtx<'db> {
             self.emit_before_try_return_drops();
         }
         let terminator = if self.is_script_unit {
+            self.emit_kept_drops_before_unit_return();
             Terminator::UnitEarlyReturn { value: Operand::Value(none_value) }
         } else {
             Terminator::Return { value: Some(Operand::Value(none_value)) }
@@ -1510,6 +1511,7 @@ impl<'db> LowerCtx<'db> {
             self.emit_before_try_return_drops();
         }
         let terminator = if self.is_script_unit {
+            self.emit_kept_drops_before_unit_return();
             Terminator::UnitEarlyReturn { value: Operand::Value(wrapped) }
         } else {
             Terminator::Return { value: Some(Operand::Value(wrapped)) }
@@ -1563,12 +1565,32 @@ impl<'db> LowerCtx<'db> {
     /// - AOT: UnitEndDrop is unconditional, UnitEndDropTracked checks tracking byte
     pub fn emit_unit_end_drops(&mut self) {
         for id in std::mem::take(&mut self.unit_end_drops) {
-            if let Some(&operand) = self.body.binding_to_operand.get(&id) {
-                if self.is_binding_tracked(id) {
-                    self.emit(Instruction::UnitEndDropTracked { operand });
-                } else {
-                    self.emit(Instruction::UnitEndDrop { operand });
-                }
+            self.emit_unit_end_drop(id);
+        }
+    }
+
+    /// Emit, before a script unit's early return, the unit-end drops of the
+    /// bindings it keeps that are bound by now.
+    ///
+    /// A unit that returns early keeps its frame as one that ends does, so
+    /// ownership takes these out of what its exits drop
+    /// (`drop_kept_from_exits`). The interpreter's session destroys the frame
+    /// when it ends, and these are no-ops there; an AOT program's frame ends
+    /// with the script, which destroys what it keeps here as at `UnitEnd`. A
+    /// binding not bound yet is not reached: lowering binds a script-level
+    /// binding once its statement's initializer has run.
+    pub fn emit_kept_drops_before_unit_return(&mut self) {
+        for id in self.unit_end_drops.clone() {
+            self.emit_unit_end_drop(id);
+        }
+    }
+
+    fn emit_unit_end_drop(&mut self, id: BindingId) {
+        if let Some(&operand) = self.body.binding_to_operand.get(&id) {
+            if self.is_binding_tracked(id) {
+                self.emit(Instruction::UnitEndDropTracked { operand });
+            } else {
+                self.emit(Instruction::UnitEndDrop { operand });
             }
         }
     }

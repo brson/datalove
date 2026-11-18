@@ -143,12 +143,14 @@ Analysis(
                         v12 = error_from v11
                         v13 = err v12
                         drop v6
+                        unit_end_drop.tracked s0
                         unit_early_return v13
                     block5:
                         v14, v15, v16 = unwrap_result v6
                         branch v16, block7, block6
                     block6:
                         v17 = err v15
+                        unit_end_drop.tracked s0
                         unit_early_return v17
                     block7:
                         unit_end_drop.tracked s0

@@ -25,6 +25,7 @@ Analysis(
                         v7 = const "index out of bounds"
                         v8 = error_from v7
                         v9 = err v8
+                        unit_end_drop v3
                         unit_early_return v9
                     block2:
                         debuglog v5

@@ -28,6 +28,7 @@ Analysis(
                         v10 = const "index out of bounds"
                         v11 = error_from v10
                         v12 = err v11
+                        unit_end_drop v6
                         unit_early_return v12
                     block2:
                         v13 = getfieldref v8.0
@@ -41,6 +42,7 @@ Analysis(
                         v18 = const "index out of bounds"
                         v19 = error_from v18
                         v20 = err v19
+                        unit_end_drop v6
                         unit_early_return v20
                     block4:
                         v21 = getfieldref v16.0

@@ -516,8 +516,10 @@ fn lower_statement_for_script<'db>(
                 ctx.emit_const(unit_val, ConstValue::Unit);
                 Operand::Value(unit_val)
             };
-            // Emit drops for nested scopes (but not top-level bindings).
+            // Emit drops for nested scopes, then the unit-end drops of the
+            // top-level bindings the unit keeps.
             ctx.emit_before_return_drops(stmt_idx);
+            ctx.emit_kept_drops_before_unit_return();
             ctx.finish_block(Terminator::UnitEarlyReturn { value });
             // Start a new unreachable block.
             let new_block = ctx.fresh_block();
