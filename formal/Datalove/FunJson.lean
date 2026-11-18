@@ -134,7 +134,7 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
   let sub (k : String) : Except String Expr := do exprFromSerde (← field e k)
   let list (k : String) : Except String (List Expr) := do
     (← (← field e k).getArr?).toList.mapM exprFromSerde
-  let core : Expr ← match kind with
+  match kind with
     | "True" => pure .tt
     | "False" => pure .ff
     | "None" => pure .none_
@@ -150,7 +150,7 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
       .hex <$> Lit.hexValue ((s.drop 2).toString)
     | "List" => .list <$> list "elements"
     | "Set" => .set <$> list "elements"
-    | "AnonTuple" | "Tuple" => .tuple <$> list "elements"
+    | "Tuple" => .tuple <$> list "elements"
     | "Tensor" => do
       let shape ← (← (← field e "shape").getArr?).toList.mapM (·.getNat?)
       pure (.tensor shape (← list "elements"))
@@ -175,7 +175,7 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
     | "Atom" => .atom <$> (← field e "name").getStr?
     | "Term" => .term <$> (← field e "name").getStr? <*> sub "payload"
     | "EnumLiteral" => .enum <$> sub "variant"
-    | "Hinted" => sub "inner"
+    | "Hinted" => .hinted <$> hintFromSerde (← field e "type_hint") <*> sub "inner"
     -- A place the Rust folded a hint into, `(: T / p).a`, is the hint as
     -- written with the steps after it on what it hints.
     | "Place" => do
@@ -208,10 +208,6 @@ partial def exprFromSerde (j : Json) : Except String Expr := do
           if m.isNull then pure Option.none else do pure (Option.some (← modeOf (← m.getStr?)))
       pure (.call name (modes.zip args))
     | other => unsupported other
-  -- A literal carries its own hint; `Hinted` its, around what is inside.
-  match optField e "type_hint" with
-  | Option.some h => pure (.hinted (← hintFromSerde h) core)
-  | Option.none => pure core
 
 end
 

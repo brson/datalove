@@ -543,7 +543,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
 
         // Check if it starts with a type hint (`:`) - use new inline variants.
         if self.peek_colon_type_hint() {
-            return self.parse_lit_expr_full();
+            return self.parse_hinted();
         }
 
         // Peek the next token to determine how to parse this expression.
@@ -559,7 +559,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                 "true" | "false" | "none" => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(None);
+                                    let expr_kind = self.parse_lit_expr();
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // some/ok/er are always keywords - they require a payload expression.
@@ -569,11 +569,12 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     self.next(); // consume the keyword
                                     let payload = self.parse_payload();
                                     let expr_kind = match word {
-                                        "some" => ast::ExprFunKind::Some(ast::ExprSome { type_hint: None, payload }),
-                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk { type_hint: None, payload }),
-                                        "er" => ast::ExprFunKind::Er(ast::ExprEr { type_hint: None, payload }),
+                                        "some" => ast::ExprFunKind::Some(ast::ExprSome { payload }),
+                                        "ok" => ast::ExprFunKind::Ok(ast::ExprOk { payload }),
+                                        "er" => ast::ExprFunKind::Er(ast::ExprEr { payload }),
                                         _ => unreachable!(),
                                     };
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // data/error are always keywords - they require a value expression.
@@ -582,10 +583,11 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     self.next(); // consume the keyword
                                     let value = self.parse_payload();
                                     let expr_kind = match word {
-                                        "data" => ast::ExprFunKind::Data(ast::ExprData { type_hint: None, value }),
-                                        "error" => ast::ExprFunKind::Error(ast::ExprError { type_hint: None, value }),
+                                        "data" => ast::ExprFunKind::Data(ast::ExprData { value }),
+                                        "error" => ast::ExprFunKind::Error(ast::ExprError { value }),
                                         _ => unreachable!(),
                                     };
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(expr_kind, ts)
                                 }
                                 // Atom expression: `atom Name`.
@@ -602,8 +604,10 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             );
                                         }
                                     };
+                                    // The expression is all of it, the keyword through what it holds.
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(
-                                        ast::ExprFunKind::Atom(ast::ExprAtom { type_hint: None, name }),
+                                        ast::ExprFunKind::Atom(ast::ExprAtom { name }),
                                         ts
                                     )
                                 }
@@ -622,8 +626,10 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         }
                                     };
                                     let payload = self.parse_payload();
+                                    // The expression is all of it, the keyword through what it holds.
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(
-                                        ast::ExprFunKind::Term(ast::ExprTerm { type_hint: None, name, payload }),
+                                        ast::ExprFunKind::Term(ast::ExprTerm { name, payload }),
                                         ts
                                     )
                                 }
@@ -645,8 +651,10 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     sub.eat_sigil(Sigil::Comma);
                                     sub.error_if_not_exhausted();
                                     self.merge_from_sub(&mut sub);
+                                    // The expression is all of it, the keyword through what it holds.
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(
-                                        ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { type_hint: None, variant }),
+                                        ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { variant }),
                                         ts
                                     )
                                 }
@@ -707,7 +715,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                 num if Self::is_number_word(num) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(None);
+                                    let expr_kind = self.parse_lit_expr();
                                     self.create_expr(expr_kind, ts)
                                 }
                                 _ => {
@@ -771,10 +779,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                         }
                         let value = InternedText::new(self.db, raw.S());
                         self.create_expr(
-                            ast::ExprFunKind::String(ast::ExprString {
-                                type_hint: None,
-                                value
-                            }),
+                            ast::ExprFunKind::String(ast::ExprString { value }),
                             ts,
                         )
                     }
@@ -802,7 +807,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 } else {
                     // Capture span before parsing for diagnostic reporting.
                     let ts = self.peek_text_span();
-                    let expr_kind = self.parse_lit_expr(None);
+                    let expr_kind = self.parse_lit_expr();
                     self.create_expr(expr_kind, ts)
                 }
             }

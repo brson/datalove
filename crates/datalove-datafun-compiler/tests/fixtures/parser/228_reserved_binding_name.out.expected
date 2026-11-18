@@ -15,11 +15,9 @@
             "payload": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "1"
               }
-            },
-            "type_hint": null
+            }
           }
         }
       },
@@ -40,7 +38,6 @@
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "1"
               }
             }

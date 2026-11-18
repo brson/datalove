@@ -97,9 +97,9 @@ fn check_against<'db>(
 /// parts, which a value of a recursive type is built as.
 fn builds_a_value(kind: &ExprFunKind<'_>) -> bool {
     matches!(kind,
-        ExprFunKind::None(_) | ExprFunKind::Some(_) | ExprFunKind::Ok(_) | ExprFunKind::Er(_)
+        ExprFunKind::None | ExprFunKind::Some(_) | ExprFunKind::Ok(_) | ExprFunKind::Er(_)
         | ExprFunKind::Table(_) | ExprFunKind::List(_) | ExprFunKind::Set(_) | ExprFunKind::Map(_)
-        | ExprFunKind::Tensor(_) | ExprFunKind::AnonTuple(_) | ExprFunKind::Tuple(_)
+        | ExprFunKind::Tensor(_) | ExprFunKind::Tuple(_)
         | ExprFunKind::AnonStruct(_) | ExprFunKind::Atom(_) | ExprFunKind::Term(_)
         | ExprFunKind::EnumLiteral(_))
 }
@@ -121,7 +121,7 @@ fn check_unhinted<'db>(
         }
 
         // Handle None literals specially - they can check against any Option type.
-        ExprFunKind::None(_lit) => {
+        ExprFunKind::None => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Option(_)) => {
                     // `none` checks against any option.
@@ -273,24 +273,7 @@ fn check_unhinted<'db>(
             }
         }
 
-        // Handle tuple expressions (datalit) - check elements against expected field types.
-        ExprFunKind::AnonTuple(tuple_expr) => {
-            match expected {
-                Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
-                    // Check elements against expected field types.
-                    check_tuple_elements(ctx, expr, &tuple_expr.elements, &expected)?;
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
-                _ => {
-                    let expected_str = type_to_string(db, expected);
-                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
-                    Err(ctx.error_type_mismatch(expr, FCode::Mismatch, &expected_str, &actual_str, "type mismatch"))
-                }
-            }
-        }
-
-        // Handle tuple expressions (datafun) - check elements against expected field types.
+        // Handle tuple expressions - check elements against expected field types.
         ExprFunKind::Tuple(tuple_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
@@ -417,12 +400,11 @@ fn check_unhinted<'db>(
             // This is how datalit reads a signed literal, which carries its
             // sign in the token rather than under an operator.
             //
-            // Only a bare literal: one with a hint of its own has the type the
-            // hint gives it, and is checked as anything else is, so that
+            // Only a bare literal: one under a hint has the type the hint
+            // gives it, and is checked as anything else is, so that
             // `-(: string / 8)` is no `i8`.
             if let (Type::Datalit(expected_datalit_ty), ExprFunKind::Int(int_expr)) =
                 (expected, expr.at(unary.operand).kind())
-                && int_expr.type_hint.is_none()
             {
                 if is_fixed_int_type(expected) {
                     let negated = format!("-{}", int_expr.value.as_str(db));
@@ -746,7 +728,7 @@ pub fn check_map_entries<'db>(
 pub fn check_tensor_shape_and_elements<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    tensor_expr: ExprTensor<'db>,
+    tensor_expr: ExprTensor,
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;

@@ -1,0 +1,80 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn run():
+                    block0:
+                        v0 = const 7u8
+                        v1 = const "a-long-heap-string-0123456789"
+                        v2 = pack struct {v0, v1}
+                        v3 = const 3u32
+                        v4 = some v3
+                        v5 = getfield v2.0
+                        v6, v7 = unwrap_option v4
+                        branch v7, block2, block1
+                    block1:
+                        v8 = none
+                        drop v2
+                        return v8
+                    block2:
+                        v9 = getfield v2.0
+                        v10 = const 9u8
+                        v11 = list [v9, v10]
+                        v12 = const 1index
+                        v13, v14 = listget v11[v12]
+                        branch v14, block4, block3
+                    block3:
+                        v15 = none
+                        drop v11
+                        drop v2
+                        return v15
+                    block4:
+                        drop v11
+                        v16 = getfieldref v2.1
+                        v17 = clone *v16
+                        v18 = const 5u8
+                        v19 = copy v18
+                        v20 = pack tuple/5 {v5, v6, v13, v17, v19}
+                        debuglog v20
+                        drop v20
+                        v21 = some v5
+                        drop v2
+                        return v21
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u0()
+                        debuglog v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, 3, 9, \"a-long-heap-string-0123456789\", 5)\nsome 7\n"),
+        ),
+    ],
+)

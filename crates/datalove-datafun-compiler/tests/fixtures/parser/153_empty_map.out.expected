@@ -13,8 +13,7 @@
         "value": {
           "expr": {
             "entries": [],
-            "kind": "Map",
-            "type_hint": null
+            "kind": "Map"
           }
         }
       }

@@ -787,12 +787,11 @@ hints that disagree, and `: u32 / (1)` is the same as `: u32 / 1`. Datalit
 checks hints the same way.
 
 Postfix lands on the expression under the hint, as it does on the payload of
-`some` and its fellows: `: u32 / o?` hints what the `?` produces, not the option
-it unwraps. A literal is the exception, because the hint is what makes it a
-value of that type: after a number, a string, a constructor, a collection or a
-parenthesized expression the hint stays on that literal and postfix comes after
-it, so `: u8 / 5@` is the `u8` 5, adapted, and `: u32 / (o)?` hints `o`. A hint
-directly under another, `: u8 / : u8 / 1`, is refused (P080); parenthesize the
+`some` and its fellows, whatever that expression is: `: u32 / o?` hints what
+the `?` produces, not the option it unwraps, and so does `: u32 / (o)?`;
+`: u8 / (p).x` hints the field, and `: u8 / [a, b][i]!` the element. To hint
+the literal and put a postfix after it, parenthesize the hint:
+`(: u8 / 5)@`. A hint directly under another, `: u8 / : u8 / 1`, is refused (P080); parenthesize the
 inner one. A hint takes nothing of its own, so the expression under it moves
 what it would have moved written without one.
 

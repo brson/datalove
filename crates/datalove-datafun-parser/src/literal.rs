@@ -6,7 +6,7 @@ use datalove_diagnostic_codes::{Code, DCode, PCode};
 use rmx::prelude::*;
 
 use bct::{
-    lexer::{TokenKind, Sigil},
+    lexer::Sigil,
     bracer::{Cursor, TreeToken},
     split,
     text::InternedText,
@@ -20,247 +20,97 @@ use datalove_diagnostic::DiagnosticBuilderExt;
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
-    /// Parse a literal expression into new inline variants.
+    /// Parse `: type / expression`.
     ///
-    /// This handles the `: type / expr` pattern.
-    pub(super) fn parse_lit_expr_full(&mut self) -> ast::ExprId {
-        // The span runs from the hint, if there is one, to the end of what it
-        // is on, so that a diagnostic about either points at both.
+    /// The hint is on a unary expression and the postfix operators written on
+    /// it, whatever the expression is: `: u32 / o?` hints what the `?`
+    /// produces, `: u8 / (p).x` the field, and `: u8 / (a, b).0` the element.
+    /// Nothing about the operand changes how far the hint reaches.
+    pub(super) fn parse_hinted(&mut self) -> ast::ExprId {
+        // The span runs from the hint to the end of what it is on, so that a
+        // diagnostic about either points at both.
         let ts = self.peek_text_span();
-
-        // Check for `: type / expr` pattern.
-        if self.peek_sigil(Sigil::Colon) {
-            self.eat_sigil(Sigil::Colon);
-            let type_hint = self.parse_type_hint();
-            // A type that did not parse was reported, and what follows it is
-            // whatever the writer meant by it; a missing `/` would say the
-            // same thing twice.
-            if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
-                let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    source: e.source, span: e.span.C(), message: e.message,
-                });
-                return self.create_expr(kind, ts);
-            }
-            // Expect `/` after type hint.
-            if !self.eat_sigil(Sigil::SlashForward) {
-                let ts = self.peek_text_span();
-                return self.emit_expr_error(ts,
-                    "expected '/' after type hint in `: type / expr` pattern",
-                    DCode::HintWithoutSlash,
-                    "expected '/'"
-                );
-            }
-            // A literal form has a field for the hint and takes it directly.
-            // Anything else -- a name, a call -- has none, so the hint goes on
-            // a wrapper around it. The spec's `: type / expression` admits
-            // both; only the literal grammar is narrower.
-            let expr_kind = if self.peek_starts_lit_expr() {
-                self.parse_lit_expr(Some(type_hint))
-            } else {
-                let inner = self.parse_expr_primary();
-                // Postfix onto the expression under the hint, the way `some`
-                // and its fellows take it onto their payload: `: u32 / o?`
-                // hints what the `?` produces, not the option it unwraps.
-                let inner = self.parse_postfix_try_operators(inner);
-                ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner })
-            };
-            let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
-            return self.create_expr(expr_kind, ts);
+        self.eat_sigil(Sigil::Colon);
+        let type_hint = self.parse_type_hint();
+        // A type that did not parse was reported, and what follows it is
+        // whatever the writer meant by it; a missing `/` would say the same
+        // thing twice.
+        if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
+            let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                source: e.source, span: e.span.C(), message: e.message,
+            });
+            return self.create_expr(kind, ts);
         }
-
-        let expr_kind = self.parse_lit_expr(None);
-        self.create_expr(expr_kind, ts)
-    }
-
-    /// Whether what comes next is a form [`Self::parse_lit_expr`] can read.
-    ///
-    /// Everything but a bare name is: numbers, strings, the literal keywords,
-    /// and the bracketed collection forms. A name reaching `parse_lit_expr`
-    /// became an "unexpected identifier" parse error, which is what made
-    /// `: u32 / n` fail for any `n`.
-    fn peek_starts_lit_expr(&self) -> bool {
-        let Some(TreeToken::Token(token)) = self.peek() else {
-            // A branch -- `(`, `[`, `{`, `%{`, `#{`, `[|`, `{|` -- is a
-            // collection or aggregate literal.
-            return true;
-        };
-        // A `-` is a literal's sign only where a decimal number is written
-        // against it, which is where the number reader takes it. Anywhere
-        // else it is the negation operator, over a name or a hex literal.
-        if token.kind == TokenKind::Sigil(Sigil::Minus) {
-            return self.glued_right() && matches!(
-                self.peek_next(),
-                Some(TreeToken::Token(next))
-                    if next.word_str(self.text()).is_some_and(|w| Self::is_number_word(w) && !parser_util::is_hex_word(w))
+        if !self.eat_sigil(Sigil::SlashForward) {
+            let ts = self.peek_text_span();
+            return self.emit_expr_error(ts,
+                "expected '/' after type hint in `: type / expr` pattern",
+                DCode::HintWithoutSlash,
+                "expected '/'"
             );
         }
-        if token.kind != TokenKind::Word {
-            return true;
-        }
-        let Some(word) = token.word_str(self.text()) else {
-            return true;
-        };
-        if Self::is_number_word(word) {
-            return true;
-        }
-        matches!(
-            word,
-            "true" | "false" | "none" | "some" | "ok" | "er"
-                | "data" | "error" | "atom" | "term" | "enum"
-        )
-    }
-
-    /// Parse a literal expression (keywords and literals).
-    pub(super) fn parse_lit_expr(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        // A number, taking the sign written against it where there is one.
-        // In an expression the prefix operator has already claimed a `-`, so
-        // one reaching here belongs to the literal.
-        if let Some(number) = parser_util::eat_number(self) {
-            return self.number_expr(type_hint, number);
-        }
-
-        if self.peek_sigil(Sigil::Minus) {
+        // Two hints on one expression would have to agree, and the second
+        // says nothing the first does not.
+        if self.peek_colon_type_hint() {
             let ts = self.peek_text_span();
             self.next();
-            return self.lit_error(ts, "unexpected minus sign", PCode::UnexpectedToken,
-                "a sign is written against the number it signs");
+            return self.emit_expr_error(ts,
+                "a type hint cannot be written directly under another",
+                PCode::UnexpectedToken,
+                "parenthesize the inner hint"
+            );
+        }
+        let inner = self.parse_expr_primary();
+        if matches!(self.expr_kind(inner), ast::ExprFunKind::ParseError(_)) {
+            return inner;
+        }
+        let inner = self.parse_postfix_try_operators(inner);
+        let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
+        self.create_expr(ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner }), ts)
+    }
+
+    /// Parse a number, `true`, `false`, `none`, or a bracketed literal.
+    ///
+    /// The rest of the literal forms -- strings, the constructors, atoms,
+    /// terms, enums and parentheses -- are read where any expression is, by
+    /// [`Self::parse_expr_primary`].
+    pub(super) fn parse_lit_expr(&mut self) -> ast::ExprFunKind<'db> {
+        // A number. In an expression the prefix operator has already claimed
+        // a `-`, so there is no sign for this to take.
+        if let Some(number) = parser_util::eat_number(self) {
+            return self.number_expr(number);
         }
 
-        // Check for keywords.
         match self.peek_word() {
             Some("true") => {
                 self.eat_word("true");
-                return ast::ExprFunKind::True(ast::ExprLit { type_hint });
+                return ast::ExprFunKind::True;
             }
             Some("false") => {
                 self.eat_word("false");
-                return ast::ExprFunKind::False(ast::ExprLit { type_hint });
+                return ast::ExprFunKind::False;
             }
             Some("none") => {
                 self.eat_word("none");
-                return ast::ExprFunKind::None(ast::ExprLit { type_hint });
-            }
-            Some("some") => {
-                self.eat_word("some");
-                let payload = self.parse_payload();
-                return ast::ExprFunKind::Some(ast::ExprSome { type_hint, payload });
-            }
-            Some("ok") => {
-                self.eat_word("ok");
-                let payload = self.parse_payload();
-                return ast::ExprFunKind::Ok(ast::ExprOk { type_hint, payload });
-            }
-            Some("er") => {
-                self.eat_word("er");
-                let payload = self.parse_payload();
-                return ast::ExprFunKind::Er(ast::ExprEr { type_hint, payload });
-            }
-            Some("data") => {
-                self.eat_word("data");
-                // Parse any datafun expression (superset of datalit).
-                let value = self.parse_payload();
-                return ast::ExprFunKind::Data(ast::ExprData { type_hint, value });
-            }
-            Some("error") => {
-                self.eat_word("error");
-                // Parse any datafun expression (superset of datalit).
-                let value = self.parse_payload();
-                return ast::ExprFunKind::Error(ast::ExprError { type_hint, value });
-            }
-            Some("atom") => {
-                let ts = self.peek_text_span();
-                self.eat_word("atom");
-                let name = match self.eat_name() {
-                    Some(n) => n,
-                    None => return self.lit_error(ts,
-                        "expected name after 'atom'",
-                        DCode::AtomWithoutName,
-                        "expected atom name",
-                    ),
-                };
-                return ast::ExprFunKind::Atom(ast::ExprAtom { type_hint, name });
-            }
-            Some("term") => {
-                let ts = self.peek_text_span();
-                self.eat_word("term");
-                let name = match self.eat_name() {
-                    Some(n) => n,
-                    None => return self.lit_error(ts,
-                        "expected name after 'term'",
-                        DCode::TermWithoutName,
-                        "expected term name",
-                    ),
-                };
-                let payload = self.parse_payload();
-                return ast::ExprFunKind::Term(ast::ExprTerm { type_hint, name, payload });
-            }
-            Some("enum") => {
-                let ts = self.peek_text_span();
-                self.eat_word("enum");
-                let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
-                    return self.lit_error(ts,
-                        "expected '{' after 'enum'",
-                        DCode::EnumLiteralWithoutBrace,
-                        "expected '{'",
-                    );
-                };
-                let mut sub = self.sub_parser(inner, None);
-                let variant = sub.parse_expr_full();
-                // A trailing comma closes the one item, as it may anywhere.
-                sub.eat_sigil(Sigil::Comma);
-                sub.error_if_not_exhausted();
-                self.merge_from_sub(&mut sub);
-                return ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { type_hint, variant });
+                return ast::ExprFunKind::None;
             }
             _ => {}
         }
 
-        // Check for numbers, strings, or branches.
         match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                match token.kind {
-                    TokenKind::Word => {
-                        // A word beginning with a digit was read as a number
-                        // above, so whatever is left here is a name.
-                        let word = token.word_str(self.text()).X();
-                        let ts = self.peek_text_span();
-                        self.next();
-                        return self.lit_error(ts, &format!("unexpected identifier '{}'", word),
-                            PCode::UnexpectedToken, "not a literal");
-                    }
-                    TokenKind::String => {
-                        let raw = token.text(self.text());
-                        let ts = self.peek_text_span();
-                        self.next();
-                        if let Err(error) = parser_util::string_literal_value(raw) {
-                            let (message, label) = parser_util::escape_complaint(&error);
-                            return self.lit_error(ts, &message, DCode::BadStringEscape, &label);
-                        }
-                        let value = InternedText::new(self.db, raw.S());
-                        return ast::ExprFunKind::String(ast::ExprString { type_hint, value });
-                    }
-                    _ => {
-                        let ts = self.peek_text_span();
-                        self.next();
-                        return self.lit_error(ts, "unexpected token in expression", PCode::UnexpectedToken,
-                            "unexpected token");
-                    }
-                }
+            Some(TreeToken::Token(_)) | None => {
+                unreachable!("parse_expr_primary reads every other token")
             }
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
-                // Anonymous tuple.
-                return self.parse_lit_anon_tuple(type_hint);
+                unreachable!("a parenthesis is read by parse_datafun_tuple")
             }
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Anonymous struct.
-                return self.parse_lit_anon_struct(type_hint);
+                return self.parse_lit_anon_struct();
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
-                return self.parse_lit_list(type_hint);
+                return self.parse_lit_list();
             }
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
                 // Map: %{k -> v, ...}
@@ -269,7 +119,7 @@ impl<'db> Parser<'db> {
                     _ => unreachable!(),
                 };
                 let entries = self.parse_comma_separated_map_entries(inner);
-                return ast::ExprFunKind::Map(ast::ExprMap { type_hint, entries });
+                return ast::ExprFunKind::Map(ast::ExprMap { entries });
             }
             Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
                 // Set: #{e, ...}
@@ -278,7 +128,7 @@ impl<'db> Parser<'db> {
                     _ => unreachable!(),
                 };
                 let elements = self.parse_comma_separated_exprs(inner);
-                return ast::ExprFunKind::Set(ast::ExprSet { type_hint, elements });
+                return ast::ExprFunKind::Set(ast::ExprSet { elements });
             }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
@@ -286,7 +136,7 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                return self.parse_lit_table(type_hint, inner);
+                return self.parse_lit_table(inner);
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
                 // Tensor: [| data |] with multi-comma separators.
@@ -294,7 +144,7 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                return self.parse_lit_tensor_multicomma(type_hint, inner);
+                return self.parse_lit_tensor_multicomma(inner);
             }
             _ => {
                 // A bracket with no expression of its own, as `(| |)` and
@@ -309,11 +159,7 @@ impl<'db> Parser<'db> {
 
 
     /// Build the expression for a number, or report how it was written.
-    fn number_expr(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
-        number: parser_util::Number,
-    ) -> ast::ExprFunKind<'db> {
+    fn number_expr(&mut self, number: parser_util::Number) -> ast::ExprFunKind<'db> {
         let ts = TextSpan::new(self.source_text(), number.span.C());
 
         if let Some((message, label)) = number.complaint() {
@@ -326,9 +172,9 @@ impl<'db> Parser<'db> {
 
         let value = InternedText::new(self.db, number.text());
         match (number.radix, number.float) {
-            (parser_util::Radix::Hex, _) => ast::ExprFunKind::Hex(ast::ExprHex { type_hint, value }),
-            (parser_util::Radix::Dec, true) => ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value }),
-            (parser_util::Radix::Dec, false) => ast::ExprFunKind::Int(ast::ExprInt { type_hint, value }),
+            (parser_util::Radix::Hex, _) => ast::ExprFunKind::Hex(ast::ExprHex { value }),
+            (parser_util::Radix::Dec, true) => ast::ExprFunKind::Float(ast::ExprFloat { value }),
+            (parser_util::Radix::Dec, false) => ast::ExprFunKind::Int(ast::ExprInt { value }),
         }
     }
 
@@ -359,41 +205,11 @@ impl<'db> Parser<'db> {
         parser_util::is_number_word(s)
     }
 
-    /// Parse anonymous tuple: (expr, expr, ...)
-    ///
-    /// Caller must have already peeked and confirmed a `ParenOpen` branch.
-    fn parse_lit_anon_tuple(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
-            _ => unreachable!("caller must peek for ParenOpen before calling"),
-        };
-
-        let mut sub = self.sub_parser(inner, None);
-        let (mut elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
-        sub.error_if_not_exhausted();
-        self.merge_from_sub(&mut sub);
-
-        // One element and no comma is a parenthesized expression, as it is
-        // with no hint, and the hint is on what the parentheses hold.
-        if elements.len() == 1 && !had_comma {
-            let inner = elements.pop().X();
-            return match type_hint {
-                Some(type_hint) => ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner }),
-                None => self.expr_kind(inner).C(),
-            };
-        }
-        ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { type_hint, elements })
-    }
-
     /// Parse anonymous struct: { name = expr, ... }
     ///
     /// Caller must have already peeked and confirmed a `BraceOpen` branch.
     fn parse_lit_anon_struct(
         &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
@@ -401,7 +217,7 @@ impl<'db> Parser<'db> {
         };
 
         let fields = self.parse_comma_separated_struct_fields(inner);
-        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct { type_hint, fields })
+        ast::ExprFunKind::AnonStruct(ast::ExprAnonStruct { fields })
     }
 
     /// Parse list: [expr, expr, ...]
@@ -409,7 +225,6 @@ impl<'db> Parser<'db> {
     /// Caller must have already peeked and confirmed a `BracketOpen` branch.
     fn parse_lit_list(
         &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
@@ -417,13 +232,12 @@ impl<'db> Parser<'db> {
         };
 
         let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::List(ast::ExprList { type_hint, elements })
+        ast::ExprFunKind::List(ast::ExprList { elements })
     }
 
     /// Parse tensor with multi-comma syntax: [| data |]
     fn parse_lit_tensor_multicomma(
         &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
         iter: Cursor<'db>,
     ) -> ast::ExprFunKind<'db> {
         let (header, body) = split::split_tensor_header(self.text(), iter);
@@ -442,7 +256,7 @@ impl<'db> Parser<'db> {
         let (shape, elements) = self.parse_tensor_multicomma_inner(body, rank as u32);
 
         let Some(header) = header else {
-            return ast::ExprFunKind::Tensor(ast::ExprTensor { type_hint, shape, elements, header: false });
+            return ast::ExprFunKind::Tensor(ast::ExprTensor { shape, elements, header: false });
         };
 
         // Under a header the body is written flat, filled in row-major order,
@@ -452,7 +266,7 @@ impl<'db> Parser<'db> {
             let ts = TextSpan::new(self.source_text(), header.span);
             return self.lit_error(ts, &message, DCode::TensorBodyMismatch, &label);
         }
-        ast::ExprFunKind::Tensor(ast::ExprTensor { type_hint, shape: header.extents, elements, header: true })
+        ast::ExprFunKind::Tensor(ast::ExprTensor { shape: header.extents, elements, header: true })
     }
 
     /// Split a table row into its cells, reporting any stray `,`.
@@ -539,7 +353,6 @@ impl<'db> Parser<'db> {
     /// Parse table: {| header; row1; row2 |}
     fn parse_lit_table(
         &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
         iter: Cursor<'db>,
     ) -> ast::ExprFunKind<'db> {
         // A row is a line, ended by a newline or a `;`.
@@ -548,7 +361,6 @@ impl<'db> Parser<'db> {
         if rows.is_empty() {
             // Empty table: {||}.
             return ast::ExprFunKind::Table(ast::ExprTable {
-                type_hint,
                 header: vec![],
                 rows: vec![],
             });
@@ -574,7 +386,7 @@ impl<'db> Parser<'db> {
             data_rows.push(ast::ExprTableRow { elements });
         }
 
-        ast::ExprFunKind::Table(ast::ExprTable { type_hint, header, rows: data_rows })
+        ast::ExprFunKind::Table(ast::ExprTable { header, rows: data_rows })
     }
 
     /// Parse table header row (column names).

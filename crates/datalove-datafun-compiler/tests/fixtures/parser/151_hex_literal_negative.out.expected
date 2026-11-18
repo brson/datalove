@@ -12,7 +12,6 @@
             "operand": {
               "expr": {
                 "kind": "Hex",
-                "type_hint": null,
                 "value": "0x10"
               }
             }

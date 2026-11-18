@@ -200,7 +200,6 @@ pub fn writes_back<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> bool {
         ExprFunKind::Map(map) => any(&mut map.entries.iter().flat_map(|entry| [entry.key, entry.value])),
         ExprFunKind::Tensor(tensor) => any(&mut tensor.elements.iter().copied()),
         ExprFunKind::Table(table) => any(&mut table.rows.iter().flat_map(|row| row.elements.iter().copied())),
-        ExprFunKind::AnonTuple(tuple) => any(&mut tuple.elements.iter().copied()),
         ExprFunKind::AnonStruct(s) => any(&mut s.fields.iter().map(|f| f.value)),
         ExprFunKind::Some(s) => writes_back(ctx, ctx.expr(s.payload)),
         ExprFunKind::Ok(o) => writes_back(ctx, ctx.expr(o.payload)),
@@ -627,17 +626,17 @@ fn lower_expression_here<'db>(
                 }
             }
         }
-        ExprFunKind::True(_) => {
+        ExprFunKind::True => {
             let dest = ctx.fresh_value(IrType::Bool);
             ctx.emit_const(dest, ConstValue::Bool(true));
             Ok(dest)
         }
-        ExprFunKind::False(_) => {
+        ExprFunKind::False => {
             let dest = ctx.fresh_value(IrType::Bool);
             ctx.emit_const(dest, ConstValue::Bool(false));
             Ok(dest)
         }
-        ExprFunKind::None(_) => {
+        ExprFunKind::None => {
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit_wrap_none(dest);
@@ -805,9 +804,6 @@ fn lower_expression_here<'db>(
             lower_field_proj(ctx, expr, proj)
         }
         ExprFunKind::Tuple(tuple) => {
-            lower_tuple_elements(ctx, expr, &tuple.elements)
-        }
-        ExprFunKind::AnonTuple(tuple) => {
             lower_tuple_elements(ctx, expr, &tuple.elements)
         }
         ExprFunKind::List(list) => {

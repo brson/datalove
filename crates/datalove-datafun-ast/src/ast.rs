@@ -950,30 +950,29 @@ pub enum ExprFunKind<'db> {
     FieldProj(ExprFieldProj<'db>),
 
     // Literal expressions (formerly delegated to datalit).
-    True(ExprLit<'db>),
-    False(ExprLit<'db>),
-    None(ExprLit<'db>),
+    True,
+    False,
+    None,
     Int(ExprInt<'db>),
     Float(ExprFloat<'db>),
     Hex(ExprHex<'db>),
     String(ExprString<'db>),
 
     // Collection expressions.
-    List(ExprList<'db>),
-    Set(ExprSet<'db>),
-    Map(ExprMap<'db>),
-    Tensor(ExprTensor<'db>),
+    List(ExprList),
+    Set(ExprSet),
+    Map(ExprMap),
+    Tensor(ExprTensor),
 
     // Aggregate expressions.
-    AnonTuple(ExprAnonTuple<'db>),
     AnonStruct(ExprAnonStruct<'db>),
 
     // Wrapper expressions.
-    Some(ExprSome<'db>),
-    Ok(ExprOk<'db>),
-    Er(ExprEr<'db>),
-    Data(ExprData<'db>),
-    Error(ExprError<'db>),
+    Some(ExprSome),
+    Ok(ExprOk),
+    Er(ExprEr),
+    Data(ExprData),
+    Error(ExprError),
 
     // A data file, as `require data` names one. Never written as an
     // expression: `require data lib/pkg/name: T` is parsed as the const
@@ -988,14 +987,12 @@ pub enum ExprFunKind<'db> {
     // Term expression: `term Foo payload`.
     Term(ExprTerm<'db>),
     // Enum literal expression: `enum { atom Foo }` (checking-only).
-    EnumLiteral(ExprEnumLiteral<'db>),
+    EnumLiteral(ExprEnumLiteral),
 
     /// An expression written under a type hint: `: type / expression`.
     ///
-    /// Only for expressions with nowhere of their own to keep a hint. Every
-    /// literal form carries its own `type_hint` field, and the parser fills
-    /// that in rather than wrapping; this covers the rest -- a name, a call,
-    /// anything the datalit literal grammar has no form for.
+    /// The only way a hint is written on an expression: no other form keeps
+    /// one, so what a hint means cannot depend on what it is on.
     Hinted(ExprHinted<'db>),
 
     // Index expression: base[index].
@@ -1013,45 +1010,10 @@ pub enum ExprFunKind<'db> {
 
 impl<'db> ExprFunKind<'db> {
     /// The type hint written on this expression, if it has one.
-    ///
-    /// A literal form keeps its hint in its own field, and anything else is
-    /// wrapped in `Hinted`; this reads either.
     pub fn type_hint(&self) -> Option<&datalit::ast::TypeHint<'db>> {
         match self {
-            ExprFunKind::True(e) | ExprFunKind::False(e) | ExprFunKind::None(e) => e.type_hint.as_ref(),
-            ExprFunKind::Int(e) => e.type_hint.as_ref(),
-            ExprFunKind::Float(e) => e.type_hint.as_ref(),
-            ExprFunKind::Hex(e) => e.type_hint.as_ref(),
-            ExprFunKind::String(e) => e.type_hint.as_ref(),
-            ExprFunKind::List(e) => e.type_hint.as_ref(),
-            ExprFunKind::Set(e) => e.type_hint.as_ref(),
-            ExprFunKind::Map(e) => e.type_hint.as_ref(),
-            ExprFunKind::Tensor(e) => e.type_hint.as_ref(),
-            ExprFunKind::AnonTuple(e) => e.type_hint.as_ref(),
-            ExprFunKind::AnonStruct(e) => e.type_hint.as_ref(),
-            ExprFunKind::Some(e) => e.type_hint.as_ref(),
-            ExprFunKind::Ok(e) => e.type_hint.as_ref(),
-            ExprFunKind::Er(e) => e.type_hint.as_ref(),
-            ExprFunKind::Data(e) => e.type_hint.as_ref(),
-            ExprFunKind::Error(e) => e.type_hint.as_ref(),
-            ExprFunKind::Table(e) => e.type_hint.as_ref(),
-            ExprFunKind::Atom(e) => e.type_hint.as_ref(),
-            ExprFunKind::Term(e) => e.type_hint.as_ref(),
-            ExprFunKind::EnumLiteral(e) => e.type_hint.as_ref(),
             ExprFunKind::Hinted(e) => Some(&e.type_hint),
-            ExprFunKind::BinOp(_)
-            | ExprFunKind::FunctionCall(_)
-            | ExprFunKind::Tuple(_)
-            | ExprFunKind::UnaryOp(_)
-            | ExprFunKind::TryOption(_)
-            | ExprFunKind::TryResult(_)
-            | ExprFunKind::CloneCoerce(_)
-            | ExprFunKind::FieldProj(_)
-            | ExprFunKind::Index(_)
-            | ExprFunKind::Place(_)
-            | ExprFunKind::ParseError(_)
-            | ExprFunKind::DataFile(_)
-            | ExprFunKind::IntrinsicCall(_) => None,
+            _ => None,
         }
     }
 }
@@ -1195,59 +1157,45 @@ pub enum FieldSelector<'db> {
     Index(u32),
 }
 
-/// Base struct for simple literals (true, false, none).
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub struct ExprLit<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-}
-
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprInt<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprFloat<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprHex<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprString<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprList<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprList {
     pub elements: Vec<ExprId>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprSet<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprSet {
     pub elements: Vec<ExprId>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprMap<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprMap {
     pub entries: Vec<ExprMapEntry>,
 }
 
@@ -1260,8 +1208,7 @@ pub struct ExprMapEntry {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprTensor<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprTensor {
     pub shape: Vec<u32>,
     pub elements: Vec<ExprId>,
     /// Whether the shape was written in a header, `[| 2 3 | ... |]`, rather
@@ -1271,15 +1218,7 @@ pub struct ExprTensor<'db> {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprAnonTuple<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub elements: Vec<ExprId>,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
 pub struct ExprAnonStruct<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub fields: Vec<ExprStructField<'db>>,
 }
 
@@ -1293,29 +1232,25 @@ pub struct ExprStructField<'db> {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprSome<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprSome {
     pub payload: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprOk<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprOk {
     pub payload: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprEr<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprEr {
     pub payload: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprData<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprData {
     pub value: ExprId,
 }
 
@@ -1342,15 +1277,13 @@ impl<'db> ExprDataFile<'db> {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprError<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprError {
     pub value: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprTable<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub header: Vec<InternedText<'db>>,
     pub rows: Vec<ExprTableRow>,
 }
@@ -1373,7 +1306,6 @@ pub struct ExprFunParseError<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprAtom<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub name: InternedText<'db>,
 }
 
@@ -1381,7 +1313,6 @@ pub struct ExprAtom<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprTerm<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub name: InternedText<'db>,
     pub payload: ExprId,
 }
@@ -1389,8 +1320,7 @@ pub struct ExprTerm<'db> {
 /// Enum literal expression: `enum { atom Foo }` (requires type context).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprEnumLiteral<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+pub struct ExprEnumLiteral {
     pub variant: ExprId,
 }
 

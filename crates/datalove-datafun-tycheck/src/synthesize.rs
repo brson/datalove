@@ -209,9 +209,9 @@ pub fn synthesize_expr<'db>(
 fn is_construction(kind: &ExprFunKind<'_>) -> bool {
     matches!(
         kind,
-        ExprFunKind::True(_)
-            | ExprFunKind::False(_)
-            | ExprFunKind::None(_)
+        ExprFunKind::True
+            | ExprFunKind::False
+            | ExprFunKind::None
             | ExprFunKind::Int(_)
             | ExprFunKind::Float(_)
             | ExprFunKind::Hex(_)
@@ -222,7 +222,6 @@ fn is_construction(kind: &ExprFunKind<'_>) -> bool {
             | ExprFunKind::Tensor(_)
             | ExprFunKind::Table(_)
             | ExprFunKind::Tuple(_)
-            | ExprFunKind::AnonTuple(_)
             | ExprFunKind::AnonStruct(_)
             | ExprFunKind::Some(_)
             | ExprFunKind::Ok(_)
@@ -269,7 +268,7 @@ fn report_depends_on_type_param<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'
 /// Report an expression that leaves a type open with nothing to decide it.
 fn report_open<'db>(ctx: &mut TypeContext<'db>, open: ExprFun<'db>) -> TypeError {
     let open_literal = match open.kind() {
-        ExprFunKind::None(_) => OpenLiteral::None,
+        ExprFunKind::None => OpenLiteral::None,
         ExprFunKind::Er(_) => OpenLiteral::Er,
         ExprFunKind::EnumLiteral(_) => OpenLiteral::Enum,
         ExprFunKind::List(_) => OpenLiteral::List,
@@ -295,7 +294,6 @@ pub(crate) fn builds_from_parts(kind: &ExprFunKind<'_>) -> bool {
     matches!(
         kind,
         ExprFunKind::Tuple(_)
-            | ExprFunKind::AnonTuple(_)
             | ExprFunKind::AnonStruct(_)
             | ExprFunKind::List(_)
             | ExprFunKind::Set(_)
@@ -410,15 +408,15 @@ pub fn synthesize_unhinted<'db>(
 
         // New inline variants - simple literals.
         // All these check for type hints first.
-        ExprFunKind::True(_) => {
+        ExprFunKind::True => {
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(ty)
         }
-        ExprFunKind::False(_) => {
+        ExprFunKind::False => {
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(ty)
         }
-        ExprFunKind::None(_) => {
+        ExprFunKind::None => {
             Err(ctx.error_cannot_synthesize(expr, TCode::OpenType, OpenLiteral::None.message()))
         }
         ExprFunKind::Int(_) => {
@@ -461,9 +459,6 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // Aggregate types.
-        ExprFunKind::AnonTuple(tuple_expr) => {
-            synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
-        }
         ExprFunKind::AnonStruct(struct_expr) => {
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
@@ -1723,7 +1718,7 @@ fn synthesize_field_proj<'db>(
 fn synthesize_inline_list<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    list_expr: &ExprList<'db>,
+    list_expr: &ExprList,
 ) -> Result<Type<'db>, TypeError> {
     let elements = &list_expr.elements;
 
@@ -1754,7 +1749,7 @@ fn synthesize_inline_list<'db>(
 fn synthesize_inline_set<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    set_expr: &ExprSet<'db>,
+    set_expr: &ExprSet,
 ) -> Result<Type<'db>, TypeError> {
     let elements = &set_expr.elements;
 
@@ -1784,7 +1779,7 @@ fn synthesize_inline_set<'db>(
 fn synthesize_inline_map<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    map_expr: &ExprMap<'db>,
+    map_expr: &ExprMap,
 ) -> Result<Type<'db>, TypeError> {
     let entries = &map_expr.entries;
 
@@ -1821,7 +1816,7 @@ fn synthesize_inline_map<'db>(
 fn synthesize_inline_tensor<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    tensor_expr: &ExprTensor<'db>,
+    tensor_expr: &ExprTensor,
 ) -> Result<Type<'db>, TypeError> {
     let shape = &tensor_expr.shape;
     let elements = &tensor_expr.elements;
@@ -1923,31 +1918,6 @@ fn synthesize_inline_table<'db>(
     )))
 }
 
-/// Synthesize type for inline anonymous tuple.
-fn synthesize_inline_anon_tuple<'db>(
-    ctx: &mut TypeContext<'db>,
-    _expr: ExprFun<'db>,
-    tuple_expr: &ExprAnonTuple<'db>,
-) -> Result<Type<'db>, TypeError> {
-    let _db = ctx.db;
-    let elements = &tuple_expr.elements;
-
-    let mut elem_types = Vec::new();
-    for elem in elements {
-        let elem_ty = ctx.synthesize_expr(ctx.expr(*elem))?;
-        let elem_datalit = match elem_ty {
-            Type::Datalit(dt) => dt.C(),
-            Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
-        };
-        elem_types.push(elem_datalit);
-    }
-
-    let ty = Type::Datalit(datalit::tycheck::Type::AnonTuple(
-        datalit::tycheck::TypeAnonTuple { fields: elem_types }
-    ));
-    Ok(ty)
-}
-
 /// Synthesize type for inline anonymous struct.
 fn synthesize_inline_anon_struct<'db>(
     ctx: &mut TypeContext<'db>,
@@ -1977,7 +1947,7 @@ fn synthesize_inline_anon_struct<'db>(
 fn synthesize_inline_data<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    data_expr: &ExprData<'db>,
+    data_expr: &ExprData,
 ) -> Result<Type<'db>, TypeError> {
     let value = data_expr.value;
 
@@ -1993,7 +1963,7 @@ fn synthesize_inline_data<'db>(
 fn synthesize_inline_err<'db>(
     ctx: &mut TypeContext<'db>,
     _expr: ExprFun<'db>,
-    err_expr: &ExprError<'db>,
+    err_expr: &ExprError,
 ) -> Result<Type<'db>, TypeError> {
     let value = err_expr.value;
 

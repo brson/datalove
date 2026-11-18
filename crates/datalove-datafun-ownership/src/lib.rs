@@ -1201,7 +1201,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::Map(map) => all(&mut map.entries.iter().flat_map(|entry| [entry.key, entry.value])),
             ExprFunKind::Tensor(tensor) => all(&mut tensor.elements.iter().copied()),
             ExprFunKind::Table(table) => all(&mut table.rows.iter().flat_map(|row| row.elements.iter().copied())),
-            ExprFunKind::AnonTuple(tuple) => all(&mut tuple.elements.iter().copied()),
             ExprFunKind::AnonStruct(s) => all(&mut s.fields.iter().map(|f| f.value)),
             ExprFunKind::Some(s) => self.early_return_in(self.expr(s.payload)),
             ExprFunKind::Ok(o) => self.early_return_in(self.expr(o.payload)),
@@ -1400,13 +1399,6 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::Table(table) => {
                 // Table cells are consumed, row by row.
                 for elem in table.rows.iter().flat_map(|row| &row.elements) {
-                    self.analyze_expr_moves(self.expr(*elem), true);
-                }
-                None
-            }
-            ExprFunKind::AnonTuple(tuple) => {
-                // Tuple elements are consumed.
-                for elem in &tuple.elements {
                     self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None

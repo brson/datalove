@@ -10,7 +10,6 @@
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "0"
               }
             }
@@ -37,7 +36,6 @@
                         "rhs": {
                           "expr": {
                             "kind": "Int",
-                            "type_hint": null,
                             "value": "1"
                           }
                         }
@@ -65,7 +63,6 @@
                     "rhs": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "3"
                       }
                     }

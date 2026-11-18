@@ -11,27 +11,23 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "2"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "3"
                 }
               }
             ],
-            "kind": "List",
-            "type_hint": null
+            "kind": "List"
           }
         }
       }

@@ -11,14 +11,12 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "42"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "99"
                 }
               }

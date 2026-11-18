@@ -7,9 +7,9 @@
           "message": "type mismatch",
           "span": [
             102,
-            107
+            130
           ],
-          "text": "error"
+          "text": "error \"something went wrong\""
         }
       ],
       "message": "mismatched types: expected `!string`, found `error`"

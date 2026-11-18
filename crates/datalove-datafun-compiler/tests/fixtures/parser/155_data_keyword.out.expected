@@ -8,11 +8,9 @@
         "value": {
           "expr": {
             "kind": "Data",
-            "type_hint": null,
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "42"
               }
             }

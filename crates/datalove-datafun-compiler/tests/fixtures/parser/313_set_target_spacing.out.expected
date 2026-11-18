@@ -13,14 +13,12 @@
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
               }
             ],
-            "kind": "AnonStruct",
-            "type_hint": null
+            "kind": "AnonStruct"
           }
         }
       },
@@ -39,7 +37,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "2"
           }
         }
@@ -54,13 +51,11 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               }
             ],
-            "kind": "List",
-            "type_hint": null
+            "kind": "List"
           }
         }
       },
@@ -74,7 +69,6 @@
               "index": {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "0"
                 }
               },
@@ -85,7 +79,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "2"
           }
         }
@@ -100,7 +93,6 @@
               "index": {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "0"
                 }
               },
@@ -111,7 +103,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "2"
           }
         }

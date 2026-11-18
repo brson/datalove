@@ -6,10 +6,10 @@
         {
           "message": "atom not a variant of this enum",
           "span": [
-            61,
+            94,
             104
           ],
-          "text": ": enum { atom Red, atom Blue } / atom Green"
+          "text": "atom Green"
         }
       ],
       "message": "mismatched types: expected `enum { atom Blue, atom Red }`, found `atom Green`"

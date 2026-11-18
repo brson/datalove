@@ -4,8 +4,7 @@
       {
         "condition": {
           "expr": {
-            "kind": "False",
-            "type_hint": null
+            "kind": "False"
           }
         },
         "else_body": [
@@ -59,7 +58,6 @@
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "1"
               }
             }

@@ -79,7 +79,7 @@ kind_names!(statement_name, Statement, Statement<'_>, ALL_STATEMENTS, [
 kind_names!(expr_name, ExprFunKind, ExprFunKind<'_>, ALL_EXPRS, [
     BinOp, FunctionCall, Tuple, UnaryOp, TryOption, TryResult, CloneCoerce,
     FieldProj, True, False, None, Int, Float, Hex, String, List, Set, Map,
-    Tensor, AnonTuple, AnonStruct, Some, Ok, Er, Data, Error, Table, Atom,
+    Tensor, AnonStruct, Some, Ok, Er, Data, Error, Table, Atom,
     Term, EnumLiteral, Hinted, Index, Place, ParseError, IntrinsicCall, DataFile,
 ]);
 
@@ -154,7 +154,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // written; the place forms are counted under the two place-step shapes.
     // A hint on a place folds into the place, and is counted under the two
     // hinted place shapes.
-    ("expr", "Hinted", "the generator hints only literals, which keep the hint themselves, and places"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
 
@@ -277,69 +276,34 @@ fn walk_expr<'db>(
             sub(e.base, cov);
             sub(e.index, cov);
         }
-        ExprFunKind::True(e) | ExprFunKind::False(e) | ExprFunKind::None(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov)
-        }
-        ExprFunKind::Int(e) => walk_opt_type(db, &e.type_hint, params, cov),
-        ExprFunKind::Float(e) => walk_opt_type(db, &e.type_hint, params, cov),
-        ExprFunKind::Hex(e) => walk_opt_type(db, &e.type_hint, params, cov),
-        ExprFunKind::String(e) => walk_opt_type(db, &e.type_hint, params, cov),
-        ExprFunKind::List(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            e.elements.iter().for_each(|a| sub(*a, cov));
-        }
-        ExprFunKind::Set(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            e.elements.iter().for_each(|a| sub(*a, cov));
-        }
+        ExprFunKind::True | ExprFunKind::False | ExprFunKind::None => {}
+        ExprFunKind::Int(_) | ExprFunKind::Float(_) | ExprFunKind::Hex(_) | ExprFunKind::String(_) => {}
+        ExprFunKind::List(e) => e.elements.iter().for_each(|a| sub(*a, cov)),
+        ExprFunKind::Set(e) => e.elements.iter().for_each(|a| sub(*a, cov)),
         ExprFunKind::Map(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
             for entry in e.entries.iter() {
                 sub(entry.key, cov);
                 sub(entry.value, cov);
             }
         }
-        ExprFunKind::Tensor(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            e.elements.iter().for_each(|a| sub(*a, cov));
-        }
-        ExprFunKind::AnonTuple(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            e.elements.iter().for_each(|a| sub(*a, cov));
-        }
-        ExprFunKind::AnonStruct(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            e.fields.iter().for_each(|f| sub(f.value, cov));
-        }
-        ExprFunKind::Some(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            sub(e.payload, cov);
-        }
-        ExprFunKind::Ok(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            sub(e.payload, cov);
-        }
-        ExprFunKind::Er(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            sub(e.payload, cov);
-        }
-        ExprFunKind::Data(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            sub(e.value, cov);
-        }
-        ExprFunKind::Error(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
-            sub(e.value, cov);
-        }
+        ExprFunKind::Tensor(e) => e.elements.iter().for_each(|a| sub(*a, cov)),
+        ExprFunKind::AnonStruct(e) => e.fields.iter().for_each(|f| sub(f.value, cov)),
+        ExprFunKind::Some(e) => sub(e.payload, cov),
+        ExprFunKind::Ok(e) => sub(e.payload, cov),
+        ExprFunKind::Er(e) => sub(e.payload, cov),
+        ExprFunKind::Data(e) => sub(e.value, cov),
+        ExprFunKind::Error(e) => sub(e.value, cov),
         ExprFunKind::Table(e) => {
-            walk_opt_type(db, &e.type_hint, params, cov);
             for row in e.rows.iter() {
                 row.elements.iter().for_each(|a| sub(*a, cov));
             }
         }
         ExprFunKind::Term(e) => sub(e.payload, cov),
         ExprFunKind::EnumLiteral(e) => sub(e.variant, cov),
-        ExprFunKind::Hinted(e) => sub(e.inner, cov),
+        ExprFunKind::Hinted(e) => {
+            walk_type(db, &e.type_hint, params, cov);
+            sub(e.inner, cov);
+        }
         // A place is a name and the steps taken from it, and the steps are
         // where a field projection and an indexing actually land: `v.a` and
         // `v[i]?` parse as a place with a step rather than as `FieldProj` or
@@ -635,7 +599,7 @@ fn test_core_constructs_are_common() {
         ("expr", "List", 20),
         ("expr", "Set", 10),
         ("expr", "Map", 10),
-        ("expr", "AnonTuple", 8),
+        ("expr", "Tuple", 8),
         ("expr", "Some", 10),
         ("type", "List", 20),
         ("type", "Option", 20),

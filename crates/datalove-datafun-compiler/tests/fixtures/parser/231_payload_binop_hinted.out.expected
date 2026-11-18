@@ -8,7 +8,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "2"
           }
         }
@@ -22,14 +21,19 @@
             "kind": "BinOp",
             "lhs": {
               "expr": {
-                "kind": "Ok",
-                "payload": {
+                "inner": {
                   "expr": {
-                    "kind": "Place",
-                    "root": "a",
-                    "steps": []
+                    "kind": "Ok",
+                    "payload": {
+                      "expr": {
+                        "kind": "Place",
+                        "root": "a",
+                        "steps": []
+                      }
+                    }
                   }
                 },
+                "kind": "Hinted",
                 "type_hint": {
                   "Result": {
                     "inner_type": "Int"
@@ -41,7 +45,6 @@
             "rhs": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "1"
               }
             }

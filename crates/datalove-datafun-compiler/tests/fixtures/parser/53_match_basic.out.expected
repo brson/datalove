@@ -28,8 +28,7 @@
         "value": {
           "expr": {
             "kind": "Atom",
-            "name": "Red",
-            "type_hint": null
+            "name": "Red"
           }
         }
       },
@@ -42,7 +41,6 @@
                 "value": {
                   "expr": {
                     "kind": "String",
-                    "type_hint": null,
                     "value": "\"red\""
                   }
                 }
@@ -60,7 +58,6 @@
                 "value": {
                   "expr": {
                     "kind": "String",
-                    "type_hint": null,
                     "value": "\"blue\""
                   }
                 }

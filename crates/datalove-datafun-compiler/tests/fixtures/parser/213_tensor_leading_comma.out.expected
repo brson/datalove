@@ -11,14 +11,12 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "2"
                 }
               }
@@ -28,8 +26,7 @@
             "shape": [
               1,
               2
-            ],
-            "type_hint": null
+            ]
           }
         }
       }

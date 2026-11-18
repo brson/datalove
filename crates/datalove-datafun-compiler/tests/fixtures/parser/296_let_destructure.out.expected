@@ -16,14 +16,12 @@
             "elements": [
               {
                 "expr": {
-                  "kind": "True",
-                  "type_hint": null
+                  "kind": "True"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "100"
                 }
               }
@@ -47,7 +45,6 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               }
@@ -94,7 +91,6 @@
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
@@ -104,14 +100,12 @@
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "2"
                   }
                 }
               }
             ],
-            "kind": "AnonStruct",
-            "type_hint": null
+            "kind": "AnonStruct"
           }
         }
       },
@@ -125,8 +119,7 @@
         "value": {
           "expr": {
             "kind": "Atom",
-            "name": "Foo",
-            "type_hint": null
+            "name": "Foo"
           }
         }
       },
@@ -145,11 +138,9 @@
             "payload": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "1"
               }
-            },
-            "type_hint": null
+            }
           }
         }
       },
@@ -176,14 +167,12 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "2"
                 }
               }
@@ -208,14 +197,12 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "2"
                 }
               }
@@ -244,14 +231,12 @@
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
               }
             ],
-            "kind": "AnonStruct",
-            "type_hint": null
+            "kind": "AnonStruct"
           }
         }
       }

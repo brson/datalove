@@ -8,7 +8,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "1_000_000"
           }
         }
@@ -20,7 +19,6 @@
         "value": {
           "expr": {
             "kind": "Hex",
-            "type_hint": null,
             "value": "0xFF_FF"
           }
         }
@@ -32,7 +30,6 @@
         "value": {
           "expr": {
             "kind": "Float",
-            "type_hint": null,
             "value": "1_0.000_1"
           }
         }
@@ -44,7 +41,6 @@
         "value": {
           "expr": {
             "kind": "Float",
-            "type_hint": null,
             "value": "1.0e1_0"
           }
         }
@@ -56,7 +52,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "4_294_967_295"
           }
         }

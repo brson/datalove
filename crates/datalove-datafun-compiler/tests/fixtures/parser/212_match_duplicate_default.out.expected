@@ -31,8 +31,7 @@
             "operand": {
               "expr": {
                 "kind": "Atom",
-                "name": "Red",
-                "type_hint": null
+                "name": "Red"
               }
             }
           }
@@ -46,7 +45,6 @@
             "value": {
               "expr": {
                 "kind": "String",
-                "type_hint": null,
                 "value": "\"first\""
               }
             }

@@ -10,9 +10,14 @@
             "args": [
               {
                 "expr": {
-                  "kind": "Int",
-                  "type_hint": "U32",
-                  "value": "1"
+                  "inner": {
+                    "expr": {
+                      "kind": "Int",
+                      "value": "1"
+                    }
+                  },
+                  "kind": "Hinted",
+                  "type_hint": "U32"
                 }
               }
             ],

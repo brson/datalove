@@ -11,11 +11,9 @@
             "lhs": {
               "expr": {
                 "kind": "Data",
-                "type_hint": null,
                 "value": {
                   "expr": {
-                    "kind": "True",
-                    "type_hint": null
+                    "kind": "True"
                   }
                 }
               }
@@ -23,8 +21,7 @@
             "op": "And",
             "rhs": {
               "expr": {
-                "kind": "False",
-                "type_hint": null
+                "kind": "False"
               }
             }
           }

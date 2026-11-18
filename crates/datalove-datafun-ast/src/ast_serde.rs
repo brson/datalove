@@ -321,9 +321,9 @@ pub enum ExprFunKind {
     FieldProj(ExprFieldProj),
 
     // Inline literal expressions.
-    True(ExprLit),
-    False(ExprLit),
-    None(ExprLit),
+    True,
+    False,
+    None,
     Int(ExprInt),
     Float(ExprFloat),
     Hex(ExprHex),
@@ -336,7 +336,6 @@ pub enum ExprFunKind {
     Tensor(ExprTensor),
 
     // Aggregate expressions.
-    AnonTuple(ExprAnonTuple),
     AnonStruct(ExprAnonStruct),
 
     // Wrapper expressions.
@@ -469,26 +468,23 @@ pub struct ExprIndex {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprHinted {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
+    pub type_hint: datalove_datalit::ast_serde::TypeHint,
     pub inner: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAtom {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTerm {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub name: String,
     pub payload: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprEnumLiteral {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub variant: Box<ExprFun>,
 }
 
@@ -506,43 +502,36 @@ pub struct ExprLit {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprInt {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprFloat {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprHex {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprString {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprList {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub elements: Vec<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprSet {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub elements: Vec<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprMap {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub entries: Vec<ExprMapEntry>,
 }
 
@@ -554,21 +543,13 @@ pub struct ExprMapEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTensor {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFun>,
     pub header: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprAnonTuple {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
-    pub elements: Vec<ExprFun>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAnonStruct {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub fields: Vec<ExprStructField>,
 }
 
@@ -581,7 +562,6 @@ pub struct ExprStructField {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTable {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub header: Vec<String>,
     pub rows: Vec<ExprTableRow>,
 }
@@ -593,25 +573,21 @@ pub struct ExprTableRow {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprSome {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub payload: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprOk {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub payload: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprEr {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub payload: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprData {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: Box<ExprFun>,
 }
 
@@ -623,7 +599,6 @@ pub struct ExprDataFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprError {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: Box<ExprFun>,
 }
 
@@ -953,9 +928,9 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::FieldProj(f) => ExprFunKind::FieldProj(ExprFieldProj::from_ast(db, arena, f)),
 
             // Inline literal expressions.
-            crate::ast::ExprFunKind::True(e) => ExprFunKind::True(ExprLit::from_ast(db, e)),
-            crate::ast::ExprFunKind::False(e) => ExprFunKind::False(ExprLit::from_ast(db, e)),
-            crate::ast::ExprFunKind::None(e) => ExprFunKind::None(ExprLit::from_ast(db, e)),
+            crate::ast::ExprFunKind::True => ExprFunKind::True,
+            crate::ast::ExprFunKind::False => ExprFunKind::False,
+            crate::ast::ExprFunKind::None => ExprFunKind::None,
             crate::ast::ExprFunKind::Int(e) => ExprFunKind::Int(ExprInt::from_ast(db, e)),
             crate::ast::ExprFunKind::Float(e) => ExprFunKind::Float(ExprFloat::from_ast(db, e)),
             crate::ast::ExprFunKind::Hex(e) => ExprFunKind::Hex(ExprHex::from_ast(db, e)),
@@ -968,7 +943,6 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Tensor(e) => ExprFunKind::Tensor(ExprTensor::from_ast(db, arena, e)),
 
             // Aggregate expressions.
-            crate::ast::ExprFunKind::AnonTuple(e) => ExprFunKind::AnonTuple(ExprAnonTuple::from_ast(db, arena, e)),
             crate::ast::ExprFunKind::AnonStruct(e) => ExprFunKind::AnonStruct(ExprAnonStruct::from_ast(db, arena, e)),
 
             // Wrapper expressions.
@@ -984,20 +958,17 @@ impl ExprFunKind {
 
             // Atom/Term/Enum expressions.
             crate::ast::ExprFunKind::Hinted(e) => ExprFunKind::Hinted(ExprHinted {
-                type_hint: type_hint_from_ast(db, Some(e.type_hint.C())),
+                type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, e.type_hint.C()),
                 inner: Box::new(ExprFun::from_ast(db, arena.get(e.inner))),
             }),
             crate::ast::ExprFunKind::Atom(e) => ExprFunKind::Atom(ExprAtom {
-                type_hint: type_hint_from_ast(db, e.type_hint.C()),
                 name: e.name.as_str(db).S(),
             }),
             crate::ast::ExprFunKind::Term(e) => ExprFunKind::Term(ExprTerm {
-                type_hint: type_hint_from_ast(db, e.type_hint.C()),
                 name: e.name.as_str(db).S(),
                 payload: Box::new(ExprFun::from_ast(db, arena.get(e.payload))),
             }),
             crate::ast::ExprFunKind::EnumLiteral(e) => ExprFunKind::EnumLiteral(ExprEnumLiteral {
-                type_hint: type_hint_from_ast(db, e.type_hint.C()),
                 variant: Box::new(ExprFun::from_ast(db, arena.get(e.variant))),
             }),
 
@@ -1147,27 +1118,9 @@ impl ExprFunParseError {
     }
 }
 
-// Conversion helpers for inline expression types.
-
-fn type_hint_from_ast<'db>(
-    db: &'db dyn Db,
-    ast: Option<datalove_datalit::ast::TypeHint<'db>>,
-) -> Option<datalove_datalit::ast_serde::TypeHint> {
-    ast.map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th))
-}
-
-impl ExprLit {
-    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprLit<'db>) -> Self {
-        ExprLit {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
-        }
-    }
-}
-
 impl ExprInt {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprInt<'db>) -> Self {
         ExprInt {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: ast.value.as_str(db).S(),
         }
     }
@@ -1176,7 +1129,6 @@ impl ExprInt {
 impl ExprFloat {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprFloat<'db>) -> Self {
         ExprFloat {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: ast.value.as_str(db).S(),
         }
     }
@@ -1185,7 +1137,6 @@ impl ExprFloat {
 impl ExprHex {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprHex<'db>) -> Self {
         ExprHex {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: ast.value.as_str(db).S(),
         }
     }
@@ -1194,34 +1145,30 @@ impl ExprHex {
 impl ExprString {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprString<'db>) -> Self {
         ExprString {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: ast.value.as_str(db).S(),
         }
     }
 }
 
 impl ExprList {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprList<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprList) -> Self {
         ExprList {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
         }
     }
 }
 
 impl ExprSet {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprSet<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprSet) -> Self {
         ExprSet {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
         }
     }
 }
 
 impl ExprMap {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprMap<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprMap) -> Self {
         ExprMap {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             entries: ast.entries.iter().map(|e| ExprMapEntry::from_ast(db, arena, e)).collect(),
         }
     }
@@ -1237,9 +1184,8 @@ impl ExprMapEntry {
 }
 
 impl ExprTensor {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprTensor<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprTensor) -> Self {
         ExprTensor {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             shape: ast.shape.C(),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
             header: ast.header,
@@ -1247,19 +1193,9 @@ impl ExprTensor {
     }
 }
 
-impl ExprAnonTuple {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprAnonTuple<'db>) -> Self {
-        ExprAnonTuple {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
-            elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, arena.get(*e))).collect(),
-        }
-    }
-}
-
 impl ExprAnonStruct {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprAnonStruct<'db>) -> Self {
         ExprAnonStruct {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             fields: ast.fields.iter().map(|f| ExprStructField::from_ast(db, arena, f)).collect(),
         }
     }
@@ -1278,7 +1214,6 @@ impl ExprStructField {
 impl ExprTable {
     pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprTable<'db>) -> Self {
         ExprTable {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             header: ast.header.iter().map(|h| h.as_str(db).S()).collect(),
             rows: ast.rows.iter().map(|r| ExprTableRow::from_ast(db, arena, r)).collect(),
         }
@@ -1294,45 +1229,40 @@ impl ExprTableRow {
 }
 
 impl ExprSome {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprSome<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprSome) -> Self {
         ExprSome {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             payload: Box::new(ExprFun::from_ast(db, arena.get(ast.payload))),
         }
     }
 }
 
 impl ExprOk {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprOk<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprOk) -> Self {
         ExprOk {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             payload: Box::new(ExprFun::from_ast(db, arena.get(ast.payload))),
         }
     }
 }
 
 impl ExprEr {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprEr<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprEr) -> Self {
         ExprEr {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             payload: Box::new(ExprFun::from_ast(db, arena.get(ast.payload))),
         }
     }
 }
 
 impl ExprData {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprData<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprData) -> Self {
         ExprData {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: Box::new(ExprFun::from_ast(db, arena.get(ast.value))),
         }
     }
 }
 
 impl ExprError {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprError<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::ExprError) -> Self {
         ExprError {
-            type_hint: type_hint_from_ast(db, ast.type_hint.C()),
             value: Box::new(ExprFun::from_ast(db, arena.get(ast.value))),
         }
     }

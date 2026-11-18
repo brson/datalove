@@ -4,8 +4,7 @@
       {
         "condition": {
           "expr": {
-            "kind": "True",
-            "type_hint": null
+            "kind": "True"
           }
         },
         "else_binding": "x",

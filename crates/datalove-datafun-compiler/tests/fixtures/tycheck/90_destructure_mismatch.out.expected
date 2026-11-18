@@ -77,9 +77,9 @@
           "message": "this is not that term",
           "span": [
             154,
-            158
+            164
           ],
-          "text": "term"
+          "text": "term Bar 1"
         }
       ],
       "message": "a pattern for `term Foo` cannot take apart `term Bar int`"
@@ -91,9 +91,9 @@
           "message": "this is not that atom",
           "span": [
             180,
-            184
+            188
           ],
-          "text": "atom"
+          "text": "atom Bar"
         }
       ],
       "message": "a pattern for `atom Foo` cannot take apart `atom Bar`"

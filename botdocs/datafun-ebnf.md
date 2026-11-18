@@ -172,15 +172,8 @@ paren         = "(", [ expr, { ",", expr }, [ "," ] ], ")" ;
                 (* one element, no comma: grouping; else a tuple; () is unit *)
 
 (* Hints  (literal.rs) *)
-hinted        = ":", type, "/", ( hint_literal | unary ) ;   (* no "/": D049 *)
+hinted        = ":", type, "/", unary ;     (* no "/": D049 *)
                 (* a hinted directly under a hint is refused: P080 *)
-hint_literal  = [ "-", ~ ], dec_number | hex_number | string_lit
-              | "true" | "false" | "none"
-              | ( "some" | "ok" | "er" | "data" | "error" ), payload
-              | "atom", NAME | "term", NAME, payload     (* D035, D036 *)
-              | "enum", "{", expr, [ "," ], "}"
-              | paren | collection ;
-                (* chosen by the first token; see "What a hint covers" below *)
 
 (* Collections  (literal.rs) *)
 collection    = list | set | map | struct | table | tensor ;
@@ -276,13 +269,11 @@ string_lit, digit_run, hex_run, comment, newline
 - A glued `(` is a call after a name, or after a place with exactly one named
   field step (`u8.max(1)`, and `(u8).max(1)` too); after anything else it is
   P072: `a.b.c(1)`, `p.0(1)`, `f(x)(1)`.
-- **What a hint covers.** A hint is a unary expression, so a binary operator
-  after it applies to the hinted expression: `: u32 / x + 1` is
-  `(: u32 / x) + 1`. Under the `hint_literal` alternative the hint sits on the
-  literal and a later postfix is outside it (`: u32 / 5@` hints the `5`);
-  under the `unary` alternative the hint covers the postfixes (`: u32 / o?`
-  hints what `?` produces). Which alternative applies is decided by the first
-  token after the `/`, so `: u32 / (o)?` hints `o`.
+- **What a hint covers.** A hint is on a unary expression, so a binary
+  operator after it applies to the hinted expression: `: u32 / x + 1` is
+  `(: u32 / x) + 1`. The hint covers the postfixes, whatever they are written
+  on: `: u32 / o?` and `: u32 / (o)?` both hint what `?` produces, and
+  `: u8 / (p).x` hints the field.
 
 **Bindings and signatures.**
 

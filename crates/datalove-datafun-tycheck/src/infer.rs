@@ -216,13 +216,13 @@ fn infer_unhinted<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<
     let lit = |ctx: &mut TypeContext<'db>, kind| ctx.inference.uni.fresh(Class::Literal(kind), Origin::None);
     let at = |id: ExprId| expr.at(id);
     match expr.kind() {
-        ExprFunKind::True(_) | ExprFunKind::False(_) => PType::Known(DT::Bool),
+        ExprFunKind::True | ExprFunKind::False => PType::Known(DT::Bool),
         ExprFunKind::String(_) => PType::Known(DT::String),
         ExprFunKind::Int(_) => lit(ctx, LiteralKind::Int),
         ExprFunKind::Hex(_) => lit(ctx, LiteralKind::Hex),
         ExprFunKind::Float(_) => lit(ctx, LiteralKind::Float),
 
-        ExprFunKind::Tuple(ExprTuple { elements }) | ExprFunKind::AnonTuple(ExprAnonTuple { elements, .. }) => {
+        ExprFunKind::Tuple(ExprTuple { elements }) => {
             PType::AnonTuple(elements.iter().map(|e| infer(ctx, at(*e))).collect())
         }
         ExprFunKind::AnonStruct(s) => {
@@ -254,7 +254,7 @@ fn infer_unhinted<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<
 
         ExprFunKind::Some(s) => PType::Option(Box::new(infer(ctx, at(s.payload)))),
         ExprFunKind::Ok(o) => PType::Result(Box::new(infer(ctx, at(o.payload)))),
-        ExprFunKind::None(_) => PType::Option(Box::new(open(ctx, expr))),
+        ExprFunKind::None => PType::Option(Box::new(open(ctx, expr))),
         ExprFunKind::Er(_) => PType::Result(Box::new(open(ctx, expr))),
         // A `data` or `error` payload is typed on its own, when the value is
         // checked.

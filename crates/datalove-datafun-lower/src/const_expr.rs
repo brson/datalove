@@ -219,9 +219,9 @@ pub fn try_extract_literal<'db>(
             return Some(crate::datafile::data_file_value(db, source, ir_type));
         }
 
-        ExprFunKind::True(_) => Some(ConstValue::Bool(true)),
-        ExprFunKind::False(_) => Some(ConstValue::Bool(false)),
-        ExprFunKind::None(_) => Some(ConstValue::OptionNone),
+        ExprFunKind::True => Some(ConstValue::Bool(true)),
+        ExprFunKind::False => Some(ConstValue::Bool(false)),
+        ExprFunKind::None => Some(ConstValue::OptionNone),
 
         ExprFunKind::Int(int_expr) => {
             let text = int_expr.value.text(db);

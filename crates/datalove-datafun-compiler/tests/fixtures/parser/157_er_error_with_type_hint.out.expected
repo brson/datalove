@@ -7,20 +7,29 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "kind": "Er",
-            "payload": {
+            "inner": {
               "expr": {
-                "kind": "Error",
-                "type_hint": null,
-                "value": {
+                "kind": "Er",
+                "payload": {
                   "expr": {
-                    "kind": "Float",
-                    "type_hint": "F64",
-                    "value": "19.0"
+                    "kind": "Error",
+                    "value": {
+                      "expr": {
+                        "inner": {
+                          "expr": {
+                            "kind": "Float",
+                            "value": "19.0"
+                          }
+                        },
+                        "kind": "Hinted",
+                        "type_hint": "F64"
+                      }
+                    }
                   }
                 }
               }
             },
+            "kind": "Hinted",
             "type_hint": "U32"
           }
         }

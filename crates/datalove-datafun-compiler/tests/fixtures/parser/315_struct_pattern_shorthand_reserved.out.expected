@@ -21,14 +21,12 @@
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
               }
             ],
-            "kind": "AnonStruct",
-            "type_hint": null
+            "kind": "AnonStruct"
           }
         }
       }

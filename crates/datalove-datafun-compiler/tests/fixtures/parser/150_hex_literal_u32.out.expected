@@ -8,7 +8,6 @@
         "value": {
           "expr": {
             "kind": "Hex",
-            "type_hint": null,
             "value": "0xFF"
           }
         }

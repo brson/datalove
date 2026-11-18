@@ -10,7 +10,6 @@
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "0"
               }
             }
@@ -22,7 +21,6 @@
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "0"
               }
             }
@@ -47,7 +45,6 @@
                     "rhs": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "1"
                       }
                     }
@@ -69,7 +66,6 @@
                     "rhs": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "5"
                       }
                     }
@@ -98,7 +94,6 @@
                     "rhs": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "2"
                       }
                     }
@@ -127,7 +122,6 @@
                     "rhs": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "4"
                       }
                     }
@@ -159,7 +153,6 @@
                     "rhs": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "1"
                       }
                     }

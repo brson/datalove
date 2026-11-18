@@ -8,7 +8,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "2"
           }
         }
@@ -29,15 +28,13 @@
                     "root": "a",
                     "steps": []
                   }
-                },
-                "type_hint": null
+                }
               }
             },
             "op": "Add",
             "rhs": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "1"
               }
             }

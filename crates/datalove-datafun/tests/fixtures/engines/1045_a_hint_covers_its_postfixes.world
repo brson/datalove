@@ -1,0 +1,28 @@
+----------
+module local/test/main
+----------
+
+// A hint covers the postfixes written after what it is on, whatever that is:
+// a name, parentheses or a literal. `(: T / x)@` is how a postfix is put after
+// the hint instead.
+type R = {x: u8, s: string}
+
+fun run(): ?u8
+    let r: R = {x = 7, s = "a-long-heap-string-0123456789"}
+    let o: ?u32 = some 3
+    let a = : u8 / (r).x
+    let b = : u32 / (o)?
+    let d = : u8 / [r.x, 9][1]?
+    let e = : string / (r).s@
+    let f = (: u8 / 5)@
+    debuglog (a, b, d, e, f)
+    ret some a
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.run
+debuglog run()

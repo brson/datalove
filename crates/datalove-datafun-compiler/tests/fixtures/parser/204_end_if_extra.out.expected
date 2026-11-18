@@ -6,8 +6,7 @@
           {
             "condition": {
               "expr": {
-                "kind": "True",
-                "type_hint": null
+                "kind": "True"
               }
             },
             "else_body": null,
@@ -18,7 +17,6 @@
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
@@ -30,7 +28,6 @@
             "value": {
               "expr": {
                 "kind": "Int",
-                "type_hint": null,
                 "value": "2"
               }
             }

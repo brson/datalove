@@ -31,7 +31,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "42"
           }
         }
@@ -43,7 +42,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "100"
           }
         }

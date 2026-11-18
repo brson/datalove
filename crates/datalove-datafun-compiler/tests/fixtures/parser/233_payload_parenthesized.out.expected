@@ -8,7 +8,6 @@
         "value": {
           "expr": {
             "kind": "Int",
-            "type_hint": null,
             "value": "2"
           }
         }
@@ -34,13 +33,11 @@
                 "rhs": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
               }
-            },
-            "type_hint": null
+            }
           }
         }
       },
@@ -66,13 +63,11 @@
                 "rhs": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 }
               }
-            },
-            "type_hint": null
+            }
           }
         }
       },
@@ -94,8 +89,7 @@
                   }
                 }
               }
-            },
-            "type_hint": null
+            }
           }
         }
       }

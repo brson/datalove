@@ -12,7 +12,6 @@
                 "key": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 },
@@ -22,20 +21,17 @@
                       {
                         "expr": {
                           "kind": "Int",
-                          "type_hint": null,
                           "value": "10"
                         }
                       },
                       {
                         "expr": {
                           "kind": "Int",
-                          "type_hint": null,
                           "value": "20"
                         }
                       }
                     ],
-                    "kind": "List",
-                    "type_hint": null
+                    "kind": "List"
                   }
                 }
               },
@@ -43,7 +39,6 @@
                 "key": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "2"
                   }
                 },
@@ -53,26 +48,22 @@
                       {
                         "expr": {
                           "kind": "Int",
-                          "type_hint": null,
                           "value": "30"
                         }
                       },
                       {
                         "expr": {
                           "kind": "Int",
-                          "type_hint": null,
                           "value": "40"
                         }
                       }
                     ],
-                    "kind": "List",
-                    "type_hint": null
+                    "kind": "List"
                   }
                 }
               }
             ],
-            "kind": "Map",
-            "type_hint": null
+            "kind": "Map"
           }
         }
       }

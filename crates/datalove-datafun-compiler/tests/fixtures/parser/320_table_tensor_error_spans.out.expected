@@ -18,14 +18,12 @@
                   {
                     "expr": {
                       "kind": "Int",
-                      "type_hint": null,
                       "value": "1"
                     }
                   },
                   {
                     "expr": {
                       "kind": "Int",
-                      "type_hint": null,
                       "value": "2"
                     }
                   }
@@ -36,14 +34,12 @@
                   {
                     "expr": {
                       "kind": "Int",
-                      "type_hint": null,
                       "value": "3"
                     }
                   }
                 ]
               }
-            ],
-            "type_hint": null
+            ]
           }
         }
       },
@@ -57,42 +53,36 @@
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "1"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "2"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "3"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "4"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "5"
                 }
               },
               {
                 "expr": {
                   "kind": "Int",
-                  "type_hint": null,
                   "value": "6"
                 }
               }
@@ -103,8 +93,7 @@
               2,
               2,
               2
-            ],
-            "type_hint": null
+            ]
           }
         }
       }

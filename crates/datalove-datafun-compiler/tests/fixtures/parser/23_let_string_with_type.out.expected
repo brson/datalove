@@ -8,7 +8,6 @@
         "value": {
           "expr": {
             "kind": "String",
-            "type_hint": null,
             "value": "\"hello world\""
           }
         }

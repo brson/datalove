@@ -12,8 +12,7 @@
         "value": {
           "expr": {
             "elements": [],
-            "kind": "Set",
-            "type_hint": null
+            "kind": "Set"
           }
         }
       }

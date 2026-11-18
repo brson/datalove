@@ -12,14 +12,12 @@
                 "key": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "1"
                   }
                 },
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "10"
                   }
                 }
@@ -28,21 +26,18 @@
                 "key": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "2"
                   }
                 },
                 "value": {
                   "expr": {
                     "kind": "Int",
-                    "type_hint": null,
                     "value": "20"
                   }
                 }
               }
             ],
-            "kind": "Map",
-            "type_hint": null
+            "kind": "Map"
           }
         }
       }

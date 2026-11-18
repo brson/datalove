@@ -11,8 +11,7 @@
               "x"
             ],
             "kind": "Table",
-            "rows": [],
-            "type_hint": null
+            "rows": []
           }
         }
       },
@@ -26,8 +25,7 @@
               "x"
             ],
             "kind": "Table",
-            "rows": [],
-            "type_hint": null
+            "rows": []
           }
         }
       },
@@ -48,21 +46,18 @@
                   {
                     "expr": {
                       "kind": "Int",
-                      "type_hint": null,
                       "value": "1"
                     }
                   },
                   {
                     "expr": {
                       "kind": "Int",
-                      "type_hint": null,
                       "value": "2"
                     }
                   }
                 ]
               }
-            ],
-            "type_hint": null
+            ]
           }
         }
       }

@@ -86,8 +86,7 @@
             "op": "And",
             "rhs": {
               "expr": {
-                "kind": "True",
-                "type_hint": null
+                "kind": "True"
               }
             }
           }
@@ -181,7 +180,6 @@
                     "index": {
                       "expr": {
                         "kind": "Int",
-                        "type_hint": null,
                         "value": "0"
                       }
                     },

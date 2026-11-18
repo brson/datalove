@@ -16,8 +16,7 @@
             "kind": "Tensor",
             "shape": [
               0
-            ],
-            "type_hint": null
+            ]
           }
         }
       }

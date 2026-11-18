@@ -401,11 +401,6 @@ fn find_const_refs_inner<'db>(
             find_const_refs_inner(db, expr.at(i.base), const_names, name_to_stmt, refs);
             find_const_refs_inner(db, expr.at(i.index), const_names, name_to_stmt, refs);
         }
-        ExprFunKind::AnonTuple(t) => {
-            for elem in &t.elements {
-                find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
-            }
-        }
         ExprFunKind::AnonStruct(s) => {
             for field in &s.fields {
                 find_const_refs_inner(db, expr.at(field.value), const_names, name_to_stmt, refs);
@@ -435,9 +430,9 @@ fn find_const_refs_inner<'db>(
         // silently loses the edge and the topological sort puts the const
         // before the one it reads. Naming every kind makes the next one added
         // a compile error here.
-        ExprFunKind::True(_)
-        | ExprFunKind::False(_)
-        | ExprFunKind::None(_)
+        ExprFunKind::True
+        | ExprFunKind::False
+        | ExprFunKind::None
         | ExprFunKind::Int(_)
         | ExprFunKind::Float(_)
         | ExprFunKind::Hex(_)

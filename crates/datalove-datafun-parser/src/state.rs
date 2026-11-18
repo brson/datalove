@@ -348,11 +348,6 @@ impl<'db> Parser<'db> {
         self.module_id
     }
 
-    /// Peek at the next token after the current one (lookahead of 2).
-    pub(super) fn peek_next(&self) -> Option<&TreeToken<'db>> {
-        self.source.buffer[1].as_ref()
-    }
-
     /// Enter function context for expression identity tracking, giving back
     /// what it replaced for [`Self::exit_function`] to restore.
     ///
