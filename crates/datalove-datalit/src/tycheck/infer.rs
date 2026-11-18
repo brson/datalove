@@ -721,9 +721,7 @@ pub fn infer_unhinted<'db>(
         // Rule: Inf-Enum
         Expr::Enum(_) => uni.fresh(Class::Open, Origin::Expr(expr.C())),
         Expr::ParseError(_) => {
-            // The parser numbers every expression it builds, an error among
-            // them, so one without a span came from somewhere else.
-            let ts = ctx.get_span(expr).expect("a parse error has the span the parser gave it");
+            let ts = ctx.get_span(expr);
             DiagnosticBuilder::error(ctx.db, "cannot type-check expression with parse errors")
                 .code(TCode::ParseErrorInExpr.as_str())
                 .primary_label(ts, "parse error occurred here")
@@ -754,7 +752,7 @@ pub fn report_unresolved<'db>(ctx: &TypeContext<'db>, unresolved: &Unresolved<'d
     let Origin::Expr(expr) = &unresolved.origin else {
         unreachable!("only a datalit expression leaves a type open in datalit")
     };
-    let Some(ts) = ctx.get_span(expr) else { return };
+    let ts = ctx.get_span(expr);
     let msg = match expr.expr() {
         Expr::None => OpenLiteral::None,
         Expr::Er(_) => OpenLiteral::Er,

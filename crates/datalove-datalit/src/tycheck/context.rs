@@ -38,13 +38,12 @@ impl<'db> TypeContext<'db> {
     /// parser.
     pub fn convert_hint(&self, expr: &ExprFull<'db>, hint: &TypeHint<'db>) -> Result<Type<'db>, TypeError> {
         convert_type_hint(self.db, hint).map_err(|error| {
-            if let Some(ts) = self.get_span(expr) {
-                if let Some(builder) = rec_diagnostic(self.db, &error, ts.C()) {
-                    builder.emit_type();
-                    return error;
-                }
+            let ts = self.get_span(expr);
+            if let Some(builder) = rec_diagnostic(self.db, &error, ts.C()) {
+                builder.emit_type();
+                return error;
             }
-            if let (Some(name), Some(ts)) = (first_alias(hint, &mut Vec::new()), self.get_span(expr)) {
+            if let Some(name) = first_alias(hint, &mut Vec::new()) {
                 let name = name.as_str(self.db);
                 let mut builder = DiagnosticBuilder::error(self.db, &rmx::std::format!("unknown type `{name}`"))
                     .code(TCode::NamedType.as_str())
@@ -59,10 +58,9 @@ impl<'db> TypeContext<'db> {
         })
     }
 
-    /// Look up the source location for an expression (on-demand).
-    pub fn get_span(&self, expr: &ExprFull<'db>) -> Option<TextSpan> {
-        let spans = crate::spans::datalit_spans(self.db, self.source);
-        spans.get_text_span(self.db, expr)
+    /// The source location of an expression.
+    pub fn get_span(&self, expr: &ExprFull<'db>) -> TextSpan {
+        crate::spans::datalit_spans(self.db, self.source).lookup(self.db, expr)
     }
 }
 

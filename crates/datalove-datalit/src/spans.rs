@@ -21,20 +21,18 @@ pub struct DatalitSpans<'db> {
 }
 
 impl<'db> DatalitSpans<'db> {
-    /// Look up span for an expression.
+    /// The span of an expression the parser built.
     ///
-    /// An expression the typechecker or the generator built has no position,
-    /// and so no span to find.
-    pub fn lookup(&self, db: &'db dyn crate::Db, expr: &ExprFull<'db>) -> Option<TextSpan> {
-        let expr_index = expr.local_index()?;
+    /// Every expression the parser builds is numbered and has a span, and
+    /// only those reach the typechecker: a generated one is printed and
+    /// parsed again first.
+    pub fn lookup(&self, db: &'db dyn crate::Db, expr: &ExprFull<'db>) -> TextSpan {
+        let expr_index = expr.local_index()
+            .expect("an expression with a span was numbered by the parser");
         self.entries(db).iter()
             .find(|e| e.expr_index == expr_index)
             .map(|e| e.entry.C())
-    }
-
-    /// Get text and span for an expression.
-    pub fn get_text_span(&self, db: &'db dyn crate::Db, expr: &ExprFull<'db>) -> Option<TextSpan> {
-        self.lookup(db, expr)
+            .expect("the parser recorded a span for every expression it numbered")
     }
 }
 

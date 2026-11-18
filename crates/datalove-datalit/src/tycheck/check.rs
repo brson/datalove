@@ -32,15 +32,14 @@ pub fn check<'db>(
         (Expr::Hinted(h), _) => {
             let hinted = ctx.convert_hint(expr, &h.type_hint)?;
             if !types_equivalent_at_head(db, &hinted, expected) {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "mismatched types")
-                        .code(TCode::HintMismatch.as_str())
-                        .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
-                            type_to_string(db, expected),
-                            type_to_string(db, &hinted)))
-                        .note("the type hint disagrees with the expected type")
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "mismatched types")
+                    .code(TCode::HintMismatch.as_str())
+                    .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
+                        type_to_string(db, expected),
+                        type_to_string(db, &hinted)))
+                    .note("the type hint disagrees with the expected type")
+                    .emit_type();
                 return Err(TypeError::TypeMismatch {
                     expected: type_to_string(db, expected),
                     actual: type_to_string(db, &hinted),
@@ -78,14 +77,13 @@ pub fn check<'db>(
                 _ => Type::Bool,
             };
             if !types_equivalent(db, &synthesized, expected) {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "mismatched types")
-                        .code(TCode::LiteralMismatch.as_str())
-                        .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
-                            type_to_string(db, expected),
-                            type_to_string(db, &synthesized)))
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "mismatched types")
+                    .code(TCode::LiteralMismatch.as_str())
+                    .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
+                        type_to_string(db, expected),
+                        type_to_string(db, &synthesized)))
+                    .emit_type();
                 return Err(TypeError::TypeMismatch {
                     expected: type_to_string(db, expected),
                     actual: type_to_string(db, &synthesized),
@@ -122,13 +120,12 @@ pub fn check<'db>(
             let expected_fields = &expected_tuple.fields;
 
             if elements.len() != expected_fields.len() {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "tuple has wrong number of elements")
-                        .code(TCode::TupleLength.as_str())
-                        .primary_label(ts.C(), &format!("expected {} element(s), found {}",
-                            expected_fields.len(), elements.len()))
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "tuple has wrong number of elements")
+                    .code(TCode::TupleLength.as_str())
+                    .primary_label(ts.C(), &format!("expected {} element(s), found {}",
+                        expected_fields.len(), elements.len()))
+                    .emit_type();
                 return Err(TypeError::ArityMismatch {
                     expected: expected_fields.len(),
                     actual: elements.len(),
@@ -148,13 +145,12 @@ pub fn check<'db>(
             let expected_fields = &expected_struct.fields;
 
             if fields.len() != expected_fields.len() {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "struct has wrong number of fields")
-                        .code(TCode::StructFieldCount.as_str())
-                        .primary_label(ts.C(), &format!("expected {} field(s), found {}",
-                            expected_fields.len(), fields.len()))
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "struct has wrong number of fields")
+                    .code(TCode::StructFieldCount.as_str())
+                    .primary_label(ts.C(), &format!("expected {} field(s), found {}",
+                        expected_fields.len(), fields.len()))
+                    .emit_type();
                 return Err(TypeError::ArityMismatch {
                     expected: expected_fields.len(),
                     actual: fields.len(),
@@ -163,14 +159,13 @@ pub fn check<'db>(
 
             for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
                 if field.name != expected_field.name {
-                    if let Some(ts) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "struct fields in wrong order")
-                            .code(TCode::StructFieldName.as_str())
-                            .primary_label(ts.C(), &format!("expected field `{}`, found `{}`",
-                                expected_field.name.as_str(db), field.name.as_str(db)))
-                            .note("struct fields must appear in the same order as the type definition")
-                            .emit_type();
-                    }
+                    let ts = ctx.get_span(expr);
+                    DiagnosticBuilder::error(db, "struct fields in wrong order")
+                        .code(TCode::StructFieldName.as_str())
+                        .primary_label(ts.C(), &format!("expected field `{}`, found `{}`",
+                            expected_field.name.as_str(db), field.name.as_str(db)))
+                        .note("struct fields must appear in the same order as the type definition")
+                        .emit_type();
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
@@ -210,13 +205,12 @@ pub fn check<'db>(
         (Expr::Tensor(t), Type::Tensor(expected_tensor)) => {
             let rank = t.shape.len() as u32;
             if rank != expected_tensor.rank {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "tensor has wrong rank")
-                        .code(TCode::TensorRank.as_str())
-                        .primary_label(ts.C(), &format!("expected rank {}, found rank {}",
-                            expected_tensor.rank, rank))
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "tensor has wrong rank")
+                    .code(TCode::TensorRank.as_str())
+                    .primary_label(ts.C(), &format!("expected rank {}, found rank {}",
+                        expected_tensor.rank, rank))
+                    .emit_type();
                 return Err(TypeError::ArityMismatch {
                     expected: expected_tensor.rank as usize,
                     actual: rank as usize,
@@ -225,13 +219,12 @@ pub fn check<'db>(
 
             let expected_count = t.shape.iter().map(|&d| d as usize).product::<usize>();
             if t.elements.len() != expected_count {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "tensor has wrong number of elements")
-                        .code(TCode::TensorElementCount.as_str())
-                        .primary_label(ts.C(), &format!("expected {} element(s), found {}",
-                            expected_count, t.elements.len()))
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "tensor has wrong number of elements")
+                    .code(TCode::TensorElementCount.as_str())
+                    .primary_label(ts.C(), &format!("expected {} element(s), found {}",
+                        expected_count, t.elements.len()))
+                    .emit_type();
                 return Err(TypeError::ArityMismatch {
                     expected: expected_count,
                     actual: t.elements.len(),
@@ -250,13 +243,12 @@ pub fn check<'db>(
             let expected_columns = &expected_table.columns;
 
             if t.header.len() != expected_columns.len() {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "table has wrong number of columns")
-                        .code(TCode::TableColumnCount.as_str())
-                        .primary_label(ts.C(), &format!("expected {} column(s), found {}",
-                            expected_columns.len(), t.header.len()))
-                        .emit_type();
-                }
+                let ts = ctx.get_span(expr);
+                DiagnosticBuilder::error(db, "table has wrong number of columns")
+                    .code(TCode::TableColumnCount.as_str())
+                    .primary_label(ts.C(), &format!("expected {} column(s), found {}",
+                        expected_columns.len(), t.header.len()))
+                    .emit_type();
                 return Err(TypeError::ArityMismatch {
                     expected: expected_columns.len(),
                     actual: t.header.len(),
@@ -265,27 +257,25 @@ pub fn check<'db>(
 
             for (i, (header_name, expected_col)) in t.header.iter().zip(expected_columns.iter()).enumerate() {
                 if *header_name != expected_col.name {
-                    if let Some(ts) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "table column name mismatch")
-                            .code(TCode::TableColumnName.as_str())
-                            .primary_label(ts.C(), &format!("column {}: expected `{}`, found `{}`",
-                                i + 1, expected_col.name.as_str(db), header_name.as_str(db)))
-                            .note("table column names must match the type definition in order")
-                            .emit_type();
-                    }
+                    let ts = ctx.get_span(expr);
+                    DiagnosticBuilder::error(db, "table column name mismatch")
+                        .code(TCode::TableColumnName.as_str())
+                        .primary_label(ts.C(), &format!("column {}: expected `{}`, found `{}`",
+                            i + 1, expected_col.name.as_str(db), header_name.as_str(db)))
+                        .note("table column names must match the type definition in order")
+                        .emit_type();
                     return Err(TypeError::FieldOrderMismatch);
                 }
             }
 
             for (row_idx, row) in t.rows.iter().enumerate() {
                 if row.elements.len() != expected_columns.len() {
-                    if let Some(ts) = ctx.get_span(expr) {
-                        DiagnosticBuilder::error(db, "table row has wrong number of columns")
-                            .code(TCode::TableRowWidth.as_str())
-                            .primary_label(ts.C(), &format!("row {}: expected {} column(s), found {}",
-                                row_idx + 1, expected_columns.len(), row.elements.len()))
-                            .emit_type();
-                    }
+                    let ts = ctx.get_span(expr);
+                    DiagnosticBuilder::error(db, "table row has wrong number of columns")
+                        .code(TCode::TableRowWidth.as_str())
+                        .primary_label(ts.C(), &format!("row {}: expected {} column(s), found {}",
+                            row_idx + 1, expected_columns.len(), row.elements.len()))
+                        .emit_type();
                     return Err(TypeError::ArityMismatch {
                         expected: expected_columns.len(),
                         actual: row.elements.len(),
@@ -344,13 +334,12 @@ pub fn check<'db>(
         (Expr::Enum(e), Type::Enum(_)) => check(ctx, &e.variant, expected),
 
         (Expr::Enum(_), _) => {
-            if let Some(ts) = ctx.get_span(expr) {
-                DiagnosticBuilder::error(db, "mismatched types")
-                    .code(TCode::EnumLiteralNotEnum.as_str())
-                    .primary_label(ts.C(), &format!("expected `{}`, found enum literal",
-                        type_to_string(db, expected)))
-                    .emit_type();
-            }
+            let ts = ctx.get_span(expr);
+            DiagnosticBuilder::error(db, "mismatched types")
+                .code(TCode::EnumLiteralNotEnum.as_str())
+                .primary_label(ts.C(), &format!("expected `{}`, found enum literal",
+                    type_to_string(db, expected)))
+                .emit_type();
             Err(TypeError::TypeMismatch {
                 expected: type_to_string(db, expected),
                 actual: "enum literal".S(),
@@ -369,13 +358,12 @@ pub fn check<'db>(
         // another head, and is a mismatch.
         _ => {
             let found = describe_unhinted(ctx, expr)?;
-            if let Some(ts) = ctx.get_span(expr) {
-                DiagnosticBuilder::error(db, "mismatched types")
-                    .code(TCode::Mismatch.as_str())
-                    .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
-                        type_to_string(db, expected), found))
-                    .emit_type();
-            }
+            let ts = ctx.get_span(expr);
+            DiagnosticBuilder::error(db, "mismatched types")
+                .code(TCode::Mismatch.as_str())
+                .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
+                    type_to_string(db, expected), found))
+                .emit_type();
             Err(TypeError::TypeMismatch {
                 expected: type_to_string(db, expected),
                 actual: found,
@@ -394,14 +382,13 @@ fn constructor_mismatch<'db>(
     let db = ctx.db;
     // What the constructor makes, with what it holds undecided.
     let (wants, makes) = if constructor == "none" { ("an option", "?_") } else { ("a result", "!_") };
-    if let Some(ts) = ctx.get_span(expr) {
-        DiagnosticBuilder::error(db, "mismatched types")
-            .code(TCode::Mismatch.as_str())
-            .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
-                type_to_string(db, expected), makes))
-            .note(&format!("`{constructor}` is a value of {wants} type only"))
-            .emit_type();
-    }
+    let ts = ctx.get_span(expr);
+    DiagnosticBuilder::error(db, "mismatched types")
+        .code(TCode::Mismatch.as_str())
+        .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
+            type_to_string(db, expected), makes))
+        .note(&format!("`{constructor}` is a value of {wants} type only"))
+        .emit_type();
     TypeError::TypeMismatch {
         expected: type_to_string(db, expected),
         actual: makes.S(),
@@ -417,14 +404,13 @@ fn variant_mismatch<'db>(
     note: &str,
 ) -> TypeError {
     let db = ctx.db;
-    if let Some(ts) = ctx.get_span(expr) {
-        DiagnosticBuilder::error(db, "mismatched types")
-            .code(TCode::VariantMismatch.as_str())
-            .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
-                type_to_string(db, expected), actual))
-            .note(note)
-            .emit_type();
-    }
+    let ts = ctx.get_span(expr);
+    DiagnosticBuilder::error(db, "mismatched types")
+        .code(TCode::VariantMismatch.as_str())
+        .primary_label(ts.C(), &format!("expected `{}`, found `{}`",
+            type_to_string(db, expected), actual))
+        .note(note)
+        .emit_type();
     TypeError::TypeMismatch {
         expected: type_to_string(db, expected),
         actual: actual.S(),
@@ -436,13 +422,12 @@ fn emit_int_range_error<'db>(ctx: &TypeContext<'db>, expr: &ExprFull<'db>, ty: &
     let db = ctx.db;
     let (code, note) = int_type_range_info(ty);
     let type_name = type_to_string(db, ty);
-    if let Some(ts) = ctx.get_span(expr) {
-        DiagnosticBuilder::error(db, &format!("integer literal out of range for type {}", type_name))
-            .code(code.as_str())
-            .primary_label(ts.C(), "value out of range")
-            .note(note)
-            .emit_type();
-    }
+    let ts = ctx.get_span(expr);
+    DiagnosticBuilder::error(db, &format!("integer literal out of range for type {}", type_name))
+        .code(code.as_str())
+        .primary_label(ts.C(), "value out of range")
+        .note(note)
+        .emit_type();
 }
 
 /// Emit a diagnostic for hex literal out of range.
@@ -454,11 +439,10 @@ fn emit_hex_range_error<'db>(ctx: &TypeContext<'db>, expr: &ExprFull<'db>, ty: &
         Type::F64 => "hex literal out of range for f64 bit pattern".S(),
         _ => format!("hex literal out of range for type {}", type_to_string(db, ty)),
     };
-    if let Some(ts) = ctx.get_span(expr) {
-        DiagnosticBuilder::error(db, &message)
-            .code(code.as_str())
-            .primary_label(ts.C(), "value out of range")
-            .note(note)
-            .emit_type();
-    }
+    let ts = ctx.get_span(expr);
+    DiagnosticBuilder::error(db, &message)
+        .code(code.as_str())
+        .primary_label(ts.C(), "value out of range")
+        .note(note)
+        .emit_type();
 }
