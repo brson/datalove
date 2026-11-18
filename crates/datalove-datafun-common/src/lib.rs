@@ -610,6 +610,7 @@ impl From<datalove_datalit::tycheck::TypeError> for TypeError {
                 TypeError::TypeMismatch { expected, actual }
             }
             datalove_datalit::tycheck::TypeError::CannotSynthesize => TypeError::CannotSynthesize,
+            datalove_datalit::tycheck::TypeError::ParseError => TypeError::ParseError,
             datalove_datalit::tycheck::TypeError::MissingField(name) => TypeError::MissingField(name),
             datalove_datalit::tycheck::TypeError::ExtraField(name) => TypeError::ExtraField(name),
             datalove_datalit::tycheck::TypeError::FieldOrderMismatch => TypeError::FieldOrderMismatch,

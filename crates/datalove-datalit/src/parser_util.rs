@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use datalove_diagnostic_codes::DCode;
 pub use bct::parser_util::{
-    eat_number, is_decimal_run, is_hex_word, is_identifier, is_numeric_literal, is_number_word,
+    eat_number, is_decimal_run, is_sigil, is_hex_word, is_identifier, is_numeric_literal, is_number_word,
     strip_separators,
     Number, Radix, TokenStream, TokenStreamExt,
 };

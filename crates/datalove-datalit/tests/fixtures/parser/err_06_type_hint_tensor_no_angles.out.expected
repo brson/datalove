@@ -4,8 +4,20 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "expected comma between tensor element type and rank"
+            "Tensor": {
+              "elements": [
+                {
+                  "expr": {
+                    "Int": {
+                      "value": "1"
+                    }
+                  }
+                }
+              ],
+              "header": false,
+              "shape": [
+                1
+              ]
             }
           }
         },

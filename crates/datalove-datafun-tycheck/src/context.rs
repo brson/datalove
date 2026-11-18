@@ -519,9 +519,6 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         &mut self,
         type_hint: datalove_datalit::ast::TypeHint<'db>,
     ) -> Result<Type<'db>, TypeError> {
-        if let datalove_datalit::ast::TypeHint::ParseError(_) = type_hint {
-            return Err(TypeError::ParseError);
-        }
         let result = convert_type_hint_inheriting(
             self.db, type_hint, &self.type_aliases, &|name| self.inherited_type_alias(name));
         if let Err(TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) }) = &result {

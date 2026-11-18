@@ -26,7 +26,7 @@
   "diagnostics": [],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     }
   ],
   "root_type": null

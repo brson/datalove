@@ -4,8 +4,8 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "expected name after 'atom'"
+            "Atom": {
+              "name": "A"
             }
           }
         },

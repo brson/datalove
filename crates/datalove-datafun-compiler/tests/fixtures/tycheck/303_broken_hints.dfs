@@ -3,3 +3,5 @@ let b = : u8 5
 let c = : u8 / : u8 / 5
 let d = : u8 / (1 +)
 let e = 1
+let f = : + 5
+let g = [: + 1, : u8 / 2]

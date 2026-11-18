@@ -8,6 +8,7 @@ use bct::lookup::LookupMap;
 
 use bct::{
     bracer::{Cursor, TreeToken},
+    lexer::Sigil,
     text::InternedText,
 };
 
@@ -107,6 +108,34 @@ pub(super) struct Parser<'db> {
 }
 
 impl<'db> Parser<'db> {
+    /// Pass over what was meant for the type of a hint that did not parse.
+    ///
+    /// The type was reported, and what is passed over would only say so
+    /// again. A type has no `/` in it, so the hint's `/` ends what was meant
+    /// for the type, and the operand follows it. With no `/` there is no
+    /// telling where the type was meant to end, and the rest of the item
+    /// goes. The item ends at a `,` or `->`, which separate the items of a
+    /// bracket and which no expression spans, or where this parser's tokens
+    /// end: a line, or the inside of one bracket.
+    pub(super) fn skip_broken_hint_type(&mut self) {
+        use crate::parser_util::is_sigil;
+        let item_end = |token: &TreeToken<'_>| is_sigil(token, Sigil::Comma) || is_sigil(token, Sigil::Arrow);
+        let rest = self.source.cursor;
+        let slash = self.source.buffer.iter().flatten().cloned().chain(rest)
+            .take_while(|token| !item_end(token))
+            .any(|token| is_sigil(&token, Sigil::SlashForward));
+        while let Some(token) = self.peek() {
+            let stop = match slash {
+                true => is_sigil(token, Sigil::SlashForward),
+                false => item_end(token),
+            };
+            if stop {
+                break;
+            }
+            self.next();
+        }
+    }
+
     /// Create a new parser with the given tokens (Vec-backed).
     pub(super) fn new(db: &'db dyn crate::Db, tokens: Cursor<'db>, source_text: bct::input::Source) -> Self {
         Parser {

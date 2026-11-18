@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "Hinted": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "5"
+            }
+          }
+        },
+        "type_hint": {
+          "ParseError": {
+            "message": "unexpected token in type hint"
+          }
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D046",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            2,
+            3
+          ],
+          "text": "+"
+        }
+      ],
+      "message": "unexpected token in type hint"
+    }
+  ]
+}

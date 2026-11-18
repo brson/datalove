@@ -722,7 +722,7 @@ pub fn infer_unhinted<'db>(
         Expr::Enum(_) => uni.fresh(Class::Open, Origin::Expr(expr.C())),
         // The parser reported it, and there is nothing to say about its
         // type that would not say so again.
-        Expr::ParseError(_) => return Err(TypeError::CannotSynthesize),
+        Expr::ParseError(_) => return Err(TypeError::ParseError),
     })
 }
 

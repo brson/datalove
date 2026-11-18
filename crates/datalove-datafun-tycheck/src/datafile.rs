@@ -52,6 +52,7 @@ fn describe(error: &DatalitTypeError) -> String {
     match error {
         DatalitTypeError::TypeMismatch { expected, actual } => fmt!("expected `{expected}`, found `{actual}`"),
         DatalitTypeError::CannotSynthesize => S("cannot work out the type of a value; give the data a type"),
+        DatalitTypeError::ParseError => S("a value did not parse"),
         DatalitTypeError::MissingField(field) => fmt!("a struct is missing the field `{field}`"),
         DatalitTypeError::ExtraField(field) => fmt!("a struct has the field `{field}`, which the type does not"),
         DatalitTypeError::FieldOrderMismatch => S("a struct's fields are not in the order the type gives them"),

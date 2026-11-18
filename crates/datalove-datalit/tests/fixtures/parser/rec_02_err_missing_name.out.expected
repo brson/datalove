@@ -4,8 +4,19 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "expected name after 'rec'"
+            "AnonStruct": {
+              "fields": [
+                {
+                  "name": "next",
+                  "value": {
+                    "expr": {
+                      "List": {
+                        "elements": []
+                      }
+                    }
+                  }
+                }
+              ]
             }
           }
         },

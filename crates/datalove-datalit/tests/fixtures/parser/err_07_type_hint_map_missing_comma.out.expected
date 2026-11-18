@@ -4,8 +4,8 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "expected '->' between map key and value types"
+            "Map": {
+              "entries": []
             }
           }
         },

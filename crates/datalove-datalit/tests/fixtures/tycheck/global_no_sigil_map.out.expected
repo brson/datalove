@@ -5,7 +5,7 @@
         "inner": {
           "expr": {
             "ParseError": {
-              "message": "unexpected token in type hint"
+              "message": "unexpected token in Parser expression"
             }
           }
         },
@@ -20,7 +20,7 @@
   "diagnostics": [],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     }
   ],
   "root_type": null

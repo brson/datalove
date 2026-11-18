@@ -4,8 +4,8 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "a recursive type cannot be named `int`"
+            "List": {
+              "elements": []
             }
           }
         },

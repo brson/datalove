@@ -278,6 +278,9 @@ pub struct TypeEnumVariant<'db> {
 pub enum TypeError {
     TypeMismatch { expected: String, actual: String },
     CannotSynthesize,
+    /// An expression or a type the parser reported, at which checking stops
+    /// without a word of its own.
+    ParseError,
     MissingField(String),
     ExtraField(String),
     FieldOrderMismatch,
@@ -352,6 +355,7 @@ impl std::fmt::Display for TypeError {
                 write!(f, "mismatched types: expected `{expected}`, found `{actual}`")
             }
             TypeError::CannotSynthesize => write!(f, "cannot infer a type here"),
+            TypeError::ParseError => write!(f, "an expression that did not parse"),
             TypeError::MissingField(name) => write!(f, "missing field `{name}`"),
             TypeError::ExtraField(name) => write!(f, "unexpected field `{name}`"),
             TypeError::FieldOrderMismatch => write!(f, "the fields are not in the order the type has them"),
@@ -885,7 +889,7 @@ fn convert_in<'db, E: From<TypeError>>(
             Type::Rec(TypeRec { name: RecName(r.name), body: Box::new(body) })
         }
 
-        TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize.into()),
+        TypeHint::ParseError(_) => return Err(TypeError::ParseError.into()),
         TypeHint::Alias(alias) => match scope.lookup(db, alias) {
             Some(use_) => use_?,
             None => {

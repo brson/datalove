@@ -4,8 +4,8 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "unexpected token in type hint"
+            "Int": {
+              "value": "42"
             }
           }
         },
@@ -20,7 +20,7 @@
   "diagnostics": [],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     }
   ],
   "root_type": null

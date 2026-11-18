@@ -165,6 +165,11 @@ fn error_to_json(error: &datalove_datalit::tycheck::TypeError) -> rmx::serde_jso
                 "kind": "CannotSynthesize"
             })
         }
+        TypeError::ParseError => {
+            json!({
+                "kind": "ParseError"
+            })
+        }
         TypeError::MissingField(name) => {
             json!({
                 "kind": "MissingField",

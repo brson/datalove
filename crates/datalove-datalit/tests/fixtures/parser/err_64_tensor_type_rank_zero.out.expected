@@ -4,8 +4,12 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "a tensor has at least one axis"
+            "Tensor": {
+              "elements": [],
+              "header": false,
+              "shape": [
+                0
+              ]
             }
           }
         },

@@ -55,16 +55,18 @@ pub trait TokenStream<'db> {
 /// Extension trait providing shared parsing methods.
 ///
 /// Blanket implemented for all types implementing `TokenStream`.
+/// Whether a token is `sigil`, or a branch it opens.
+pub fn is_sigil(token: &TreeToken<'_>, sigil: Sigil) -> bool {
+    match token {
+        TreeToken::Token(token) => matches!(token.kind, TokenKind::Sigil(s) if s == sigil),
+        TreeToken::Branch { sigil: s, .. } => *s == sigil,
+    }
+}
+
 pub trait TokenStreamExt<'db>: TokenStream<'db> {
     /// Check if the current token is a specific sigil.
     fn peek_sigil(&self, sigil: Sigil) -> bool {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                matches!(token.kind, TokenKind::Sigil(s) if s == sigil)
-            }
-            Some(TreeToken::Branch { sigil: s, .. }) => *s == sigil,
-            None => false,
-        }
+        self.peek().is_some_and(|token| is_sigil(token, sigil))
     }
 
     /// Try to consume a sigil. Returns true if successful.

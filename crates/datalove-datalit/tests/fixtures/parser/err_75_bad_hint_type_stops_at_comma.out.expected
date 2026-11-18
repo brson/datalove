@@ -1,0 +1,58 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Hinted": {
+                "inner": {
+                  "expr": {
+                    "ParseError": {
+                      "message": "unexpected token in type hint"
+                    }
+                  }
+                },
+                "type_hint": {
+                  "ParseError": {
+                    "message": "unexpected token in type hint"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "expr": {
+              "Hinted": {
+                "inner": {
+                  "expr": {
+                    "Int": {
+                      "value": "2"
+                    }
+                  }
+                },
+                "type_hint": "U8"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D046",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            3,
+            4
+          ],
+          "text": "+"
+        }
+      ],
+      "message": "unexpected token in type hint"
+    }
+  ]
+}

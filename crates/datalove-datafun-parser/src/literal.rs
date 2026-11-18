@@ -32,25 +32,28 @@ impl<'db> Parser<'db> {
         let ts = self.peek_text_span();
         self.eat_sigil(Sigil::Colon);
         let type_hint = self.parse_type_hint();
+        let broken = matches!(type_hint, datalit::ast::TypeHint::ParseError(_));
+        if broken {
+            self.skip_broken_hint_type();
+        }
         // Whatever goes wrong goes under the hint, as in datalit, so that a
         // hint is one node however it was written.
-        let inner = if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
-            // The type was reported, and what follows it is whatever the
-            // writer meant by it; a missing `/` would say the same thing
-            // twice.
-            let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                source: e.source, span: e.span.C(), message: e.message,
-            });
-            let error_ts = TextSpan::new(e.source, e.span.C());
-            self.eat_sigil(Sigil::SlashForward);
-            self.create_expr(kind, error_ts)
-        } else if !self.eat_sigil(Sigil::SlashForward) {
-            let ts = self.peek_text_span();
-            self.emit_expr_error(ts,
-                "expected '/' after type hint in `: type / expr` pattern",
-                DCode::HintWithoutSlash,
-                "expected '/'"
-            )
+        let inner = if !self.eat_sigil(Sigil::SlashForward) {
+            if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
+                // With no `/` there is no telling where the type was meant to
+                // end, and a missing `/` would say the same thing twice.
+                let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    source: e.source, span: e.span.C(), message: e.message,
+                });
+                self.create_expr(kind, TextSpan::new(e.source, e.span.C()))
+            } else {
+                let ts = self.peek_text_span();
+                self.emit_expr_error(ts,
+                    "expected '/' after type hint in `: type / expr` pattern",
+                    DCode::HintWithoutSlash,
+                    "expected '/'"
+                )
+            }
         } else if self.peek_colon_type_hint() {
             // Two hints on one expression would have to agree, and the
             // second says nothing the first does not.

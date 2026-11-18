@@ -53,17 +53,20 @@ impl<'db> Parser<'db> {
     fn parse_hinted(&mut self) -> ast::Expr<'db> {
         self.eat_sigil(Sigil::Colon);
         let type_hint = self.parse_type_hint();
-        let inner = if let ast::TypeHint::ParseError(e) = &type_hint {
-            // The type was reported, and what follows it is whatever the
-            // writer meant by it; a missing `/` would say the same thing
-            // twice.
+        let broken = matches!(type_hint, ast::TypeHint::ParseError(_));
+        if broken {
+            self.skip_broken_hint_type();
+        }
+        let inner = if self.eat_sigil(Sigil::SlashForward) {
+            self.numbered(|p| p.parse_expr())
+        } else if let ast::TypeHint::ParseError(e) = &type_hint {
+            // With no `/` there is no telling where the type was meant to
+            // end, and a missing `/` would say the same thing twice.
             let error_expr = ast::Expr::ParseError(ast::ExprParseError {
                 source: e.source, span: e.span.C(), message: e.message,
             });
-            let inner = self.numbered(|_| error_expr);
-            self.eat_sigil(Sigil::SlashForward);
-            inner
-        } else if !self.eat_sigil(Sigil::SlashForward) {
+            self.numbered(|_| error_expr)
+        } else {
             self.numbered(|p| {
                 let ts = p.peek_text_span();
                 p.emit_expr_error(ts,
@@ -72,8 +75,6 @@ impl<'db> Parser<'db> {
                     "expected '/' separator between type hint and expression"
                 )
             })
-        } else {
-            self.numbered(|p| p.parse_expr())
         };
         ast::Expr::Hinted(ast::ExprHinted { type_hint, inner })
     }

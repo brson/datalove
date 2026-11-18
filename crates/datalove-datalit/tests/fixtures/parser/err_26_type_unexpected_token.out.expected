@@ -4,8 +4,8 @@
       "Hinted": {
         "inner": {
           "expr": {
-            "ParseError": {
-              "message": "unexpected token in type hint"
+            "Int": {
+              "value": "42"
             }
           }
         },

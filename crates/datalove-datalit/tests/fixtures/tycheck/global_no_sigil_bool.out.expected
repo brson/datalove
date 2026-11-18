@@ -3,11 +3,7 @@
     "expr": {
       "Hinted": {
         "inner": {
-          "expr": {
-            "ParseError": {
-              "message": "unexpected token in type hint"
-            }
-          }
+          "expr": "True"
         },
         "type_hint": {
           "ParseError": {
@@ -20,7 +16,7 @@
   "diagnostics": [],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "kind": "ParseError"
     }
   ],
   "root_type": null

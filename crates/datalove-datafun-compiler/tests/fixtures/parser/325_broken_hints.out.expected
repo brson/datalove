@@ -7,28 +7,16 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "kind": "BinOp",
-            "lhs": {
+            "inner": {
               "expr": {
-                "inner": {
-                  "expr": {
-                    "kind": "ParseError",
-                    "message": "unexpected token in type hint"
-                  }
-                },
-                "kind": "Hinted",
-                "type_hint": {
-                  "ParseError": {
-                    "message": "unexpected token in type hint"
-                  }
-                }
+                "kind": "Int",
+                "value": "5"
               }
             },
-            "op": "Add",
-            "rhs": {
-              "expr": {
-                "kind": "ParseError",
-                "message": "unexpected token in expression"
+            "kind": "Hinted",
+            "type_hint": {
+              "ParseError": {
+                "message": "unexpected token in type hint"
               }
             }
           }
@@ -107,6 +95,67 @@
             "value": "1"
           }
         }
+      },
+      {
+        "kind": "Let",
+        "name": "f",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "inner": {
+              "expr": {
+                "kind": "ParseError",
+                "message": "unexpected token in type hint"
+              }
+            },
+            "kind": "Hinted",
+            "type_hint": {
+              "ParseError": {
+                "message": "unexpected token in type hint"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "g",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "inner": {
+                    "expr": {
+                      "kind": "ParseError",
+                      "message": "unexpected token in type hint"
+                    }
+                  },
+                  "kind": "Hinted",
+                  "type_hint": {
+                    "ParseError": {
+                      "message": "unexpected token in type hint"
+                    }
+                  }
+                }
+              },
+              {
+                "expr": {
+                  "inner": {
+                    "expr": {
+                      "kind": "Int",
+                      "value": "2"
+                    }
+                  },
+                  "kind": "Hinted",
+                  "type_hint": "U8"
+                }
+              }
+            ],
+            "kind": "List"
+          }
+        }
       }
     ]
   },
@@ -124,20 +173,6 @@
         }
       ],
       "message": "unexpected token in type hint"
-    },
-    {
-      "code": "P080",
-      "labels": [
-        {
-          "message": "unexpected token",
-          "span": [
-            12,
-            13
-          ],
-          "text": "/"
-        }
-      ],
-      "message": "unexpected token in expression"
     },
     {
       "code": "D049",
@@ -188,6 +223,34 @@
         }
       ],
       "message": "expected expression"
+    },
+    {
+      "code": "D046",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            96,
+            97
+          ],
+          "text": "+"
+        }
+      ],
+      "message": "unexpected token in type hint"
+    },
+    {
+      "code": "D046",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            111,
+            112
+          ],
+          "text": "+"
+        }
+      ],
+      "message": "unexpected token in type hint"
     }
   ]
 }
