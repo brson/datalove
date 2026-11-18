@@ -24,15 +24,24 @@ what does not, given calls that keep the same promise (`CallInit`).
 through (`ProgInit`), and a script's functions are such a program, the
 consts each sees holding values (`constPass_has`).
 
-What is not shown is that evaluating the consts never reads one not yet
-evaluated: a const's initializer runs on the consts' values alone, and that
-it reads only consts evaluated before it rests on the checker (F058) and on
-the order consts and functions are declared in.
+That evaluating the consts never reads one not yet evaluated is
+`Proofs/ConstSound.lean`'s, which takes the functions a const can reach as
+a program of their own (`ProgInit` of signatures among the run's,
+`SigsIn`), each const a function sees holding a value or not.
 -/
 
 namespace Datalove.Fun
 
 open Lit (Val)
+
+/-- Every signature `A` has, `S` has too: the analysis's signatures, a
+script's or those a const may reach, and the run's. -/
+def SigsIn (A S : List (String × Sig)) : Prop :=
+  ∀ f sig, A.lookup f = some sig → S.lookup f = some sig
+
+theorem SigsIn.refl (A : List (String × Sig)) : SigsIn A A := fun _ _ h => h
+
+theorem SigsIn.of_eq {A S S' : List (String × Sig)} (h : SigsIn A S) (e : S' = S) : SigsIn A S' := e ▸ h
 
 /-! ## Lining up -/
 
@@ -241,7 +250,7 @@ theorem initE_shape : ∀ (σ : ISt) (e : Expr), KeepsShape (initE sigs σ e) σ
       split
       · exact KeepsShape.bind ((KeepsShape.exitI σ1).trans h1) (give _)
       · exact KeepsShape.bind (KeepsShape.pure.trans h1) (give _)
-    · exact KeepsShape.pure
+    · intro _ e; cases e
   | σ, .tuple es => by simp only [initE]; exact initAll_shape σ es
   | σ, .list es => by simp only [initE]; exact initAll_shape σ es
   | σ, .set es => by simp only [initE]; exact initAll_shape σ es
@@ -955,7 +964,7 @@ set_option linter.unusedSectionVars false
 
 mutual
 
-theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), Γ.sigs = sigs →
+theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initE sigs σ e = .ok σ' → IT O σ σ' (fun _ _ => True) (evalS env call n Γ e)
   | 0, _, _, _, _, _, _ => by simp only [evalS]; exact IT.fuel
   | n + 1, Γ, e, σ, σ', hs, h => by
@@ -1050,7 +1059,7 @@ theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), Γ.sigs
     case proj b sel =>
       simp only [initE] at h
       simp only [evalS]
-      exact IT.bind (evalS_init n _ b σ σ' ((sigs_under _ b).trans hs) h) (initE_shape sigs σ b σ' h) (fun v =>
+      exact IT.bind (evalS_init n _ b σ σ' (hs.of_eq (sigs_under _ b)) h) (initE_shape sigs σ b σ' h) (fun v =>
         IT.calm (fieldVal_calm _ _) (fieldVal_noEarly _ _))
     case index b k mode =>
       cases mode with
@@ -1066,7 +1075,7 @@ theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), Γ.sigs
         refine IT.bind (IT.calm (typeOf_calm _) (typeOf_noEarly _)) rfl (fun bt => ?_)
         split
         · simp only [pure_bind]
-          exact IT.bind (evalS_init n _ b σ σ1 ((sigs_under _ b).trans hs) h1) hs1 (fun v =>
+          exact IT.bind (evalS_init n _ b σ σ1 (hs.of_eq (sigs_under _ b)) h1) hs1 (fun v =>
             IT.bind (evalC_init n (Γ.enter _) k _ σ1 σ' hs h2) hs2 (fun kv =>
               IT.here (indexVal_calm _ _ _) (fun _ _ => ho) (fun _ _ _ _ => trivial)))
         · exact IT.wrong
@@ -1075,7 +1084,7 @@ theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), Γ.sigs
       exact IT.bind (IT.calm (typeOf_calm _) (typeOf_noEarly _)) rfl (fun t =>
         evalForm_init n _ _ t σ σ' hs h0)
 
-theorem evalC_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt), Γ.sigs = sigs →
+theorem evalC_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initE sigs σ e = .ok σ' → IT O σ σ' (fun _ _ => True) (evalC env call n Γ e t)
   | 0, _, _, _, _, _, _, _ => by simp only [evalC]; exact IT.fuel
   | n + 1, Γ, e, t, σ, σ', hs, h => by
@@ -1086,7 +1095,7 @@ theorem evalC_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt)
       exact evalForm_init n _ inner t σ σ' hs h
     all_goals simp only [evalC]; exact evalForm_init n _ _ t σ σ' hs h
 
-theorem evalForm_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt), Γ.sigs = sigs →
+theorem evalForm_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initE sigs σ e = .ok σ' → IT O σ σ' (fun _ _ => True) (evalForm env call n Γ e t)
   | 0, _, _, _, _, _, _, _ => by simp only [evalForm]; exact IT.fuel
   | n + 1, Γ, e, t, σ, σ', hs, h => by
@@ -1206,22 +1215,22 @@ theorem evalForm_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : I
       exact evalCall_init n _ f args _ σ σ' hs h
     all_goals simp only [evalForm]; exact evalSub_init n _ _ σ σ' hs h0
 
-theorem evalSub_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), Γ.sigs = sigs →
+theorem evalSub_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initE sigs σ e = .ok σ' → IT O σ σ' (fun _ _ => True) (evalSub env call n Γ e)
   | 0, _, _, _, _, _, _ => by simp only [evalSub]; exact IT.fuel
   | n + 1, Γ, e, σ, σ', hs, h => by simp only [evalSub]; exact evalS_init n Γ e σ σ' hs h
 
 theorem evalCall_init : ∀ (n : Nat) (Γ : Ctx) (f : String) (args : List (Option Mode × Expr))
-    (expected : Option Ty) (σ σ' : ISt), Γ.sigs = sigs →
+    (expected : Option Ty) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initE sigs σ (.call f args) = .ok σ' → IT O σ σ' (fun _ _ => True) (evalCall env call n Γ f args expected)
   | 0, _, _, _, _, _, _, _, _ => by simp only [evalCall]; exact IT.fuel
   | n + 1, Γ, f, args, expected, σ, σ', hs, h => by
     simp only [initE] at h
-    simp only [evalCall, hs]
     cases hsig : sigs.lookup f with
-    | none => simp only; exact IT.wrong
+    | none => simp only [hsig] at h; cases h
     | some sig =>
       simp only [hsig] at h
+      simp only [evalCall, hs f sig hsig]
       obtain ⟨σ1, h1, h⟩ := bind_ok h
       have hs1 := initArgs_shape sigs σ args _ σ1 h1
       have hex : σ' = giveArgs σ1 args (sig.params.map (·.1)) ∧
@@ -1290,7 +1299,7 @@ theorem evalCall_init : ∀ (n : Nat) (Γ : Ctx) (f : String) (args : List (Opti
           exact IT.unsupported
 
 theorem evalArgs_init : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × Expr)) (ps : List (Mode × Ty))
-    (σ σ' : ISt), Γ.sigs = sigs → initArgs sigs σ args (ps.map (·.1)) = .ok σ' →
+    (σ σ' : ISt), SigsIn sigs Γ.sigs → initArgs sigs σ args (ps.map (·.1)) = .ok σ' →
     IT O σ σ' (fun vs ρ' => IArgs args ps vs ρ') (evalArgs env call n Γ args ps)
   | 0, _, _, _, _, _, _, _ => by simp only [evalArgs]; exact IT.fuel
   | n + 1, Γ, (mk, e) :: args, (mode, t) :: ps, σ, σ', hs, h => by
@@ -1369,7 +1378,7 @@ theorem evalArgs_init : ∀ (n : Nat) (Γ : Ctx) (args : List (Option Mode × Ex
     simp only [evalArgs]
     exact IT.pure' (fun ρ hρ => ⟨hρ, by simp, by simp, trivial⟩)
 
-theorem placeC_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt) (need : Bool), Γ.sigs = sigs →
+theorem placeC_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt) (need : Bool), SigsIn sigs Γ.sigs →
     initPlace sigs σ e need = .ok σ' → IT O σ σ' (fun r ρ' => IPlace need e r.1 ρ') (placeC env call n Γ e t)
   | 0, _, _, _, _, _, _, _, _ => by simp only [placeC]; exact IT.fuel
   | n + 1, Γ, e, t, σ, σ', need, hs, h => by
@@ -1381,17 +1390,17 @@ theorem placeC_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt
         simpa [IPlace, placeOf] using hr)
     all_goals simp only [placeC]; exact placeForm_init n _ _ t σ σ' need hs h
 
-theorem placeForm_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt) (need : Bool), Γ.sigs = sigs →
+theorem placeForm_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty) (σ σ' : ISt) (need : Bool), SigsIn sigs Γ.sigs →
     initPlace sigs σ e need = .ok σ' → IT O σ σ' (fun r ρ' => IPlace need e r.1 ρ') (placeForm env call n Γ e t)
   | 0, _, _, _, _, _, _, _, _ => by simp only [placeForm]; exact IT.fuel
   | n + 1, Γ, e, t, σ, σ', need, hs, h => by simp only [placeForm]; exact placeSub_init n Γ e σ σ' need hs h
 
-theorem placeSub_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need : Bool), Γ.sigs = sigs →
+theorem placeSub_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need : Bool), SigsIn sigs Γ.sigs →
     initPlace sigs σ e need = .ok σ' → IT O σ σ' (fun r ρ' => IPlace need e r.1 ρ') (placeSub env call n Γ e)
   | 0, _, _, _, _, _, _, _ => by simp only [placeSub]; exact IT.fuel
   | n + 1, Γ, e, σ, σ', need, hs, h => by simp only [placeSub]; exact placeS_init n Γ e σ σ' need hs h
 
-theorem placeS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need : Bool), Γ.sigs = sigs →
+theorem placeS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need : Bool), SigsIn sigs Γ.sigs →
     initPlace sigs σ e need = .ok σ' → IT O σ σ' (fun r ρ' => IPlace need e r.1 ρ') (placeS env call n Γ e)
   | 0, _, _, _, _, _, _, _ => by simp only [placeS]; exact IT.fuel
   | n + 1, Γ, e, σ, σ', need, hs, h => by
@@ -1448,7 +1457,7 @@ theorem placeS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need :
     case proj b sel =>
       simp only [initPlace] at h
       simp only [placeS]
-      refine IT.bind' (placeS_init n _ b σ σ' true ((sigs_under _ b).trans hs) h) (initPlace_shape sigs σ b true σ' h)
+      refine IT.bind' (placeS_init n _ b σ σ' true (hs.of_eq (sigs_under _ b)) h) (initPlace_shape sigs σ b true σ' h)
         (fun r ρa hpl hfr1 hρa => ?_)
       obtain ⟨o, kvs⟩ := r
       cases o with
@@ -1477,7 +1486,7 @@ theorem placeS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need :
         refine IT.bind (IT.calm (typeOf_calm _) (typeOf_noEarly _)) rfl (fun bt => ?_)
         split
         · simp only [pure_bind]
-          refine IT.bind' (placeS_init n _ b σ σ1 true ((sigs_under _ b).trans hs) h1) hs1
+          refine IT.bind' (placeS_init n _ b σ σ1 true (hs.of_eq (sigs_under _ b)) h1) hs1
             (fun r ρa hpl hfr1 hρa => ?_)
           obtain ⟨o, kvs⟩ := r
           refine IT.res_bindK (evalC_init n (Γ.enter _) k _ σ1 _ hs h2 hfr1 ρa hρa)
@@ -1497,7 +1506,7 @@ theorem placeS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need :
     all_goals simp only [placeS]; exact IT.wrong
 
 theorem evalPath_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (steps : List Step) (σ σ' : ISt),
-    Γ.sigs = sigs → initSteps sigs σ steps = .ok σ' →
+    SigsIn sigs Γ.sigs → initSteps sigs σ steps = .ok σ' →
     IT O σ σ' (fun _ _ => True) (evalPath env call n Γ t v steps)
   | 0, _, _, _, _, _, _, _, _ => by simp only [evalPath]; exact IT.fuel
   | _ + 1, _, _, v, [], σ, σ', _, h => by
@@ -1518,7 +1527,7 @@ theorem evalPath_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (steps : Lis
           (fun _ => IT.pure' (fun ρ hρ => ⟨hρ, trivial⟩))))
 
 theorem evalPathStep_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : Step) (σ σ' : ISt),
-    Γ.sigs = sigs → initSteps sigs σ [st] = .ok σ' →
+    SigsIn sigs Γ.sigs → initSteps sigs σ [st] = .ok σ' →
     IT O σ σ' (fun _ _ => True) (evalPathStep env call n Γ t v st)
   | 0, _, _, _, _, _, _, _, _ => by simp only [evalPathStep]; exact IT.fuel
   | _ + 1, _, _, v, .field s, σ, σ', _, h => by
@@ -1542,7 +1551,7 @@ theorem evalPathStep_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : St
     · exact IT.wrong
 
 theorem evalSteps_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (steps : List Step) (σ σ' : ISt),
-    Γ.sigs = sigs → initSteps sigs σ steps = .ok σ' →
+    SigsIn sigs Γ.sigs → initSteps sigs σ steps = .ok σ' →
     IT O σ σ' (fun _ _ => True) (evalSteps env call n Γ t v steps)
   | 0, _, _, _, _, _, _, _, _ => by simp only [evalSteps]; exact IT.fuel
   | _ + 1, _, _, v, [], σ, σ', _, h => by
@@ -1562,7 +1571,7 @@ theorem evalSteps_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (steps : Li
         evalSteps_init n Γ u w (st2 :: rest) σ1 σ' hs h))
 
 theorem evalStep_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : Step) (σ σ' : ISt),
-    Γ.sigs = sigs → initSteps sigs σ [st] = .ok σ' →
+    SigsIn sigs Γ.sigs → initSteps sigs σ [st] = .ok σ' →
     IT O σ σ' (fun _ _ => True) (evalStep env call n Γ t v st)
   | 0, _, _, _, _, _, _, _, _ => by simp only [evalStep]; exact IT.fuel
   | _ + 1, _, _, v, .field s, σ, σ', _, h => by
@@ -1584,7 +1593,7 @@ theorem evalStep_init : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : Step) 
     · exact IT.wrong
 
 theorem evalPair_init : ∀ (n : Nat) (Γ : Ctx) (a b : Expr) (expected : Option Ty) (σ σ1 σ' : ISt),
-    Γ.sigs = sigs → initE sigs σ a = .ok σ1 → initE sigs σ1 b = .ok σ' →
+    SigsIn sigs Γ.sigs → initE sigs σ a = .ok σ1 → initE sigs σ1 b = .ok σ' →
     IT O σ σ' (fun _ _ => True) (evalPair env call n Γ a b expected)
   | 0, _, _, _, _, _, _, _, _, _, _ => by simp only [evalPair]; exact IT.fuel
   | n + 1, Γ, a, b, expected, σ, σ1, σ', hs, h1, h2 => by
@@ -1594,7 +1603,7 @@ theorem evalPair_init : ∀ (n : Nat) (Γ : Ctx) (a b : Expr) (expected : Option
         IT.bind (evalC_init n _ b t σ1 σ' hs h2) (initE_shape sigs σ1 b σ' h2) (fun _ =>
           IT.pure' (fun ρ hρ => ⟨hρ, trivial⟩))))
 
-theorem evalPairs_init : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (ts : List Ty) (σ σ' : ISt), Γ.sigs = sigs →
+theorem evalPairs_init : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (ts : List Ty) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initAll sigs σ es = .ok σ' → IT O σ σ' (fun _ _ => True) (evalPairs env call n Γ es ts)
   | 0, _, _, _, _, _, _, _ => by simp only [evalPairs]; exact IT.fuel
   | n + 1, Γ, e :: es, t :: ts, σ, σ', hs, h => by
@@ -1612,7 +1621,7 @@ theorem evalPairs_init : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (ts : List Ty
   | n + 1, Γ, _ :: _, [], σ, σ', hs, h => by simp only [evalPairs]; exact IT.wrong
 
 theorem evalFields_init : ∀ (n : Nat) (Γ : Ctx) (fs : List (String × Expr)) (ts : List (String × Ty)) (σ σ' : ISt),
-    Γ.sigs = sigs → initFields sigs σ fs = .ok σ' → IT O σ σ' (fun _ _ => True) (evalFields env call n Γ fs ts)
+    SigsIn sigs Γ.sigs → initFields sigs σ fs = .ok σ' → IT O σ σ' (fun _ _ => True) (evalFields env call n Γ fs ts)
   | 0, _, _, _, _, _, _, _ => by simp only [evalFields]; exact IT.fuel
   | n + 1, Γ, (m, e) :: fs, (k, t) :: ts, σ, σ', hs, h => by
     simp only [initFields] at h
@@ -1628,7 +1637,7 @@ theorem evalFields_init : ∀ (n : Nat) (Γ : Ctx) (fs : List (String × Expr)) 
   | n + 1, Γ, [], _ :: _, σ, σ', hs, h => by simp only [evalFields]; exact IT.wrong
   | n + 1, Γ, _ :: _, [], σ, σ', hs, h => by simp only [evalFields]; exact IT.wrong
 
-theorem evalAll_init : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (t : Ty) (σ σ' : ISt), Γ.sigs = sigs →
+theorem evalAll_init : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (t : Ty) (σ σ' : ISt), SigsIn sigs Γ.sigs →
     initAll sigs σ es = .ok σ' → IT O σ σ' (fun _ _ => True) (evalAll env call n Γ es t)
   | 0, _, _, _, _, _, _, _ => by simp only [evalAll]; exact IT.fuel
   | _ + 1, _, [], _, σ, σ', _, h => by
@@ -1644,7 +1653,7 @@ theorem evalAll_init : ∀ (n : Nat) (Γ : Ctx) (es : List Expr) (t : Ty) (σ σ
         IT.pure' (fun ρ hρ => ⟨hρ, trivial⟩)))
 
 theorem evalEntries_init : ∀ (n : Nat) (Γ : Ctx) (es : List (Expr × Expr)) (k v : Ty) (σ σ' : ISt),
-    Γ.sigs = sigs → initEntries sigs σ es = .ok σ' → IT O σ σ' (fun _ _ => True) (evalEntries env call n Γ es k v)
+    SigsIn sigs Γ.sigs → initEntries sigs σ es = .ok σ' → IT O σ σ' (fun _ _ => True) (evalEntries env call n Γ es k v)
   | 0, _, _, _, _, _, _, _, _ => by simp only [evalEntries]; exact IT.fuel
   | _ + 1, _, [], _, _, σ, σ', _, h => by
     simp only [initEntries, pure, Except.pure, Except.ok.injEq] at h; subst h
@@ -1661,7 +1670,7 @@ theorem evalEntries_init : ∀ (n : Nat) (Γ : Ctx) (es : List (Expr × Expr)) (
           IT.pure' (fun ρ hρ => ⟨hρ, trivial⟩))))
 
 theorem evalRows_init : ∀ (n : Nat) (Γ : Ctx) (rows : List (List Expr)) (cols : List (String × Ty)) (σ σ' : ISt),
-    Γ.sigs = sigs → initRows sigs σ rows = .ok σ' → IT O σ σ' (fun _ _ => True) (evalRows env call n Γ rows cols)
+    SigsIn sigs Γ.sigs → initRows sigs σ rows = .ok σ' → IT O σ σ' (fun _ _ => True) (evalRows env call n Γ rows cols)
   | 0, _, _, _, _, _, _, _ => by simp only [evalRows]; exact IT.fuel
   | _ + 1, _, [], _, σ, σ', _, h => by
     simp only [initRows, pure, Except.pure, Except.ok.injEq] at h; subst h
@@ -2407,7 +2416,7 @@ variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall :
 include hcall
 set_option linter.unusedSectionVars false
 
-theorem evalKeys_init (n : Nat) (Γ : Ctx) (hs : Γ.sigs = sigs) : ∀ (keys : List (Expr × Ty)) (σ σ' : ISt),
+theorem evalKeys_init (n : Nat) (Γ : Ctx) (hs : SigsIn sigs Γ.sigs) : ∀ (keys : List (Expr × Ty)) (σ σ' : ISt),
     initAll sigs σ (keys.map (·.1)) = .ok σ' → IT O σ σ' (fun _ _ => True) (evalKeys env call n Γ keys)
   | [], σ, σ', h => by
     simp only [List.map_nil, initAll, pure, Except.pure, Except.ok.injEq] at h; subst h
@@ -2422,7 +2431,7 @@ theorem evalKeys_init (n : Nat) (Γ : Ctx) (hs : Γ.sigs = sigs) : ∀ (keys : L
         IT.pure' (fun ρ hρ => ⟨hρ, trivial⟩)))
 
 theorem execBind_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (p : Pat) (hint : Option Hint) (e : Expr) (σ σ1 : ISt)
-    (hs : Γ.sigs = sigs) (h : initE sigs σ e = .ok σ1) (hfr : Fr O σ) (hρ : IAg σ ρ) {B C : Prop} (hC : C) :
+    (hs : SigsIn sigs Γ.sigs) (h : initE sigs σ e = .ok σ1) (hfr : Fr O σ) (hρ : IAg σ ρ) {B C : Prop} (hC : C) :
     SRes O ρ (σ1.bind (patNames p) true, []) B C (execBind env call n Γ ρ p hint e) := by
   have fin : ∀ (a : Val) (ρ1 : VEnv), Keeps ρ ρ1 → True → IAg σ1 ρ1 →
       SRes O ρ1 (σ1.bind (patNames p) true, []) B C (do
@@ -2467,7 +2476,7 @@ include hcall
 set_option linter.unusedSectionVars false
 
 theorem execSet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List Step) (op : Option BinOp)
-    (e : Expr) (σ σ' : ISt) (hs : Γ.sigs = sigs) (h : initSet sigs σ x steps op e = .ok σ') (hfr : Fr O σ)
+    (e : Expr) (σ σ' : ISt) (hs : SigsIn sigs Γ.sigs) (h : initSet sigs σ x steps op e = .ok σ') (hfr : Fr O σ)
     (hρ : IAg σ ρ) {B C : Prop} (hC : C) : SRes O ρ (σ', []) B C (execSet env call n Γ ρ x steps op e) := by
   unfold initSet at h
   obtain ⟨σ1, h1, hA⟩ := bind_ok h
@@ -2506,7 +2515,7 @@ theorem execSet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List
     · rename_i vt keys hp
       have hkeys : initAll sigs σ1 (keys.map (·.1)) = .ok σ4 := by
         rw [setPlan_keys hp, ← initKeys_eq]; exact h2
-      have inner : ∀ Γe : Ctx, Γe.sigs = sigs → IT O σ σ4 (fun _ _ => True) (do
+      have inner : ∀ Γe : Ctx, SigsIn sigs Γe.sigs → IT O σ σ4 (fun _ _ => True) (do
           let r ← evalC env call n Γe e vt
           let kvs ← evalKeys env call n Γ keys
           match (← get).lookup x with
@@ -2544,7 +2553,7 @@ theorem execSet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List
   · trivial
 
 theorem execRet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Option Expr) (σ : ISt) (out : IOut)
-    (hs : Γ.sigs = sigs) (h : initStmt sigs σ (.ret e) = .ok out) (hfr : Fr O σ) (hρ : IAg σ ρ) {B C : Prop} :
+    (hs : SigsIn sigs Γ.sigs) (h : initStmt sigs σ (.ret e) = .ok out) (hfr : Fr O σ) (hρ : IAg σ ρ) {B C : Prop} :
     SRes O ρ out B C (execRet env call n Γ ρ e) := by
   simp only [initStmt] at h
   obtain ⟨σ1, h1, hk⟩ := bind_ok h
@@ -2632,7 +2641,7 @@ set_option linter.unusedSectionVars false
 
 mutual
 
-theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : ISt) (out : IOut), Γ.sigs = sigs →
+theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : ISt) (out : IOut), SigsIn sigs Γ.sigs →
     initStmt sigs σ s = .ok out → Fr O σ → IAg σ ρ →
     SRes O ρ out (hasBreakS s = true) (completesS s = true) (execStmt env call n k Γ ρ s)
   | 0, _, _, _, _, _, _, _, _, _, _ => by simp only [execStmt]; trivial
@@ -2737,7 +2746,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
       have meetE : ∀ ρ', IAg (σc.back re.1) ρ' → IAg ((σc.back rt.1).meet (σc.back re.1)) ρ' :=
         fun ρ' h => IAg.meet_right h (shE.trans shT.symm)
       -- The `then` body, run on the condition's variables with its name bound.
-      have thenCase : ∀ (Γt : Ctx) (ρ1 : VEnv) (w : Val), Γt.sigs = sigs → IAg σc ρ1 →
+      have thenCase : ∀ (Γt : Ctx) (ρ1 : VEnv) (w : Val), SigsIn sigs Γt.sigs → IAg σc ρ1 →
           SRes O ρ1 ((σc.back rt.1).meet (σc.back re.1), rt.2 ++ re.2) (hasBreakS (.if_ c tB eB t e) = true)
             (completesS (.if_ c tB eB t e) = true)
             (execBlock env call n k Γt (bindVals ρ1 (tB.toList.map (·, some w))) t >>= fun ρ' =>
@@ -2782,7 +2791,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
             exact SStop.weaken this (fun hb => by simp [hasBreakS, hasBreakElse, hb])
               (fun b hb => List.mem_append_right _ hb)
       -- The `else`, with the error bound.
-      have elseCase1 : ∀ (Γe : Ctx) (ρ1 : VEnv) (w : Val), Γe.sigs = sigs → IAg σc ρ1 →
+      have elseCase1 : ∀ (Γe : Ctx) (ρ1 : VEnv) (w : Val), SigsIn sigs Γe.sigs → IAg σc ρ1 →
           SRes O ρ1 ((σc.back rt.1).meet (σc.back re.1), rt.2 ++ re.2) (hasBreakS (.if_ c tB eB t e) = true)
             (completesS (.if_ c tB eB t e) = true)
             (execElse env call n k Γe (bindVals ρ1 (eB.toList.map (·, some w))) e >>= fun ρ' =>
@@ -3017,7 +3026,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
       · trivial
 
 theorem execCases_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (vs : List (String × Option Ty)) (a : String)
-    (v : Val) (cs : List Case) (σ : ISt) (r : List ISt × List ISt), Γ.sigs = sigs →
+    (v : Val) (cs : List Case) (σ : ISt) (r : List ISt × List ISt), SigsIn sigs Γ.sigs →
     initCases sigs σ cs = .ok r → Fr O σ → IAg σ ρ →
     match execCases env call n k Γ ρ vs a v cs with
     | .ok (some ρ') => Grew ρ ρ' ∧ (∃ τ ∈ r.1, IAg τ (restore ρ ρ')) ∧ casesComplete cs = true
@@ -3118,7 +3127,7 @@ theorem execCases_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (vs : List (Stri
           (fun hc => by rcases hc with hc | hc <;> simp [casesComplete, hc])
           (fun hc => by simp [casesBreak, hc])
 
-theorem execBlock_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt) (σ : ISt) (out : IOut), Γ.sigs = sigs →
+theorem execBlock_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt) (σ : ISt) (out : IOut), SigsIn sigs Γ.sigs →
     initBlock sigs σ ss = .ok out → Fr O σ → IAg σ ρ →
     SRes O ρ out (hasBreak ss = true) (completes ss = true) (execBlock env call n k Γ ρ ss)
   | 0, _, _, _, _, _, _, _, _, _, _ => by simp only [execBlock]; trivial
@@ -3140,7 +3149,7 @@ theorem execBlock_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (ss : List Stmt)
       exact SStop.weaken this (fun hb => by simp [hasBreak, hb]) (fun b hb => List.mem_append_left _ hb)
     | ok ρ' =>
       obtain ⟨g, h1', hc1⟩ := this
-      have := execBlock_init n k _ ρ' ss r1.1 r2 ((checkStmtF_sigs env n Γ s #[]).trans hs) h2 (hfr.inside i1) h1'
+      have := execBlock_init n k _ ρ' ss r1.1 r2 (hs.of_eq (checkStmtF_sigs env n Γ s #[])) h2 (hfr.inside i1) h1'
       simp only [bind, Except.bind]
       generalize execBlock env call n k _ ρ' ss = m2 at this ⊢
       cases m2 with
@@ -3185,7 +3194,7 @@ theorem IAg.start : ∀ (params : List (Mode × String × Hint)) (vals : List (O
   | _ :: _, [], hl, _ => by simp at hl
 
 theorem IAg.consts : ∀ (consts : List String) (cvals : VEnv), cvals.map (·.1) = consts →
-    (∀ q ∈ cvals, q.2.isSome = true) → IAg (consts.map (·, true, false)) cvals
+    (∀ q ∈ cvals, q.2.isSome = true) → IAg ((consts.map (·, true)).map fun (x, s) => (x, s, false)) cvals
   | [], [], _, _ => .nil
   | x :: consts, (y, o) :: cvals, hn, hs => by
     simp only [List.map_cons, List.cons.injEq] at hn
@@ -3235,17 +3244,18 @@ theorem outsSet_reverse (σ : ISt) (h : σ.outsSet = true) : ISt.outsSet σ.reve
   simpa [ISt.outsSet, List.all_reverse] using h
 
 /-- A program each of whose bodies the analysis lets through: the functions
-in the table have their signatures' modes, the analysis lets each body
-through with the consts it sees, and those consts hold values. -/
+`sigs` has a signature for have its modes in the table, and the analysis
+lets each body through with each const it sees holding a value or not, as
+the const's value in the table has one or not. -/
 def ProgInit (sigs : List (String × Sig)) (funs : List (String × FunInfo)) : Prop :=
   ∀ f sig fi, sigs.lookup f = some sig → funs.lookup f = some fi →
     fi.params.map (·.1) = sig.params.map (·.1) ∧
-    initFun sigs (fi.consts.map (·.1)) fi.params fi.body = .ok () ∧
-    fi.cvals.map (·.1) = fi.consts.map (·.1) ∧ ∀ q ∈ fi.cvals, q.2.isSome = true
+    ∃ marks, initFun sigs marks fi.params fi.body = .ok () ∧
+      IAg (marks.map fun (x, s) => (x, s, false)) fi.cvals
 
 /-- Where a body leaves with every `mut` and `out` parameter holding a
 value, what each parameter came to, as the call reads it back, holds one. -/
-theorem after_ok (params : List (Mode × String × Hint)) (consts : List String) (ps : List (Mode × Ty))
+theorem after_ok (params : List (Mode × String × Hint)) (consts : List (String × Bool)) (ps : List (Mode × Ty))
     (hm : params.map (·.1) = ps.map (·.1)) {τ : ISt} {ρ0 ρ' : VEnv}
     (hfr : Fr (funStart params consts).shape τ) (h : IAg τ ρ') (ho : τ.outsSet = true)
     (hl0 : (funStart params consts).length = ρ0.length) :
@@ -3286,15 +3296,16 @@ variable (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String × 
 given a value for every parameter but an `out` one, a call never stops at a
 variable that holds nothing, and returns with every `mut` and `out`
 parameter holding a value. -/
-theorem runCall_init (hp : ProgInit sigs funs) : ∀ d, CallInit sigs (runCall env sigs funs k d)
+theorem runCall_init {S : List (String × Sig)} (hS : SigsIn sigs S) (hp : ProgInit sigs funs) :
+    ∀ d, CallInit sigs (runCall env S funs k d)
   | 0 => fun f sig θ vals _ _ => by simp only [runCall]; simp [throw, throwThe, MonadExceptOf.throw]
   | d + 1 => by
     intro f sig θ vals hs hv
-    simp only [runCall, hs]
+    simp only [runCall, hS f sig hs]
     cases hfi : funs.lookup f with
     | none => simp [throw, throwThe, MonadExceptOf.throw]
     | some fi =>
-      obtain ⟨hm, hinit, hcn, hcs⟩ := hp f sig fi hs hfi
+      obtain ⟨hm, marks, hinit, hcv⟩ := hp f sig fi hs hfi
       have hpl : fi.params.length = sig.params.length := by simpa using congrArg List.length hm
       simp only
       by_cases hn : vals.length ≠ fi.params.length
@@ -3315,18 +3326,18 @@ theorem runCall_init (hp : ProgInit sigs funs) : ∀ d, CallInit sigs (runCall e
         rw [hm, List.zip_map_right] at hq
         obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
         exact hv q' hq' hmq
-      have hρ0 : IAg (funStart fi.params (fi.consts.map (·.1))) (argVals fi.params vals fi.cvals) := by
+      have hρ0 : IAg (funStart fi.params (marks)) (argVals fi.params vals fi.cvals) := by
         unfold funStart argVals
         rw [List.map_reverse, List.map_reverse]
-        exact IAg.append (IAg.reverse (IAg.start fi.params vals hlen' hvals)) (IAg.consts _ _ hcn hcs)
+        exact IAg.append (IAg.reverse (IAg.start fi.params vals hlen' hvals)) hcv
       have hl0 := IAg.length hρ0
-      have hfr0 : Fr (funStart fi.params (fi.consts.map (·.1))).shape (funStart fi.params (fi.consts.map (·.1))) :=
+      have hfr0 : Fr (funStart fi.params (marks)).shape (funStart fi.params (marks)) :=
         ⟨[], by simp, rfl⟩
-      have hb := execBlock_init env sigs (runCall env sigs funs k d) (runCall_init hp d)
-        (funStart fi.params (fi.consts.map (·.1))).shape fuel k
-        ((funCtx sigs fi.aliases fi.consts fi.tps fi.params sig).inst θ) _ fi.body _ r rfl hr hfr0 hρ0
+      have hb := execBlock_init env sigs (runCall env S funs k d) (runCall_init hS hp d)
+        (funStart fi.params (marks)).shape fuel k
+        ((funCtx S fi.aliases fi.consts fi.tps fi.params sig).inst θ) _ fi.body _ r hS hr hfr0 hρ0
       obtain ⟨ir, -⟩ := initBlock_shape sigs _ fi.body r hr
-      generalize execBlock env (runCall env sigs funs k d) fuel k _ _ fi.body = m at hb ⊢
+      generalize execBlock env (runCall env S funs k d) fuel k _ _ fi.body = m at hb ⊢
       cases m with
       | ok ρ' =>
         obtain ⟨-, h1, hc⟩ := hb
@@ -3334,14 +3345,14 @@ theorem runCall_init (hp : ProgInit sigs funs) : ∀ d, CallInit sigs (runCall e
         | ty t => simp [throw, throwThe, MonadExceptOf.throw]
         | void =>
           simp only [pure, Except.pure]
-          obtain ⟨ha1, ha2⟩ := after_ok fi.params (fi.consts.map (·.1)) sig.params hm (hfr0.inside ir) h1
+          obtain ⟨ha1, ha2⟩ := after_ok fi.params (marks) sig.params hm (hfr0.inside ir) h1
             (hout hc) hl0
           exact ⟨by simp [hpl], ha1, ha2⟩
       | error s =>
         cases s with
         | returned o ρ' =>
           obtain ⟨τ, hfr, h1, ho⟩ := hb
-          obtain ⟨ha1, ha2⟩ := after_ok fi.params (fi.consts.map (·.1)) sig.params hm hfr h1 ho hl0
+          obtain ⟨ha1, ha2⟩ := after_ok fi.params (marks) sig.params hm hfr h1 ho hl0
           cases o with
           | some v => exact ⟨by simp [hpl], ha1, ha2⟩
           | none => exact ⟨by simp [hpl], ha1, ha2⟩
@@ -3363,11 +3374,11 @@ holds nothing**: run against a program whose bodies the analysis lets
 through, its statements never stop at `Stop.uninit`. -/
 theorem runTop_init (sigs : List (String × Sig)) (funs : List (String × FunInfo)) (k d : Nat)
     (hp : ProgInit sigs funs) : ∀ (ss : List Stmt) (Γ Γa : Ctx) (σ : ISt) (ρ : VEnv) (log : List (Ty × Val)),
-    Γ.sigs = sigs → initTop sigs Γa σ ss = .ok () → Fr [] σ → IAg σ ρ →
+    SigsIn sigs Γ.sigs → initTop sigs Γa σ ss = .ok () → Fr [] σ → IAg σ ρ →
     (runTop sigs k d Γ ρ funs log ss).result ≠ .error .uninit
   | [], _, _, _, _, _, _, _, _, _ => by simp [runTop, pure, Except.pure]
   | s :: ss, Γ, Γa, σ, ρ, log, hs, h, hfr, hρ => by
-    have hcall := runCall_init inferEnv sigs funs k hp d
+    have hcall := runCall_init inferEnv sigs funs k (SigsIn.refl sigs) hp d
     cases s
     case fun_ f =>
       obtain ⟨name, tps, params, ret, body⟩ := f
@@ -3415,7 +3426,7 @@ theorem runTop_init (sigs : List (String × Sig)) (funs : List (String × FunInf
       cases m with
       | ok ρ' =>
         simp only
-        exact runTop_init sigs funs k d hp ss _ _ r.1 ρ' log ((checkStmtF_sigs _ _ _ _ _).trans hs) h2
+        exact runTop_init sigs funs k d hp ss _ _ r.1 ρ' log (hs.of_eq (checkStmtF_sigs _ _ _ _ _)) h2
           (hfr.inside ir) hex.2.1
       | error s' =>
         simp only
@@ -3472,7 +3483,7 @@ theorem decl_modes {ss : List Stmt} (hn : (resolveNames ss).2 = #[]) {name : Str
 lets through, with the consts it sees. -/
 theorem funDefs_init (sigs : List (String × Sig)) : ∀ (ss : List Stmt) (Γ : Ctx) (σ : ISt) (seen : Nat),
     initTop sigs Γ σ ss = .ok () → ∀ fd ∈ funDefs sigs Γ seen ss,
-      initFun sigs (fd.consts.map (·.1)) fd.params fd.body = .ok () ∧
+      initFun sigs (fd.consts.map (·.1, true)) fd.params fd.body = .ok () ∧
       ∃ tps ret, Stmt.fun_ (.mk fd.name tps fd.params ret fd.body) ∈ ss
   | [], _, _, _, _ => by simp [funDefs]
   | s :: ss, Γ, σ, seen, h => by
@@ -3515,7 +3526,8 @@ theorem funTable_init {ss : List Stmt} (hn : (resolveNames ss).2 = #[]) {Γ : Ct
   obtain ⟨hi, tps, ret, hmem⟩ := funDefs_init _ ss Γ σ 0 h fd hfd
   obtain ⟨sig', hl', hmodes⟩ := decl_modes hn hmem
   rw [hs] at hl'; cases hl'
-  refine ⟨hmodes.symm, hi, by simp [constEnv, List.map_map, Function.comp_def], hc fd hfd⟩
+  refine ⟨hmodes.symm, (fd.consts.map (·.1)).map (·, true), by simpa [List.map_map, Function.comp_def] using hi,
+    IAg.consts _ _ (by simp [constEnv, List.map_map, Function.comp_def]) (hc fd hfd)⟩
 
 /-! ## The consts a function sees -/
 
@@ -3752,10 +3764,9 @@ variable is read while it holds nothing, and no call returns with an `out`
 parameter it left holding nothing, since every way out of a body the
 analysis lets through has given each one a value.
 
-The consts are left out: a const's initializer runs on the consts' values
-alone (`constPass`), and that it reads only consts already evaluated rests
-on the checker (F058) and on the order consts and functions are declared
-in, which this does not show. -/
+The consts are `runScript_noUninit`'s, in `Proofs/ConstSound.lean`: a
+const's initializer runs on the consts' values alone (`constPass`), and
+that it reads only consts already evaluated rests on F089. -/
 theorem runScript_init (ss : List Stmt) (h : checkScript ss = #[]) (hi : initScript ss = none) (k d : Nat)
     (hu : (runScript k d ss).result = .error .uninit) :
     constPass (resolveNames ss).1 (funDefs (resolveNames ss).1
@@ -3775,7 +3786,7 @@ theorem runScript_init (ss : List Stmt) (h : checkScript ss = #[]) (hi : initScr
     | ok store =>
       intro hu
       obtain ⟨-, hc⟩ := constPass_has _ _ k d ss _ [] store 0 rfl ⟨by simp, by simp⟩ hcp
-      exact absurd hu (runTop_init _ _ k d (funTable_init hn ht hc) ss _ _ [] [] [] rfl ht ⟨[], by simp, rfl⟩ .nil)
+      exact absurd hu (runTop_init _ _ k d (funTable_init hn ht hc) ss _ _ [] [] [] (SigsIn.refl _) ht ⟨[], by simp, rfl⟩ .nil)
     | error s =>
       intro hu
       simp only [throw, throwThe, MonadExceptOf.throw, Except.error.injEq] at hu

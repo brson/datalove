@@ -2061,3 +2061,107 @@ fn init_agrees() {
     }
     assert!(mismatches.is_empty(), "the Rust and the model decide what holds a value differently on {} functions", mismatches.len());
 }
+
+/// An expression of `consts_script`'s: a number, a const among `consts`, or
+/// a call to one of the `funs` functions, added up.
+fn const_expr(rng: &mut SeededRng, consts: &[String], funs: usize, depth: u32) -> String {
+    let pick = rng.random_range(0..if depth < 2 { 5 } else { 3 });
+    match pick {
+        0 => fmt!("{}", rng.random_range(0..4)),
+        1 | 2 if !consts.is_empty() => consts[rng.random_range(0..consts.len())].C(),
+        1 | 2 => "1".S(),
+        3 => fmt!("f{}({})", rng.random_range(0..funs), const_expr(rng, consts, funs, depth + 1)),
+        _ => fmt!("{} + {}", const_expr(rng, consts, funs, depth + 1), const_expr(rng, consts, funs, depth + 1)),
+    }
+}
+
+/// A script for `consts_agrees`: consts and functions declared in a random
+/// order, each const's value and each function's body reading the consts
+/// declared above it and calling any of the functions, one above or below,
+/// so that some const reaches, through calls, one declared at or after it.
+/// A function's body may shadow a const with a local of its name.
+fn consts_script(rng: &mut SeededRng) -> String {
+    let funs = rng.random_range(1..=4);
+    let const_count = rng.random_range(1..=4);
+    let mut order: Vec<Option<usize>> = (0..funs).map(Some).chain((0..const_count).map(|_| None)).collect();
+    for i in (1..order.len()).rev() {
+        order.swap(i, rng.random_range(0..=i));
+    }
+    let mut consts = Vec::<String>::new();
+    let mut text = String::new();
+    for item in order {
+        match item {
+            Some(f) => {
+                text.push_str(&fmt!("fun f{f}(n: int): int\n"));
+                let mut seen = consts.C();
+                seen.push("n".S());
+                if !consts.is_empty() && rng.random_bool(0.3) {
+                    let shadow = consts[rng.random_range(0..consts.len())].C();
+                    text.push_str(&fmt!("  let {shadow}: int = 1\n"));
+                }
+                if rng.random_bool(0.4) {
+                    text.push_str(&fmt!("  if n == 0\n    ret {}\n  end if\n", const_expr(rng, &seen, funs, 1)));
+                }
+                text.push_str(&fmt!("  ret {}\nend fun\n", const_expr(rng, &seen, funs, 0)));
+            }
+            None => {
+                let name = fmt!("c{}", consts.len());
+                text.push_str(&fmt!("const {name}: int = {}\n", const_expr(rng, &consts, funs, 0)));
+                consts.push(name);
+            }
+        }
+    }
+    text
+}
+
+/// F089 as the model decides it (`formal/Datalove/FunConsts.lean`) held to
+/// the Rust's, on scripts whose consts call functions declared above and
+/// below them: the model refuses a script where, and only where, the Rust
+/// reports F089, and the two checkers agree on everything else.
+#[test]
+fn consts_agrees() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the consts tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let mut cases = Vec::new();
+    for seed in seeds.iter() {
+        let mut rng = SeededRng::derive(seed, "consts");
+        let text = consts_script(&mut rng);
+        let (codes, script, _) = rust_side(&text);
+        cases.push((fmt!("seed {seed}"), text, script, codes));
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script, _)| json!({ "consts": script })).collect();
+    let answers = ask_oracle(&queries);
+
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    let mut mismatches = Vec::new();
+    for ((what, text, _, rust_codes), oracle) in cases.iter().zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
+            continue;
+        }
+        let codes: Vec<&str> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X()).collect();
+        let rust_f089 = rust_codes.iter().any(|c| c == "F089");
+        let rust_rest: Vec<&str> = rust_codes.iter().map(|c| c.as_str()).filter(|c| *c != "F089").collect();
+        assert_eq!(codes, rust_rest, "the checkers differ but for F089:\n{text}");
+        if !codes.is_empty() {
+            *outcomes.entry(fmt!("checker refuses {}", codes[0])).or_default() += 1;
+            continue;
+        }
+        let model_f089 = oracle["consts"].as_str() == Some("F089");
+        *outcomes.entry(if model_f089 { "F089" } else { "accepted" }.S()).or_default() += 1;
+        if model_f089 != rust_f089 {
+            mismatches.push(fmt!("{what}:\n{text}    rust F089: {rust_f089}, model F089: {model_f089}"));
+        }
+    }
+    println!(
+        "{} scripts over seeds {}..{}: {} differ; {outcomes:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model decide F089 differently on {} scripts", mismatches.len());
+}

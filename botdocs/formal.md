@@ -468,9 +468,8 @@ What it found:
   about type parameters for F088. A const that binds nothing now touches no
   other binding (error fixture `130_failed_const_leaves_the_name_alone`).
   F089, a const that depends on
-  itself through a function, cannot arise in a script, where a function
-  sees only the consts above it; it is a module's, and the model leaves it
-  out.
+  itself or on a later const through the functions it calls, the checker
+  leaves out; `FunConsts.lean` models it beside the checker, as below.
 - **Checking a negation against a float did not borrow its operand.**
   Synthesizing `-e` reads `e` in a borrowed position, but checking it
   against `f32` or `f64` passed the type down to `e` outside one, so
@@ -606,8 +605,8 @@ Four things are proved of it:
   bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
   of the return type, or with none from a function that returns nothing.
   It may also stop at a read of a variable declared with no value, which
-  the ownership analysis refuses (O005, and `Fun.runScript_init` below shows
-  that a script it lets through does not, past its consts), at a loop run more often than it
+  the ownership analysis refuses (O005, and `Fun.runScript_noUninit` below shows
+  that a script it and the F089 check let through does not), at a loop run more often than it
   was given, or calls nested deeper than they were given, and at what the
   model does not run, each a case of `Gap` in `FunEval.lean`: a call with a
   type argument that has a `rec` in it, a comparison or map key of a float,
@@ -710,7 +709,32 @@ Four things are proved of it:
   inside an expression against what the whole expression wrote, so that
   `o? + get(out p)` returned without writing `p` and the caller read an
   unset string; the analysis now checks at each such operator as it reaches
-  it (error fixture 152), as the model does.
+  it (error fixture 152), as the model does. The analysis refuses a call
+  to a function it has no signature for, which under a script's signatures
+  only a script the checker refuses makes, and the next result uses.
+- **Nor do its consts** (`Fun.runScript_noUninit`, in
+  `Proofs/ConstSound.lean`, of F089 as `FunConsts.lean` models it). A const
+  is evaluated from the consts' values alone, and the functions it calls
+  see the consts above them, those not evaluated yet holding nothing, so
+  what it reads through a call is not settled by order: a const may call a
+  function declared below it, which sees consts declared after the const.
+  The check runs the analysis on each const and on each function it can
+  reach by calls, with only those functions' signatures, so the run calls
+  no other, and with each const a function sees holding a value only where
+  it is evaluated before (`constMarks`), which is where the run's value has
+  one (`constMarks_IAg`). Those functions are then a program the analysis
+  lets through (`constProg`, `ProgInit`), with the analysis's signatures
+  among the run's (`SigsIn`), and evaluating the consts never stops at
+  `Stop.uninit` (`constPass_init`). With the result above, a script that
+  checks and that both let through never stops there. The Rust looks for
+  the consts each reached function names; the model asks the analysis
+  whether one is read, and the two differ only where the analysis refuses a
+  function for its own variables, which `initScript` does too.
+  `consts_agrees` in `fun_tests` holds the Rust's F089 to the model's on
+  scripts of consts and functions in random order, calling one another and
+  reading the consts above them, some shadowed by a local; over three
+  thousand seeds, four hundred of them F089, none differ, and marking every
+  const as holding a value makes 151 of a thousand differ.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -790,7 +814,8 @@ Four things are proved of it:
   type parameters (`funTable_ok`). A const's expression reads only consts
   above it, through the functions it calls too, as F089 sees to; the model
   does not need that for soundness, since a const it read before it was
-  evaluated would read as unset, a stop a script may end with. A function goes into the
+  evaluated would read as unset, a stop a script may end with, and
+  `Fun.runScript_noUninit` shows F089 rules that stop out. A function goes into the
   table under the signature `resolveNames` gave its name, and the runner
   checks nothing more of it. In a script that checks, that signature is its
   own, with its type parameters and as many parameters (`Fun.resolveNames_own`,
@@ -896,13 +921,6 @@ it, as it did not find the atom and term case.
 
 In rough order of what to do next:
 
-- **Consts read before they are evaluated.** `Fun.runScript_init` leaves
-  out the const pass: a const's initializer runs on the consts' values
-  alone, and that it reads only consts evaluated before it rests on F058
-  and on the order consts and functions are declared in, which the proof
-  does not carry. A const calling a function declared below it that reads a
-  const declared below the first is the case to settle.
-
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Order independence.** The doc claims that where unification's
   constraints all hold and no `rec` is involved, the order of a
@@ -922,9 +940,10 @@ In rough order of what to do next:
 - **Recursive type arguments.** The check-once theorem takes type arguments
   with no `rec` in them (`Ground`), until T065 says whether a recursive key
   is allowed.
-- **F089, and requires that fail.** The Rust finds a const that depends on
-  itself through a function by what its checker looked up, and the model
-  does not track that; `world_typing_agrees` skips any world the Rust
+- **F089 in a world, and requires that fail.** A script's F089 is modelled
+  (`FunConsts.lean`), a module's is not: the Rust finds a module's const
+  that depends on itself through a function by what its checker looked up,
+  and the model's world checker does not track that; `world_typing_agrees` skips any world the Rust
   reports it in, though worldgen has not yet written one. The model takes
   only worlds whose modules require modules before them, once each under
   one alias, with every require and import above the declarations: a

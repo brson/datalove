@@ -11,7 +11,8 @@ type of each top-level `debuglog`. Every function is in the table calls run
 the consts it sees where it is declared: the consts above it, by name and
 type, the latest of each (`constEnv`, `FunDef.entry`). A const's expression
 reads only consts above it, through the functions it calls too, which F089
-sees to; one that read a const not evaluated yet would read it unset. A
+sees to (`FunConsts.lean`); one that read a const not evaluated yet would
+read it unset. A
 `debuglog` inside a function is not kept.
 
 A function goes into the table under the signature `resolveNames` gave its

@@ -36,7 +36,9 @@ reads back: it starts with a value, so the check at a way out never fails
 for it, but the proof needs to know it holds one there.
 
 `Proofs/InitSound.lean` shows that a script this accepts, and that checks,
-stops at `Stop.uninit` only while evaluating its consts.
+stops at `Stop.uninit` only while evaluating its consts, and
+`Proofs/ConstSound.lean` that with F089 (`FunConsts.lean`) it does not
+stop there at all.
 -/
 
 namespace Datalove.Fun
@@ -128,7 +130,10 @@ def argsExit : List (Option Mode × Expr) → List Mode → Bool
 mutual
 
 /-- An expression, as `evalS` runs it: what holds a value after it, or the
-first thing refused. -/
+first thing refused. A call to a function `sigs` has no signature for is
+refused: under a script's signatures only a script the checker refuses makes
+one, and under a const's (`FunConsts.lean`) it is a call the const does not
+reach. -/
 def initE (sigs : List (String × Sig)) : ISt → Expr → InitM ISt
   | σ, .var x => readI σ x
   | σ, .place x steps => readI σ x >>= fun σ => initSteps sigs σ steps
@@ -164,7 +169,7 @@ def initE (sigs : List (String × Sig)) : ISt → Expr → InitM ISt
       let σ ← initArgs sigs σ args ms
       let σ ← if argsExit args ms then exitI σ else pure σ
       pure (giveArgs σ args ms)
-    | none => pure σ
+    | none => throw "F089"
   | σ, .tuple es => initAll sigs σ es
   | σ, .list es => initAll sigs σ es
   | σ, .set es => initAll sigs σ es
@@ -338,13 +343,14 @@ end
 
 /-- What a function's body starts with: its parameters, the last innermost,
 each holding a value but an `out` one, then the consts it sees, as
-`argVals` binds them. -/
-def funStart (params : List (Mode × String × Hint)) (consts : List String) : ISt :=
-  params.reverse.map (fun (m, x, _) => (x, m != .out, m == .out || m == .mut)) ++ consts.map (·, true, false)
+`argVals` binds them, each holding a value or not. -/
+def funStart (params : List (Mode × String × Hint)) (consts : List (String × Bool)) : ISt :=
+  params.reverse.map (fun (m, x, _) => (x, m != .out, m == .out || m == .mut)) ++
+    consts.map fun (x, s) => (x, s, false)
 
 /-- A function's body: what it refuses, if anything. Its end is a way out
 where it can complete. -/
-def initFun (sigs : List (String × Sig)) (consts : List String) (params : List (Mode × String × Hint))
+def initFun (sigs : List (String × Sig)) (consts : List (String × Bool)) (params : List (Mode × String × Hint))
     (body : List Stmt) : InitM Unit := do
   let (σ, _) ← initBlock sigs (funStart params consts) body
   if completes body then discard (exitI σ)
@@ -355,7 +361,7 @@ there, and every other statement on the top level's variables. -/
 def initTop (sigs : List (String × Sig)) : Ctx → ISt → List Stmt → InitM Unit
   | _, _, [] => pure ()
   | Γ, σ, .fun_ (.mk _ _ params _ body) :: ss =>
-    initFun sigs ((constsOf Γ.vars).map (·.1)) params body >>= fun _ => initTop sigs Γ σ ss
+    initFun sigs ((constsOf Γ.vars).map (·.1, true)) params body >>= fun _ => initTop sigs Γ σ ss
   | Γ, σ, s :: ss =>
     initStmt sigs σ s >>= fun r => initTop sigs ((checkStmt Γ s).run #[]).1 r.1 ss
 
