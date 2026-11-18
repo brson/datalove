@@ -49,7 +49,7 @@ def StopOkS (Γ : Ctx) (B : Prop) : Stop → Prop
   | .returned o ρ => RetOk Γ.ret o ∧ Ext Γ.vars ρ
   | .brk ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ ∧ B
   | .cont ρ => Γ.inLoop = true ∧ Ext Γ.vars ρ
-  | .unsupported | .uninit | .diverge => True
+  | .unsupported _ | .uninit | .diverge => True
   | .fuel | .wrong => False
 
 /-- What running gives meets `P`, or stops as a checked block may. -/
@@ -271,7 +271,7 @@ theorem slices_typed {e : Ty} {shape : List Nat} {vs : List Val}
 theorem indexed_fits {i x : String} {t : Ty} {vs : List Val} (hvs : ∀ w ∈ vs, HasType w t) :
     match indexed vs with
     | .ok items => ∀ item ∈ items, Fits [(i, .index), (x, t)] (([i, x].zip item).map fun (x, w) => (x, some w))
-    | .error s => s = .unsupported := by
+    | .error s => s = .unsupported .bigFor := by
   unfold indexed
   by_cases hlen : vs.length ≤ 2 ^ Lit.indexBits
   · simp only [hlen, ↓reduceIte, pure, Except.pure]
@@ -304,7 +304,7 @@ theorem walkItems_fits {c : Ty} {names : List String} {Δ : List (String × Ty)}
     (hw : walk c names = .ok Δ) (hv : HasType v c) :
     match walkItems c names v with
     | .ok items => ∀ item ∈ items, Fits Δ ((names.zip item).map fun (x, w) => (x, some w))
-    | .error s => s = .unsupported := by
+    | .error s => s = .unsupported .bigFor := by
   have one : ∀ (x : String) (t : Ty) (ws : List Val), (∀ w ∈ ws, HasType w t) →
       ∀ item ∈ ws.map ([·]), Fits [(x, t)] (([x].zip item).map fun (x, w) => (x, some w)) := by
     intro x t ws hws item hm

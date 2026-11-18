@@ -7,8 +7,9 @@ import Datalove.Proofs.CallSound
 `Fun.runScript_sound`: where `checkScript` reports nothing, running the
 script (`runScript`) logs, at each top-level `debuglog`, a value of the type
 the checker gives it, and ends, or returns early with a value of the
-script's type `!()`, or stops at what is not run yet, at a variable read
-before it is set, or where a loop or calls ran as long as they were given.
+script's type `!()`, or stops at a `Gap` the model does not run, at a
+variable read before it is set, or where a loop or calls ran as long as
+they were given.
 It joins the theorems for expressions, statements and calls. The consts
 are evaluated first, each to a value of its type (`constPass_sound`), and
 every function is in the table from the start, as checked (`funTable_ok`),
@@ -255,8 +256,9 @@ theorem checkStmtF_consts {env : InferEnv} : ∀ {n : Nat} {Γ : Ctx} {s : Stmt}
 /-! ## Running -/
 
 /-- How a script may end: normally, or returning early with a value of its
-type `!()`, or stopping at what is not run yet, at a variable read before it
-is set, or where a loop or calls ran as long as they were given. -/
+type `!()`, or stopping at a `Gap` the model does not run, at a variable
+read before it is set, or where a loop or calls ran as long as they were
+given. -/
 def TopOk (r : EvalM Unit) : Prop :=
   match r with
   | .ok _ => True
@@ -290,10 +292,29 @@ def FunDefOk (env : InferEnv) (sigs : List (String × Sig)) (fd : FunDef) : Prop
           | .ty _ => completes fd.body
           | .void => false) "F063") ()
 
+/-- A function declared is in the table. -/
+theorem funTable_lookup {store : CStore} {f : String} :
+    ∀ {defs : List FunDef}, (∃ fd ∈ defs, fd.name = f) → ∃ fi, (funTable defs store).lookup f = some fi
+  | [], ⟨_, hm, _⟩ => by simp at hm
+  | d :: ds, ⟨fd, hm, hn⟩ => by
+    simp only [funTable, List.map_cons, FunDef.entry, List.lookup]
+    by_cases e : f = d.name
+    · simp [e]
+    · have : fd ∈ ds := by
+        rcases List.mem_cons.mp hm with rfl | hm
+        · exact absurd hn.symm e
+        · exact hm
+      have hne : (f == d.name) = false := by simp [e]
+      simp only [hne]
+      exact funTable_lookup ⟨fd, this, hn⟩
+
 /-- The table of functions as declared, their consts' values from consts
-evaluated, is as `ProgOk` asks. -/
+evaluated, is as `ProgOk` asks, where every function the signatures name is
+declared. -/
 theorem funTable_ok {env : InferEnv} {sigs : List (String × Sig)} {defs : List FunDef} {store : CStore}
+    (hcov : ∀ f sig, sigs.lookup f = some sig → ∃ fd ∈ defs, fd.name = f)
     (hd : ∀ fd ∈ defs, FunDefOk env sigs fd) (hs : StoreOk store) : ProgOk env sigs (funTable defs store) := by
+  refine ⟨fun f sig hsig => funTable_lookup (hcov f sig hsig), ?_⟩
   intro f sig fi hsig hl
   have hm := lookup_mem hl
   simp only [funTable, List.mem_map] at hm
@@ -328,6 +349,33 @@ theorem funDef_ok (ss0 : List Stmt) (hn : (resolveNames ss0).2 = #[]) {Γ : Ctx}
     cases hs
     exact ⟨hlen.symm, fun θ hg hbd =>
       body_checks ss0 Γ.aliases (constsOf Γ.vars) name tps params ret body _ hsn htp tf hf θ hg hbd⟩
+
+/-- A function declared with a signature is among a script's functions. -/
+theorem funDefs_has (sigs : List (String × Sig)) : ∀ (ss : List Stmt) (Γ : Ctx) (seen : Nat) (d : FunDecl),
+    .fun_ d ∈ ss → (sigs.lookup d.name).isSome → ∃ fd ∈ funDefs sigs Γ seen ss, fd.name = d.name
+  | [], _, _, _, h, _ => by simp at h
+  | s :: ss, Γ, seen, d, hm, hs => by
+    rcases List.mem_cons.mp hm with rfl | hm'
+    · obtain ⟨name, tps, params, ret, body⟩ := d
+      obtain ⟨sig, hsig⟩ := Option.isSome_iff_exists.mp hs
+      simp only [FunDecl.name] at hsig
+      exact ⟨{ name, aliases := Γ.aliases, consts := constsOf Γ.vars, tps, params, body, seen },
+        by simp [funDefs, funDef, hsig], rfl⟩
+    · cases s
+      case fun_ f =>
+        obtain ⟨fd, h1, h2⟩ := funDefs_has sigs ss Γ seen d hm' hs
+        exact ⟨fd, by simp [funDefs, h1], h2⟩
+      all_goals
+        simp only [funDefs]
+        exact funDefs_has sigs ss _ _ d hm' hs
+
+/-- Every function a script's signatures name is among its functions. -/
+theorem funDefs_covers (ss : List Stmt) (Γ : Ctx) (seen : Nat) :
+    ∀ f sig, (resolveNames ss).1.lookup f = some sig →
+      ∃ fd ∈ funDefs (resolveNames ss).1 Γ seen ss, fd.name = f := by
+  intro f sig hl
+  obtain ⟨d, hm, rfl⟩ := resolveNames_declared hl
+  exact funDefs_has _ ss Γ seen d hm (by simp [hl])
 
 /-- Every function of a script that checks is declared as checked. -/
 theorem funDefs_ok (ss0 : List Stmt) (hn : (resolveNames ss0).2 = #[]) : ∀ (ss : List Stmt) (Γ : Ctx) (seen : Nat),
@@ -368,6 +416,7 @@ theorem const_vars {env : InferEnv} {n : Nat} {Γ Γ' : Ctx} {x : String} {hint 
 /-- A script's consts, evaluated in order from consts of their types, are
 of their types, or stop as a script may. -/
 theorem constPass_sound (ss0 : List Stmt) (k d : Nat) (defs : List FunDef)
+    (hcov : ∀ f sig, (resolveNames ss0).1.lookup f = some sig → ∃ fd ∈ defs, fd.name = f)
     (hd : ∀ fd ∈ defs, FunDefOk inferEnv (resolveNames ss0).1 fd) :
     ∀ (ss : List Stmt) (Γ : Ctx) (store : CStore),
     SQuiet (checkTop (resolveNames ss0).1 Γ ss) () → Γ.Runs (resolveNames ss0).1 → Γ.inLoop = false →
@@ -377,13 +426,13 @@ theorem constPass_sound (ss0 : List Stmt) (k d : Nat) (defs : List FunDef)
     | .error s => StopOk (.ty (.result unitTy)) s.unreturn
   | [], _, store, _, _, _, _, _, hs => by simp only [constPass]; exact hs
   | s :: ss, Γ, store, h, hb, hl, hr, hc, hst => by
-    have hcall := runCall_ok inferEnv _ _ (funTable_ok hd hst) k d
+    have hcall := runCall_ok inferEnv _ _ (funTable_ok hcov hd hst) k d
     cases s
     case fun_ f =>
       simp only [checkTop] at h
       obtain ⟨⟨⟩, -, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
       simp only [constPass]
-      exact constPass_sound ss0 k d defs hd ss Γ store h hb hl hr hc hst
+      exact constPass_sound ss0 k d defs hcov hd ss Γ store h hb hl hr hc hst
     case const_ x hint e =>
       simp only [checkTop] at h
       obtain ⟨Γ', hs, h⟩ := SQuiet.bind_inv (fun _ => checkTop_appends _ _ _) h
@@ -404,7 +453,7 @@ theorem constPass_sound (ss0 : List Stmt) (k d : Nat) (defs : List FunDef)
         cases ha with
         | cons ho ha =>
           simp only [hv, bind, Except.bind]
-          exact constPass_sound ss0 k d defs hd ss Γ' _ h (g.runs hb) (g.2.1.trans hl) (g.1.trans hr)
+          exact constPass_sound ss0 k d defs hcov hd ss Γ' _ h (g.runs hb) (g.2.1.trans hl) (g.1.trans hr)
             (checkStmtF_consts hs hc) (fun p hp => by
               rcases List.mem_cons.mp hp with rfl | hp
               · exact ho
@@ -416,7 +465,7 @@ theorem constPass_sound (ss0 : List Stmt) (k d : Nat) (defs : List FunDef)
       have hrun := congrArg Prod.fst hs
       simp only [constPass]
       rw [hrun]
-      exact constPass_sound ss0 k d defs hd ss Γ' store h (g.runs hb) (g.2.1.trans hl) (g.1.trans hr)
+      exact constPass_sound ss0 k d defs hcov hd ss Γ' store h (g.runs hb) (g.2.1.trans hl) (g.1.trans hr)
         (checkStmtF_consts hs hc) hst
 
 /-- A script's statements from a context its run agrees with run soundly. -/
@@ -484,21 +533,22 @@ theorem runTop_sound (ss0 : List Stmt) (k d : Nat) :
 
 /-- **A script that checks runs soundly**: each top-level `debuglog` logs a
 value of the type the checker gives it, and the script ends, or returns
-early with a value of its type `!()`, or stops at what is not run yet, at a
-variable read before it is set, or where a loop or calls ran as long as they
-were given. -/
+early with a value of its type `!()`, or stops at a `Gap` the model does not
+run, at a variable read before it is set, or where a loop or calls ran as
+long as they were given. -/
 theorem runScript_sound (ss : List Stmt) (h : checkScript ss = #[]) (k d : Nat) :
     TopOk (runScript k d ss).result ∧ ∀ p ∈ (runScript k d ss).log, HasType p.2 p.1 := by
   have hq := checkScript_quiet h
   have hd := funDefs_ok ss (checkScript_names h) ss _ 0 (fun _ h => h) hq (fun _ h => by simp at h)
-  have hcp := constPass_sound ss k d _ hd ss _ [] hq ⟨rfl, rfl⟩ rfl rfl (fun _ h => by simp at h)
+  have hcov := funDefs_covers ss { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } 0
+  have hcp := constPass_sound ss k d _ hcov hd ss _ [] hq ⟨rfl, rfl⟩ rfl rfl (fun _ h => by simp at h)
     (fun _ h => by simp at h)
   simp only [runScript]
   split
   · rename_i store hres
     rw [hres] at hcp
     exact runTop_sound ss k d ss _ [] _ [] hq ⟨rfl, rfl⟩ rfl rfl .nil (fun _ h => by simp at h)
-      (funTable_ok hd hcp) (fun _ h => by simp at h)
+      (funTable_ok hcov hd hcp) (fun _ h => by simp at h)
   · rename_i s hres
     rw [hres] at hcp
     exact ⟨hcp, by simp⟩

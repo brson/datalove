@@ -587,12 +587,19 @@ Four things are proved of it:
   its type (`Agree`), running it leaves its scope's variables so, with more
   bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
   of the return type, or with none from a function that returns nothing.
-  It may also stop where the model has not
-  gone: a call written back to more than a variable, or with a type
-  argument that has a `rec` in it; a read of a variable declared with no value, which
-  the ownership analysis refuses (O005); a `set` through a tensor's slice; a
-  `for` with an index over more elements than `index` counts; and a loop run
-  more often than it was given, or calls nested deeper than they were given.
+  It may also stop at a read of a variable declared with no value, which
+  the ownership analysis refuses (O005), at a loop run more often than it
+  was given, or calls nested deeper than they were given, and at what the
+  model does not run, each a case of `Gap` in `FunEval.lean`: a call with a
+  type argument that has a `rec` in it, a comparison or map key of a float,
+  `data` or `error`, whose contents the model does not carry, a `for` with
+  an index over more elements than `index` counts, and a temporary passed
+  `mut` or `out`, which the ownership analysis refuses (O012). Nothing else:
+  the theorems allow `Stop.unsupported` only with a `Gap`, so a gap added to
+  the model is a case added to `Gap` and shows up in what they say. A `set`
+  through a tensor's slice, `set t[i]![j]! = v`, writes the slice back into
+  the tensor, and a call has a function in the table for every signature
+  (`Fun.funDefs_covers`); both used to stop.
   It breaks only where the block has a `break` of its own (`hasBreak`), and
   ends normally only where control can reach its end (`completes`). As with expressions, running follows the checker
   one function for one, asking it for the context after each statement, and
@@ -693,7 +700,7 @@ Four things are proved of it:
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
   statement as `checkScript` checks them, each top-level `debuglog` logs a
   value of the type the checker gives it, and the script ends, or returns
-  early with a value of its type `!()`, or stops at what is not run yet, at a
+  early with a value of its type `!()`, or stops at a `Gap`, at a
   variable read before it is set, or where a loop or calls ran as long as
   they were given. It puts the theorems above together. As the Rust does,
   the script's top-level consts are evaluated first, in order (`constPass`),

@@ -14,9 +14,8 @@ scope is a prefix: leaving it drops what it bound and keeps what it set
 A loop runs at most as many times as it is given (`Stop.diverge`); a `for`
 walks a collection once. A statement's expressions run from the variables
 as they are, and may change them, a call writing back to its `mut` and `out`
-arguments; the statement goes on from what they leave. A `set` through a
-tensor's slice is not run yet (`Stop.unsupported`), nor a `for` with an
-index over more elements than `index` counts. A return, by `ret` or early
+arguments; the statement goes on from what they leave. A `for` with an
+index over more elements than `index` counts is not run (`Gap.bigFor`). A return, by `ret` or early
 from an expression, is `Stop.returned`, with the variables, so that a call
 can write back what its parameters came to.
 -/
@@ -45,11 +44,11 @@ def patValues (p : Pat) (v : Val) : EvalM (List (String × Val)) :=
   | .term _ x, .term _ w => pure [(x, w)]
   | _, _ => throw .wrong
 
-/-- Elements with their positions, as `index` values, or `unsupported` for
-more than `index` counts, which no collection in memory holds. -/
+/-- Elements with their positions, as `index` values, where `index` counts
+them. -/
 def indexed (vs : List Val) : EvalM (List (List Val)) :=
   if vs.length ≤ 2 ^ Lit.indexBits then pure (vs.zipIdx.map fun (w, i) => [.int i, w])
-  else throw .unsupported
+  else throw (.unsupported .bigFor)
 
 /-- The elements a `for` walks, as `walk` types them: an element, or an
 index and an element, of a list or tensor; an element of a set; a key and a

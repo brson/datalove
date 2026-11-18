@@ -625,6 +625,42 @@ theorem foldl_own : ∀ (l : List Stmt) (st : Aliases × List (String × Sig) ×
       exact ⟨_, sig, foldl_keeps l hl, hs⟩
     · exact foldl_own l _ h f hm
 
+/-- A signature resolving a statement adds is a function's it declares. -/
+theorem resolveStep_sigs {st : Aliases × List (String × Sig) × Array Lit.Code} {s : Stmt}
+    {p : String × Sig} (h : p ∈ (resolveStep st s).2.1) : p ∈ st.2.1 ∨ ∃ f, s = .fun_ f ∧ f.name = p.1 := by
+  unfold resolveStep at h
+  split at h
+  · split at h <;> exact .inl h
+  · rename_i f
+    split at h
+    · exact .inl h
+    · split at h
+      · simp only [List.mem_append, List.mem_singleton] at h
+        rcases h with h | rfl
+        · exact .inl h
+        · exact .inr ⟨f, rfl, rfl⟩
+      · exact .inl h
+  · exact .inl h
+
+theorem foldl_declared : ∀ (l : List Stmt) (st : Aliases × List (String × Sig) × Array Lit.Code)
+    (p : String × Sig), p ∈ (l.foldl resolveStep st).2.1 → p ∈ st.2.1 ∨ ∃ f, .fun_ f ∈ l ∧ f.name = p.1
+  | [], _, _, h => .inl h
+  | s :: l, st, p, h => by
+    rcases foldl_declared l _ p h with h | ⟨f, hf, hn⟩
+    · rcases resolveStep_sigs h with h | ⟨f, rfl, hn⟩
+      · exact .inl h
+      · exact .inr ⟨f, List.mem_cons_self, hn⟩
+    · exact .inr ⟨f, List.mem_cons_of_mem _ hf, hn⟩
+
+/-- Each signature resolving a script's names gives is of a function it
+declares. -/
+theorem resolveNames_declared {ss : List Stmt} {f : String} {sig : Sig}
+    (h : (resolveNames ss).1.lookup f = some sig) : ∃ d, .fun_ d ∈ ss ∧ d.name = f := by
+  rw [resolveNames_foldl] at h
+  rcases foldl_declared ss _ _ (lookup_mem_of h) with h | h
+  · simp at h
+  · exact h
+
 /-- In a script whose names resolve quietly, each function's signature has
 its type parameters and as many parameters. -/
 theorem resolveNames_own {ss : List Stmt} (h : (resolveNames ss).2 = #[]) :

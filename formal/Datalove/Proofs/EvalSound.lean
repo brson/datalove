@@ -326,12 +326,12 @@ open Lit (Val HasType inRange roll_of)
 def EarlyOk (R : Ret) (r : Val) : Prop := ∃ T, R = .ty T ∧ HasType r T
 
 /-- Why evaluating a checked expression may give no value: an early return
-the function's type allows, what is not evaluated yet, a variable read
+the function's type allows, a `Gap` the model does not run, a variable read
 before it was set, which the ownership analysis refuses, or calls nested as
 deep as they were given. -/
 def StopOk (R : Ret) : Stop → Prop
   | .early r => EarlyOk R r
-  | .unsupported | .uninit | .diverge => True
+  | .unsupported _ | .uninit | .diverge => True
   | .fuel | .wrong | .retVoid | .brk _ | .cont _ | .returned _ _ => False
 
 /-- What evaluation gives meets `P`, or stops as a checked expression may. -/
@@ -360,7 +360,7 @@ theorem map' {x : EvalM α} {f : α → β} (hx : Sound R P x) (hf : ∀ a, P a 
 
 theorem early {r : Val} (h : EarlyOk R r) : Sound R P (throw (.early r)) := h
 
-theorem unsupported : Sound R P (throw .unsupported) := trivial
+theorem unsupported {g : Gap} : Sound R P (throw (.unsupported g)) := trivial
 
 theorem weaken {x : EvalM α} {P' : α → Prop} (h : Sound R P x) (hp : ∀ a, P a → P' a) : Sound R P' x := by
   cases x with
@@ -543,7 +543,7 @@ variable read before it was set, or out of calls. -/
 def CallRes (sig : Sig) (θ : List (String × Ty)) (m : EvalM (Val × List (Option Val))) : Prop :=
   match m with
   | .ok (v, after) => HasType v (sig.retTy θ) ∧ ArgsFit θ after sig.params
-  | .error s => s = .unsupported ∨ s = .uninit ∨ s = .diverge
+  | .error s => (∃ g, s = .unsupported g) ∨ s = .uninit ∨ s = .diverge
 
 /-- Calls that do what calls may, for each function of the program called
 as a checked call calls it: with ground type arguments its bounds admit, and
@@ -557,7 +557,7 @@ theorem CallRes.sound {R : Ret} {sig : Sig} {θ : List (String × Ty)} {m : Eval
     (h : CallRes sig θ m) : Sound R (fun r => HasType r.1 (sig.retTy θ) ∧ ArgsFit θ r.2 sig.params) m := by
   cases m with
   | ok r => exact h
-  | error s => rcases h with rfl | rfl | rfl <;> trivial
+  | error s => rcases h with ⟨_, rfl⟩ | rfl | rfl <;> trivial
 
 theorem zip_inst {θ : List (String × Ty)} {vals : List (Option Val)} {sps : List (Mode × Ty)} :
     (∀ q ∈ vals.zip (sps.map fun (m, t) => (m, t.inst θ)), ∀ v, q.1 = some v → HasType v q.2.2) ↔
@@ -619,7 +619,7 @@ theorem weaken {x : EvalT α} {P' : α → Prop} (h : SoundT V R P x) (hp : ∀ 
 
 theorem throw' {s : Stop} (h : StopOkT V R s) : SoundT V R P (throw s) := fun _ _ => h
 
-theorem unsupported : SoundT V R P (throw .unsupported) := throw' trivial
+theorem unsupported {g : Gap} : SoundT V R P (throw (.unsupported g)) := throw' trivial
 
 theorem uninit : SoundT V R P (throw .uninit) := throw' trivial
 
@@ -907,6 +907,30 @@ theorem insertKey_typed {R : Ret} {k w : Val} {kt vt : Ty} (hk : HasType k kt) (
     · exact hvs p hp
     · exact hw
 
+theorem overwrite_length : ∀ (n : Nat) (ws vs : List Val), (overwrite n ws vs).length = vs.length
+  | _, _, [] => by simp [overwrite]
+  | 0, [], _ :: _ => by simp [overwrite]
+  | 0, _ :: ws, _ :: vs => by simp [overwrite, overwrite_length 0 ws vs]
+  | n + 1, ws, _ :: vs => by simp [overwrite, overwrite_length n ws vs]
+
+theorem mem_overwrite {u : Val} : ∀ {n : Nat} {ws vs : List Val}, u ∈ overwrite n ws vs → u ∈ ws ∨ u ∈ vs
+  | _, _, [], h => by simp [overwrite] at h
+  | 0, [], _ :: _, h => .inr h
+  | 0, _ :: ws, _ :: vs, h => by
+    simp only [overwrite, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact .inl List.mem_cons_self
+    · rcases mem_overwrite h with h | h
+      · exact .inl (List.mem_cons_of_mem _ h)
+      · exact .inr (List.mem_cons_of_mem _ h)
+  | n + 1, ws, _ :: vs, h => by
+    simp only [overwrite, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact .inr List.mem_cons_self
+    · rcases mem_overwrite h with h | h
+      · exact .inl h
+      · exact .inr (List.mem_cons_of_mem _ h)
+
 theorem putIndex_sound {R : Ret} {v kv w : Val} {t et kt : Ty} (hv : HasType v t)
     (hi : indexTypes t = .ok (et, kt)) (hk : HasType kv kt) (hw : HasType w et) :
     Sound R (HasType · t) (putIndex v kv w) := by
@@ -947,7 +971,14 @@ theorem putIndex_sound {R : Ret} {v kv w : Val} {t et kt : Ty} (hv : HasType v t
       rcases List.mem_or_eq_of_mem_set hu with hu | rfl
       · exact hvs u hu
       · exact hw
-    · simp only [putIndex]; exact Sound.unsupported
+    · subst hs
+      simp only [putIndex, hn]
+      have hw' : HasType w (.tensor e (rest.length + 1)) := by simpa using hw
+      obtain ⟨sh, ws, rfl, -, -, hws⟩ := hw'.tensor_inv
+      refine Sound.pure' (roll_of hT (.tensor rfl (by rw [overwrite_length]; exact hl) fun u hu => ?_))
+      rcases mem_overwrite hu with hu | hu
+      · exact hws u (List.mem_of_mem_take hu)
+      · exact hvs u hu
 
 theorem finishBinop_quiet {Γ : Ctx} (hb : Γ.bounds = []) {op : BinOp} {t : Ty}
     (ha : arithAdmits op t (Γ.boundOf t) = true) (hf : fits Γ (needs op) = true) :

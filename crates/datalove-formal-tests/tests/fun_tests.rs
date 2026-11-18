@@ -927,13 +927,17 @@ fn dump() {
 /// Scripts written by hand for `runs_agree`, each run as it is: checked and
 /// optional arithmetic at its bounds, division, indexes in and out of range,
 /// `for`, `loop` with `break`, recursion, `match`, a binding `if`, `!` in a
-/// function and at the top level, `set` through an index, and `mut` and
-/// `out` arguments written back, an early return's included, and calls
+/// function and at the top level, `set` through an index, a tensor's slice
+/// among them, and `mut` and `out` arguments written back, an early
+/// return's included, and calls
 /// that write back inside an expression, read after in it, or returned
 /// early from after; a `set` whose value or key changes its target, which it
 /// reaches only after them; and copy arguments and operands read where
 /// written.
 const RUN_CORPUS: &[&str] = &[
+    // Elements of a tensor of rank above one written through its slices, by
+    // `set`, a compound `set` and a `mut` argument, and an index out of range.
+    "fun set9(mut x: u8): u8\n  set x = : u8 / 9\n  ret : u8 / 0\nend fun\nfun row(ref t: [|u8, 2|], i: index): !(u8, u8, u8)\n  ret ok (t[i]![(: index / 0)]!, t[i]![(: index / 1)]!, t[i]![(: index / 2)]!)\nend fun\nvar t: [|u8, 2|] = [|1 2 3, 4 5 6|]\nset t[(: index / 1)]![(: index / 2)]! = : u8 / 7\nset t[(: index / 0)]![(: index / 1)]! +!= : u8 / 250\ndebuglog set9(mut t[(: index / 1)]![(: index / 0)]!)\ndebuglog row(ref t, : index / 0)\ndebuglog row(ref t, : index / 1)\nvar u: [|u8, 3|] = [|2 2 2 | 1 2 3 4 5 6 7 8|]\nset u[(: index / 1)]![(: index / 0)]![(: index / 1)]! = : u8 / 0\ndebuglog set9(mut u[(: index / 0)]![(: index / 1)]![(: index / 0)]!)\ndebuglog (u[(: index / 0)]![(: index / 1)]![(: index / 0)]!, u[(: index / 1)]![(: index / 0)]![(: index / 1)]!, u[(: index / 1)]![(: index / 1)]![(: index / 1)]!)\nset t[(: index / 2)]![(: index / 0)]! = : u8 / 1\n",
     // Calls of functions declared below: from the top level, from a body,
     // and from a const, which reads only consts above it; a function reads
     // the consts above it, evaluated before anything runs.

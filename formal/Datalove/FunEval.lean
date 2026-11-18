@@ -31,18 +31,37 @@ steps with those keys' values (`writeBack`, `writeSteps`). A hinted one,
 or a field or index of a hinted place, is the place its hints are on
 (`placeOf`), and is evaluated as `checkF` reaches it, through the hints, each
 key at the fuel it is checked at (`placeC`). One with type
-arguments that are not ground is `Stop.unsupported`. `@`
+arguments that are not ground is not run yet (`Gap.recTypeArg`). `@`
 converts between types whose values are the same: a wider number, an atom or
 term into an enum, a clone. A comparison, and whether two map keys are one,
 are answered where the values' contents are modelled (`valEq?`): numbers,
 booleans, strings, by their text, and what is built of them. A float,
 `data` or `error` carries nothing here, so comparing one, or looking one up
-as a map's key, is `Stop.unsupported`.
+as a map's key, is not run (`Gap.opaque`).
+
+What is not run is a `Gap`, each named, so that the theorems saying where a
+checked program may stop list them: a new one is a new case of `Gap`, and
+shows up in them.
 -/
 
 namespace Datalove.Fun
 
 open Lit (Val)
+
+/-- What the model does not run, which a program that checks may stop at. -/
+inductive Gap where
+  /-- A call whose type arguments hold a `rec`, which the check-once theorem
+  does not take (`Ground`). -/
+  | recTypeArg
+  /-- A comparison, or a map's key looked up, of a float, `data` or `error`,
+  whose contents a value does not carry. -/
+  | opaque
+  /-- A `for` with an index over more elements than `index` counts, which no
+  collection in memory holds. -/
+  | bigFor
+  /-- A temporary passed `mut` or `out`, which has no place to be written
+  back to. The ownership analysis refuses it (O012), not the checker. -/
+  | temporary
 
 /-- Why evaluation gave no value. -/
 inductive Stop where
@@ -53,11 +72,8 @@ inductive Stop where
   /-- An operation met an operand of the wrong kind, or a form a checked
   expression never has. -/
   | wrong
-  /-- A form not evaluated yet: a call with a recursive type argument, a
-  `set` through a tensor's slice, a `for` over more elements than `index`
-  counts, or a comparison or map key the model carries too little of to
-  answer, a float, `data` or `error`. -/
-  | unsupported
+  /-- What the model does not run. -/
+  | unsupported (g : Gap)
   /-- A variable read before it was set, which the ownership analysis refuses
   (O005), not the checker. -/
   | uninit
@@ -170,11 +186,11 @@ def compareOp? (op : BinOp) (va vb : Val) : Option Bool :=
     | _, _ => none
   | _ => none
 
-/-- Whether two map keys are one, or `unsupported` where that is not known. -/
+/-- Whether two map keys are one, where that is known. -/
 def keyEq (a b : Val) : EvalM Bool :=
   match valEq? a b with
   | some r => pure r
-  | none => throw .unsupported
+  | none => throw (.unsupported .opaque)
 
 /-- The value at a key of a map's entries, the first entry's of it. -/
 def findKey (k : Val) : List (Val × Val) → EvalM (Option Val)
@@ -186,7 +202,7 @@ def binOp (op : BinOp) (t : Ty) (va vb : Val) : EvalM Val :=
   match op with
   | .lt | .gt | .le | .ge | .eq | .ne => match compareOp? op va vb with
     | some b => pure (.bool b)
-    | none => throw .unsupported
+    | none => throw (.unsupported .opaque)
   | .and | .or | .xor => match va, vb with
     | .bool a, .bool b => pure (.bool (match op with
       | .and => a && b
@@ -301,8 +317,17 @@ def replaceKey (k w : Val) : List (Val × Val) → EvalM (List (Val × Val))
   | (k', u) :: es => do
     if ← keyEq k k' then pure ((k', w) :: es) else ((k', u) :: ·) <$> replaceKey k w es
 
-/-- A list, map or tensor of rank one or less with its element at a key
-replaced, which `indexVal` read. A tensor's slice is not written. -/
+/-- `vs` with the elements from position `n` on replaced by `ws`, as far as
+both go. -/
+def overwrite : Nat → List Val → List Val → List Val
+  | _, _, [] => []
+  | 0, [], vs => vs
+  | 0, w :: ws, _ :: vs => w :: overwrite 0 ws vs
+  | n + 1, ws, v :: vs => v :: overwrite n ws vs
+
+/-- A list, map or tensor with its element at a key replaced, which
+`indexVal` read. A tensor of rank above one has its slice replaced, the
+elements of `w` written over the ones `indexVal` took. -/
 def putIndex (v k w : Val) : EvalM Val :=
   match v with
   | .list vs => match numOf k with
@@ -313,7 +338,10 @@ def putIndex (v k w : Val) : EvalM Val :=
     | [] | [_] => match numOf k with
       | some i => pure (.tensor shape (vs.set i.toNat w))
       | none => throw .wrong
-    | _ => throw .unsupported
+    | _ :: rest => match numOf k, w with
+      | some i, .tensor _ ws =>
+        pure (.tensor shape (overwrite (i.toNat * shapeSize rest) (ws.take (shapeSize rest)) vs))
+      | _, _ => throw .wrong
   | _ => throw .wrong
 
 /-- A map with a value at a key, replaced or added. -/
@@ -386,7 +414,7 @@ def writeBack (Γ : Ctx) : VEnv → List (Option Mode × Expr) → List (Mode ×
           writeBack Γ (setVar x w ρ) args params kvss after
         | _, _ => throw .wrong
       | _, none => throw .uninit
-      | _, _ => throw .unsupported
+      | _, _ => throw (.unsupported .temporary)
     else writeBack Γ ρ args params kvss after
   | ρ, _, _, _, _ => pure ρ
 
@@ -558,7 +586,7 @@ def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → String → List 
   | n + 1, Γ, f, args, expected =>
     match Γ.sigs.lookup f, decided (env.call Γ f args expected) with
     | some sig, .ok θ =>
-      if !groundArgs θ then throw .unsupported
+      if !groundArgs θ then throw (.unsupported .recTypeArg)
       else do
         let ps := sig.params.map fun (m, t) => (m, t.inst θ)
         let vals ← evalArgs env call n Γ args ps

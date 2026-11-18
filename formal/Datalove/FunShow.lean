@@ -52,10 +52,17 @@ partial def showVal (t : Ty) (v : Val) : String :=
     | some n => if u.isFloat then unknown else toString n
     | none => unknown
 
+/-- What the model did not run, by name. -/
+def Gap.name : Gap → String
+  | .recTypeArg => "recTypeArg"
+  | .opaque => "opaque"
+  | .bigFor => "bigFor"
+  | .temporary => "temporary"
+
 /-- How a run ended, by name. -/
 def Stop.name : Stop → String
   | .early _ => "early"
-  | .unsupported => "unsupported"
+  | .unsupported g => "unsupported " ++ g.name
   | .uninit => "uninit"
   | .diverge => "diverge"
   | .fuel => "fuel"
