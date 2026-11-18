@@ -1,0 +1,20 @@
+// O006 at a `?` that comes before the argument writing the out parameter.
+//
+// The out parameters an early return leaves through were checked against
+// what the whole expression had written, so `get(out p)` after the `?`
+// counted as written where the `?` returns without running it. The caller
+// then read whatever its slot held, a string's garbage here.
+fun get(out q: string): int
+  set q = "written"
+  ret 3
+end fun
+
+fun f(out p: string, o: ?int): ?int
+  let r = o? + get(out p)
+  ret some r
+end fun
+
+var z: string
+let r = f(out z, none)
+debuglog r
+debuglog z

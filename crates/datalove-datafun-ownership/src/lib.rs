@@ -1250,11 +1250,21 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 self.analyze_expr_moves(lhs, false);
                 let held = if self.expr_type(lhs).is_copy() { None } else { self.borrowed_path(lhs) };
                 self.holding(held, |ctx| ctx.analyze_expr_moves(ctx.expr(binop.rhs), false));
+                if matches!(
+                    binop.op,
+                    BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional |
+                    BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked
+                ) {
+                    report_out_params_unwritten(self, FunctionExit::Early { expr_key });
+                }
                 None
             }
             ExprFunKind::UnaryOp(unary) => {
                 // Unary ops read their operand, not consume it.
                 self.analyze_expr_moves(self.expr(unary.operand), false);
+                if matches!(unary.op, UnaryOp::NegOptional | UnaryOp::NegResult) {
+                    report_out_params_unwritten(self, FunctionExit::Early { expr_key });
+                }
                 None
             }
             ExprFunKind::FunctionCall(call) => {
@@ -1354,11 +1364,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::TryOption(try_opt) => {
                 // Try operand is consumed.
                 self.analyze_expr_moves(self.expr(try_opt.operand), true);
+                report_out_params_unwritten(self, FunctionExit::Early { expr_key });
                 None
             }
             ExprFunKind::TryResult(try_res) => {
                 // Try operand is consumed.
                 self.analyze_expr_moves(self.expr(try_res.operand), true);
+                report_out_params_unwritten(self, FunctionExit::Early { expr_key });
                 None
             }
             ExprFunKind::CloneCoerce(cc) => {
@@ -1529,6 +1541,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                         for step in &place.steps {
                             if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
                                 ctx.analyze_expr_moves(ctx.expr(idx.index), false);
+                                // A missing element returns early once its
+                                // key has run.
+                                report_out_params_unwritten(ctx, FunctionExit::Early { expr_key });
                             }
                         }
                     });
@@ -2210,6 +2225,21 @@ fn check_out_params_initialized<'db>(
     exit: FunctionExit<'db>,
 ) {
     ctx.note_unit_exit();
+    report_out_params_unwritten(ctx, exit);
+}
+
+/// Report every out parameter that has not been written by `exit`, as
+/// `check_out_params_initialized` does, where the analysis reaches it.
+///
+/// An early return from inside an expression is checked here, as the
+/// expression is analyzed, and not only once the statement's expression has
+/// been: a `mut` or `out` argument after the `?` writes an out parameter only
+/// when the `?` did not leave. Checking afterwards let `o? + get(out p)`
+/// return without writing `p`, and the caller read whatever its slot held.
+fn report_out_params_unwritten<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    exit: FunctionExit<'db>,
+) {
     for (idx, info) in ctx.bindings.iter().enumerate() {
         if info.param_mode == Some(ParamMode::Out) {
             let id = BindingId(idx as u32);
@@ -2219,7 +2249,9 @@ fn check_out_params_initialized<'db>(
                     _ => None,
                 });
                 match reported {
-                    Some(exits) => exits.push(exit.C()),
+                    Some(exits) => if !exits.contains(&exit) {
+                        exits.push(exit.C());
+                    },
                     None => ctx.errors.push(AnalysisError::OutParamNotInitialized {
                         name: info.name.C(),
                         exits: vec![exit.C()],
