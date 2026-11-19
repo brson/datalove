@@ -21,7 +21,12 @@ of the wrong kind (`Stop.wrong`).
 
 It evaluates literals, variables, places, hints, operators, `?`, `!`, `@`,
 fields, indexes and calls, reading the variables in scope as it goes
-(`EvalT`). A call goes to a `CallFn` the evaluator is given (`FunCall.lean`
+(`EvalT`). Where `InferEnv.moves` asks, a variable read where the ownership
+analysis has the read take its value (`Ctx.takes`: not lent, not copy, not
+a const) is moved: it holds nothing after, and a later read stops at
+`Stop.uninit`, as one never set does. An index's key is lent (`Ctx.key`),
+a `set`'s too, though the Rust takes the key a plain `set m[k] = v` inserts:
+the run moves no more than the analysis does. A call goes to a `CallFn` the evaluator is given (`FunCall.lean`
 runs the function's body), and writes back to its `mut` and `out` arguments'
 variables, so a variable read after it in the same expression reads what it
 came to. A `mut` or `out` argument into a field or element of a variable
@@ -296,6 +301,20 @@ def setVar (x : String) (v : Val) : VEnv → VEnv
   | [] => []
   | (y, o) :: ρ => if y == x then (y, some v) :: ρ else (y, o) :: setVar x v ρ
 
+/-- The innermost variable of a name left holding nothing, its value moved
+out. -/
+def takeVar (x : String) : VEnv → VEnv
+  | [] => []
+  | (y, o) :: ρ => if y == x then (y, none) :: ρ else (y, o) :: takeVar x ρ
+
+/-- Whether reading `x` here takes its value: where the ownership analysis
+does not have the read borrow (`Ctx.lends`), of a type that is not copy,
+and not a const, which is borrowed wherever it is named. -/
+def Ctx.takes (Γ : Ctx) (x : String) : Bool :=
+  !Γ.lends && match Γ.lookup x with
+    | some (t, k) => !t.isCopy && k != .const_
+    | none => false
+
 /-- A tuple or struct value with a field replaced. -/
 def putField (v : Val) (s : Sel) (w : Val) : EvalM Val :=
   match v, s with
@@ -457,7 +476,9 @@ def evalS (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT Val
         | .error _ => throw .wrong
       evalForm env call n Γ inner t
     | .var x => do match (← get).lookup x with
-      | some (some v) => pure v
+      | some (some v) => do
+        if env.moves && Γ.takes x then modify (takeVar x)
+        pure v
       | some none => throw .uninit
       | none => throw .wrong
     | .binop op a b => do
@@ -492,7 +513,7 @@ def evalS (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT Val
           | .ok p => pure p
           | .error _ => throw .wrong
         let v ← evalS env call n (Γ.under b) b
-        let kv ← evalC env call n Γ k kt
+        let kv ← evalC env call n Γ.key k kt
         here (indexVal m v kv)
     | e => do
       let t ← here (typeOf (synthF env (n + 1) Γ₀ e))
@@ -661,7 +682,7 @@ def placeS (env : InferEnv) (call : CallFn) : Nat → Ctx → Expr → EvalT (Op
         | .ok p => pure p
         | .error _ => throw .wrong
       let (o, kvs) ← placeS env call n (Γ.under b) b
-      let kv ← evalC env call n Γ k kt
+      let kv ← evalC env call n Γ.key k kt
       match o with
       | some v => pure (some (← here (indexVal m v kv)), kvs ++ [kv])
       | none => throw .uninit
@@ -689,7 +710,7 @@ def evalPathStep (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val �
     let (_, kt) ← match indexTypes t with
       | .ok p => pure p
       | .error _ => throw .wrong
-    let kv ← evalC env call n Γ k kt
+    let kv ← evalC env call n Γ.key k kt
     pure (← here (indexVal m v kv), [kv])
 
 /-- A place's steps from a value of type `t`, as `stepsF` types them. -/
@@ -711,7 +732,7 @@ def evalStep (env : InferEnv) (call : CallFn) : Nat → Ctx → Ty → Val → S
     let (_, kt) ← match indexTypes t with
       | .ok p => pure p
       | .error _ => throw .wrong
-    let kv ← evalC env call n Γ k kt
+    let kv ← evalC env call n Γ.key k kt
     here (indexVal m v kv)
 
 /-- What `e` evaluates to, as `subsumeF` synthesizes it. -/

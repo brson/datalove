@@ -227,6 +227,13 @@ structure Ctx where
   /-- Whether this is a borrowed position, where a non-copy part may be read
   without being moved out (F070, F072). -/
   borrowed : Bool := false
+  /-- Whether a read here borrows as the ownership analysis has it, leaving
+  what it reads in place, where a variable read elsewhere is moved (O001).
+  As `borrowed`, but for an index's key, which the analysis borrows where
+  the checker does not (`Ctx.key`), and a const argument, which is passed by
+  reference. Nothing the checker decides reads it; the run's moves do
+  (`Ctx.takes`). -/
+  lends : Bool := false
   /-- Whether this is an argument passed `mut` or `out`, which no tensor view
   may be (F073). -/
   mutArg : Bool := false
@@ -244,11 +251,15 @@ structure Ctx where
 
 /-- A borrowed position: an operand, the operand of `@`, `debuglog`'s
 argument, a compound `set`'s value, a `for`'s collection. -/
-def Ctx.borrow (Γ : Ctx) : Ctx := { Γ with borrowed := true }
+def Ctx.borrow (Γ : Ctx) : Ctx := { Γ with borrowed := true, lends := true }
 
 /-- An argument's position, by its parameter's mode. -/
 def Ctx.forArg (Γ : Ctx) (m : Mode) : Ctx :=
-  { Γ with borrowed := m != .in_ && m != .const_, mutArg := m == .mut || m == .out }
+  { Γ with borrowed := m != .in_ && m != .const_, lends := m != .in_, mutArg := m == .mut || m == .out }
+
+/-- An index's key, which the ownership analysis borrows, `m[k]?` leaving
+`k` in place, though the checker checks it as it would any operand there. -/
+def Ctx.key (Γ : Ctx) : Ctx := { Γ with lends := true }
 
 /-- A conversion's error as datafun reports it: a name that names no alias
 nor `rec` is F064, where datalit says T059. -/
@@ -789,6 +800,9 @@ total function; inference only says what types are, and never where an early
 return may be, so what `Proofs/EarlyReturn.lean` shows of checking holds
 whatever it says. -/
 structure InferEnv where
+  /-- Whether the run moves a variable's value out where a read takes it
+  (`Ctx.takes`). Nothing the checker decides reads it. -/
+  moves : Bool := false
   ty : Ctx → Expr → Except Code Ty
   pair : Ctx → Expr → Expr → Option Ty → Except Code Ty × Except Code Ty
   /-- A call's type arguments (`callTypeArgs`). -/
@@ -826,11 +840,11 @@ def Ctx.fitsMode (Γ : Ctx) : IdxMode → Bool
 /-- The context an expression is checked in: a borrowed position ends at one
 that builds a value of its parts. -/
 def Ctx.enter (Γ : Ctx) (e : Expr) : Ctx :=
-  { Γ with borrowed := Γ.borrowed && !buildsFromParts e }
+  { Γ with borrowed := Γ.borrowed && !buildsFromParts e, lends := Γ.lends && !buildsFromParts e }
 
 /-- The context of a place's step that is not its last, which only leads to
 what is read. -/
-def Ctx.through (Γ : Ctx) : Ctx := { Γ with borrowed := true, mutArg := false }
+def Ctx.through (Γ : Ctx) : Ctx := { Γ with borrowed := true, lends := true, mutArg := false }
 
 /-- The place an expression names, its variable and steps, a hint on it or
 on a place along the way left aside: `(: T / p).a` is `p.a`, as the Rust's
@@ -961,7 +975,7 @@ def synthF (env : InferEnv) : Nat → Ctx → Expr → ChkM Ty
       | Option.some m => do
         let bt ← synthF env n (Γ.under b) b
         let (t, kt) ← liftE (indexTypes bt)
-        recover (checkF env n Γ k kt)
+        recover (checkF env n Γ.key k kt)
         if Γ.mutArg && isView bt then throw "F073"
         if !t.isCopy && !Γ.borrowed then throw "F072"
         if !Γ.fitsMode m then throw Γ.earlyCode
@@ -999,7 +1013,7 @@ def stepF (env : InferEnv) : Nat → Ctx → Ty → Step → ChkM Ty
   | _ + 1, _, _, .index _ Option.none => throw "F104"
   | n + 1, Γ, t, .index k (Option.some m) => do
     let (et, kt) ← liftE (indexTypes t)
-    recover (checkF env n Γ k kt)
+    recover (checkF env n Γ.key k kt)
     if Γ.mutArg && isView t then throw "F073"
     if !et.isCopy && !Γ.borrowed then throw "F072"
     if !Γ.fitsMode m then throw Γ.earlyCode
@@ -1510,7 +1524,7 @@ def setIndex (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr) (mode : O
   | Option.none, Option.some _ => modify (·.push "F074")
   | Option.none, Option.none => match t.expose with
     | .map kt vt =>
-      runChk (checkF env n Γ k kt) >>= fun _ =>
+      runChk (checkF env n Γ.key k kt) >>= fun _ =>
       runChk (checkF env n Γ e vt) >>= fun _ => pure ()
     | _ => modify (·.push "F074")
   | Option.some _, _ => match indexTypes t with
@@ -1518,7 +1532,7 @@ def setIndex (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr) (mode : O
     | .ok (et, kt) =>
       if isView t then modify (·.push "F073")
       else
-        runChk (checkF env n Γ k kt) >>= fun _ =>
+        runChk (checkF env n Γ.key k kt) >>= fun _ =>
         setValue env n Γ et op e
 
 /-- A `set` target's steps from a type. A field the type does not have stops
@@ -1535,7 +1549,7 @@ def setSteps (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (op : Option BinOp) 
   | .index k (Option.some _) :: rest => match indexTypes t with
     | .error c => modify (·.push c)
     | .ok (et, kt) =>
-      runChk (checkF env n Γ k kt) >>= fun _ =>
+      runChk (checkF env n Γ.key k kt) >>= fun _ =>
       setSteps env n Γ et op e rest
 
 /-- The ways a `set` target's indexes return early, each once, in the order

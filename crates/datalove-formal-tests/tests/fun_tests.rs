@@ -2154,9 +2154,10 @@ fun maybe(c: bool): ?string\n  ret none\nend fun\n\
 fun pass(x: string): bool\n  ret true\nend fun\n\
 const ka: string = \"ka\"\n";
 
-/// Bodies written by hand for `moves_agree`, of `go(c, s, ref r, mut u, l)`
-/// with `var x: string`, in the shapes the generator makes rarely or not at
-/// all: each was asked of the Rust while the move analysis was written.
+/// Bodies written by hand for `moves_agree`, of `go(c, s, ref r, mut u, l)`,
+/// which returns `?string`, with `var x: string`, in the shapes the
+/// generator makes rarely or not at all: each was asked of the Rust while
+/// the move analysis was written.
 const MOVES_CORPUS: &[&str] = &[
     // Moves and reads.
     "  let y = x\n  debuglog x\n",
@@ -2177,10 +2178,10 @@ const MOVES_CORPUS: &[&str] = &[
     "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
     "  call take(x)\n  if c\n    set x = \"a\"\n  end if\n",
     "  var v: string\n  if c\n    set v = \"a\"\n  end if\n",
-    "  if c\n    ret x\n  end if\n  debuglog x\n",
-    "  if c\n    ret \"a\"\n  else\n    call take(x)\n    ret \"b\"\n  end if\n  debuglog x\n",
-    "  if c\n    call take(x)\n    ret \"a\"\n  else\n    ret \"b\"\n  end if\n  debuglog x\n",
-    "  if c\n    ret \"a\"\n  else\n    ret x\n  end if\n  debuglog x\n",
+    "  if c\n    ret some x\n  end if\n  debuglog x\n",
+    "  if c\n    ret some \"a\"\n  else\n    call take(x)\n    ret some \"b\"\n  end if\n  debuglog x\n",
+    "  if c\n    call take(x)\n    ret some \"a\"\n  else\n    ret some \"b\"\n  end if\n  debuglog x\n",
+    "  if c\n    ret some \"a\"\n  else\n    ret some x\n  end if\n  debuglog x\n",
     // Loops.
     "  loop\n    call take(x)\n    break\n  end loop\n",
     "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    call take(x)\n  end loop\n",
@@ -2194,6 +2195,10 @@ const MOVES_CORPUS: &[&str] = &[
     "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      call take(x)\n      break\n    end if\n  end loop\n",
     "  loop\n    if c\n      call take(x)\n      break\n    end if\n    break\n  end loop\n",
     "  var v: string\n  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    set v = \"a\"\n  end loop\n  debuglog v\n",
+    // Keys: one looked up is borrowed, the one a plain `set` inserts taken.
+    "  var m: %{string -> u8} = %{\"a\" -> 1}\n  let n = m[x]?\n  debuglog x\n",
+    "  var m: %{string -> u8} = %{\"a\" -> 1}\n  set m[x]? = 2\n  debuglog x\n",
+    "  var m: %{string -> u8} = %{\"a\" -> 1}\n  set m[x] = 2\n  debuglog x\n",
     // A condition that moves, read again before every pass.
     "  var i: int = 0\n  loop while pass(x)\n    set i = i + 1\n    if i == 3\n      break\n    end if\n  end loop\n",
     "  var i: int = 0\n  loop while pass(x)\n    set i = i + 1\n    set x = \"y\"\n    if i == 3\n      break\n    end if\n  end loop\n",
@@ -2222,7 +2227,7 @@ fn moves_agree() {
     let texts: Vec<(String, String)> = match std::env::var("FORMAL_MOVES_TEXT") {
         Ok(path) => vec![(path.C(), std::fs::read_to_string(&path).X())],
         Err(_) => MOVES_CORPUS.iter().enumerate()
-            .map(|(i, body)| (fmt!("corpus {i}"), fmt!("{MOVES_PRELUDE}fun go(c: bool, s: string, ref r: string, mut u: string, l: [string]): string\n  var x: string = \"x\"\n{body}  ret \"end\"\nend fun\nvar uu: string = \"u\"\ndebuglog go(true, \"s\", ref \"r\", mut uu, [\"a\"])\ndebuglog uu\n")))
+            .map(|(i, body)| (fmt!("corpus {i}"), fmt!("{MOVES_PRELUDE}fun go(c: bool, s: string, ref r: string, mut u: string, l: [string]): ?string\n  var x: string = \"x\"\n{body}  ret some \"end\"\nend fun\nvar uu: string = \"u\"\ndebuglog go(true, \"s\", ref \"r\", mut uu, [\"a\"])\ndebuglog uu\n")))
             .chain(seeds.iter().map(|seed| (fmt!("seed {seed}"), datalove_worldgen::moves_script(seed, 0.3))))
             .collect(),
     };
@@ -2257,6 +2262,16 @@ fn moves_agree() {
             Some(c) => c.C(),
             None => "accepted".S(),
         }).or_default() += 1;
+        // The model's run, moving what reads take, never reads what was moved
+        // where the move analysis lets a script through, and the Rust's O010
+        // and O017 do, which see that no argument a call writes back through
+        // is moved before the call takes it.
+        let run = oracle["run"].as_str().X();
+        let aliased = rust.iter().any(|c| c == "O010" || c == "O017");
+        if model.is_none() && !aliased && run == "uninit" {
+            mismatches.push(fmt!("{what}:\n{text}    the model's run read what was moved"));
+        }
+        *outcomes.entry(fmt!("run {run}")).or_default() += 1;
         if model.as_ref() != rust.first() {
             if let Ok(dir) = std::env::var("FORMAL_MOVES_WRITE") {
                 std::fs::write(std::path::Path::new(&dir).join(fmt!("{}.dfs", what.replace(' ', "_"))), text).X();

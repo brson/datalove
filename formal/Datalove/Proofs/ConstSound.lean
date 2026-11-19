@@ -140,8 +140,8 @@ theorem constPass_init (sigs : List (String × Sig)) (defs : List FunDef) (k d :
       generalize hR : reachOf defs e = R at h1 hf
       have hS := sigsIn_filter sigs (fun f => R.contains f)
       have hp := constProg hs hm hf
-      have hcall := runCall_init inferEnv _ (funTable defs store) k hS hp d
-      have hex := execStmt_init inferEnv _ (runCall inferEnv sigs (funTable defs store) k d) hcall [] fuel k Γ
+      have hcall := runCall_init inferEnv _ (funTable defs store) k rfl hS hp d
+      have hex := execStmt_init inferEnv _ (runCall inferEnv sigs (funTable defs store) k d) hcall [] rfl fuel k Γ
         (constEnv Γ.vars store) _ _ r (hΓ ▸ hS) h1 (Fr.unmarked _) (constMarks_IAg hs Γ.vars)
       simp only [constPass, ↓reduceIte]
       generalize hE : execStmt inferEnv (runCall inferEnv sigs (funTable defs store) k d) fuel k Γ

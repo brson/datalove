@@ -130,4 +130,51 @@ def runScript (k d : Nat) (ss : List Stmt) : RunOut :=
   | .ok store => runTop sigs k d Γ [] (funTable defs store) [] ss
   | .error s => ⟨[], throw s.unreturn⟩
 
+/-- Inference as `inferEnv` has it, with the run moving a variable's value
+out where a read takes it (`InferEnv.moves`). -/
+def movesEnv : InferEnv := { inferEnv with moves := true }
+
+/-- `constPass`, the run moving what reads take. Kept beside `constPass`,
+which the proofs are about, until `Proofs/` shows a script the move analysis
+lets through never reads what was moved. -/
+def constPassMoves (sigs : List (String × Sig)) (defs : List FunDef) (k d : Nat) :
+    Ctx → CStore → List Stmt → EvalM CStore
+  | _, store, [] => pure store
+  | Γ, store, .fun_ _ :: ss => constPassMoves sigs defs k d Γ store ss
+  | Γ, store, s :: ss =>
+    let Γ' := ((checkStmt Γ s).run #[]).1
+    if s matches .const_ .. then do
+      let ρ ← execStmt movesEnv (runCall movesEnv sigs (funTable defs store) k d) fuel k Γ
+        (constEnv Γ.vars store) s
+      match Γ'.vars, ρ with
+      | (x, t, _) :: _, (_, o) :: _ => constPassMoves sigs defs k d Γ' ((x, t, o) :: store) ss
+      | _, _ => throw .wrong
+    else constPassMoves sigs defs k d Γ' store ss
+
+/-- `runTop`, the run moving what reads take, kept beside it as
+`constPassMoves` is. -/
+def runTopMoves (sigs : List (String × Sig)) (k d : Nat) :
+    Ctx → VEnv → List (String × FunInfo) → List (Ty × Val) → List Stmt → RunOut
+  | _, _, _, log, [] => ⟨log, pure ()⟩
+  | Γ, ρ, funs, log, .fun_ _ :: ss => runTopMoves sigs k d Γ ρ funs log ss
+  | Γ, ρ, funs, log, .debuglog e :: ss =>
+    let call := runCall movesEnv sigs funs k d
+    match typeOf (synthF movesEnv (fuel - 1) Γ.borrow e), (evalS movesEnv call (fuel - 1) Γ.borrow e).run ρ with
+    | .ok t, .ok (v, ρ') => runTopMoves sigs k d Γ ρ' funs (log ++ [(t, v)]) ss
+    | .error s, _ | _, .error s => ⟨log, throw s.unreturn⟩
+  | Γ, ρ, funs, log, s :: ss =>
+    match execStmt movesEnv (runCall movesEnv sigs funs k d) fuel k Γ ρ s with
+    | .ok ρ' => runTopMoves sigs k d ((checkStmt Γ s).run #[]).1 ρ' funs log ss
+    | .error e => ⟨log, throw e.unreturn⟩
+
+/-- `runScript`, the run moving what reads take: a variable read where the
+ownership analysis has the read take its value holds nothing after. -/
+def runScriptMoves (k d : Nat) (ss : List Stmt) : RunOut :=
+  let sigs := (resolveNames ss).1
+  let Γ : Ctx := { ret := .ty (.result unitTy), sigs }
+  let defs := funDefs sigs Γ 0 ss
+  match constPassMoves sigs defs k d Γ [] ss with
+  | .ok store => runTopMoves sigs k d Γ [] (funTable defs store) [] ss
+  | .error s => ⟨[], throw s.unreturn⟩
+
 end Datalove.Fun

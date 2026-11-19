@@ -366,7 +366,7 @@ theorem setPlan_checks {n : Nat} {Γ : Ctx} {op : Option BinOp} {e : Expr} :
     ∀ (t : Ty) (steps : List Step), SQuiet (setSteps env n Γ t op e steps) () →
       ∃ vt keys, setPlan op t steps = some (vt, keys) ∧
         Quiet (checkF env n (match op with | none => Γ | some _ => Γ.borrow) e vt) () ∧
-        (∀ p ∈ keys, Quiet (checkF env n Γ p.1 p.2) ()) ∧
+        (∀ p ∈ keys, Quiet (checkF env n Γ.key p.1 p.2) ()) ∧
         (∀ o, op = some o → arithAdmits o vt (Γ.boundOf vt) = true ∧ fits Γ (needs o) = true)
   | t, [], h => by
     simp only [setSteps] at h
@@ -777,7 +777,8 @@ theorem execSet_sound {n : Nat} {Γ : Ctx} {ρ : VEnv} {x : String} {steps : Lis
       refine SoundS.bind' (SoundS.ofT (P := (HasType · t)) ?_ hρ)
         (fun ⟨w, ρ'⟩ ⟨hw, hρ'⟩ => setVar_agree hρ' hl hw)
       refine SoundT.bind' (evalC_sound env sigs call hcall n _ e vt hv hb) (fun r hr => ?_)
-      refine SoundT.bind' (evalKeys_sound env sigs call hcall hb keys hks) (fun kvs hkvs => ?_)
+      refine SoundT.bind' (evalKeys_sound env sigs call hcall (Γ := Γ.key) ⟨hb.1, hb.2⟩ keys hks)
+        (fun kvs hkvs => ?_)
       refine SoundT.get' (fun ρ1 hρ1 => ?_)
       obtain ⟨o, ho, hot⟩ := hρ1.lookup x t k hl
       simp only [ho]

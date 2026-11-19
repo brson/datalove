@@ -320,7 +320,7 @@ theorem synthF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (e : Expr),
           · have := synthF_guarded env n _ _ hb
             rw [Ctx.under_ret] at this
             exact this
-          · exact checkF_guarded env n (Γ.enter _) _ _ (clean_recover hk)
+          · exact checkF_guarded env n (Γ.enter _).key _ _ (clean_recover hk)
     case tuple | struct | list | set | map | tensor | table | some_ | ok | er | data | error
       | term | enum =>
       simp only [synthF] at h
@@ -371,7 +371,7 @@ theorem stepF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (st :
       simpa using hf
     · simp only [Step.key, Option.some.injEq] at hp
       subst hp
-      exact checkF_guarded env n Γ _ _ (clean_recover hk)
+      exact checkF_guarded env n Γ.key _ _ (clean_recover hk)
 
 theorem pairF_guarded (env : InferEnv) : ∀ (n : Nat) (Γ : Ctx) (a b : Expr) (x : Option Ty)
     , Clean (pairF env n Γ a b x) →
@@ -862,7 +862,7 @@ theorem setIndex_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
   split
   · exact push_good
   · split
-    · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
+    · refine good_bind (runChk_checkF_good env n Γ.key k _) (fun _ _ => ?_)
       refine good_bind (runChk_checkF_good env n Γ e _) (fun _ _ => ?_)
       exact good_pure trivial (fun he hk => ⟨hk, he, by simp [opEarlies]⟩)
     · exact push_good
@@ -870,7 +870,7 @@ theorem setIndex_good (env : InferEnv) (n : Nat) (Γ : Ctx) (t : Ty) (k : Expr)
     · exact push_good
     · split
       · exact push_good
-      · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
+      · refine good_bind (runChk_checkF_good env n Γ.key k _) (fun _ _ => ?_)
         exact good_weaken (setValue_good env n Γ _ op e) (fun _ h => h)
           (fun _ _ he hk => ⟨hk, he⟩)
 
@@ -906,7 +906,7 @@ theorem setSteps_good (env : InferEnv) (n : Nat) (Γ : Ctx) (op : Option BinOp) 
     simp only [setSteps]
     split
     · exact push_good
-    · refine good_bind (runChk_checkF_good env n Γ k _) (fun _ _ => ?_)
+    · refine good_bind (runChk_checkF_good env n Γ.key k _) (fun _ _ => ?_)
       refine good_weaken (setSteps_good env n Γ op e _ (st' :: rest)) (fun _ h => h)
         (fun _ _ h hk => ⟨fun st hst p hp => ?_, h.2⟩)
       simp only [List.mem_cons] at hst

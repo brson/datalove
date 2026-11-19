@@ -958,8 +958,8 @@ theorem IT.calm {O : List (String × Bool)} {α} {σ : ISt} {m : EvalM α} (hc :
 
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallInit sigs call)
-  (O : List (String × Bool))
-include hcall
+  (O : List (String × Bool)) (hmv : env.moves = false)
+include hcall hmv
 set_option linter.unusedSectionVars false
 
 mutual
@@ -984,7 +984,8 @@ theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), SigsIn 
       refine IT.get' (fun ρ hfr hρ => ?_)
       have hl := IAg.lookup hρ hx
       split
-      · exact IT.pure' (fun ρ' h' => ⟨h', trivial⟩) hfr ρ hρ
+      · simp only [hmv, Bool.false_and, Bool.false_eq_true, ↓reduceIte]
+        exact IT.pure' (fun ρ' h' => ⟨h', trivial⟩) hfr ρ hρ
       · rename_i hn; exact absurd hn hl
       · exact IT.wrong hfr ρ hρ
     case binop op a b =>
@@ -1076,7 +1077,7 @@ theorem evalS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt), SigsIn 
         split
         · simp only [pure_bind]
           exact IT.bind (evalS_init n _ b σ σ1 (hs.of_eq (sigs_under _ b)) h1) hs1 (fun v =>
-            IT.bind (evalC_init n (Γ.enter _) k _ σ1 σ' hs h2) hs2 (fun kv =>
+            IT.bind (evalC_init n (Γ.enter _).key k _ σ1 σ' hs h2) hs2 (fun kv =>
               IT.here (indexVal_calm _ _ _) (fun _ _ => ho) (fun _ _ _ _ => trivial)))
         · exact IT.wrong
     all_goals
@@ -1489,7 +1490,7 @@ theorem placeS_init : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (σ σ' : ISt) (need :
           refine IT.bind' (placeS_init n _ b σ σ1 true (hs.of_eq (sigs_under _ b)) h1) hs1
             (fun r ρa hpl hfr1 hρa => ?_)
           obtain ⟨o, kvs⟩ := r
-          refine IT.res_bindK (evalC_init n (Γ.enter _) k _ σ1 _ hs h2 hfr1 ρa hρa)
+          refine IT.res_bindK (evalC_init n (Γ.enter _).key k _ σ1 _ hs h2 hfr1 ρa hρa)
             (fun kv ρb kb _ hρb => ?_)
           cases o with
           | none => exact absurd (hpl.1 rfl) (by simp)
@@ -2412,8 +2413,8 @@ theorem walkItems_lengths {c : Ty} {names : List String} {v : Val} {items : List
 
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallInit sigs call)
-  (O : List (String × Bool))
-include hcall
+  (O : List (String × Bool)) (hmv : env.moves = false)
+include hcall hmv
 set_option linter.unusedSectionVars false
 
 theorem evalKeys_init (n : Nat) (Γ : Ctx) (hs : SigsIn sigs Γ.sigs) : ∀ (keys : List (Expr × Ty)) (σ σ' : ISt),
@@ -2426,7 +2427,7 @@ theorem evalKeys_init (n : Nat) (Γ : Ctx) (hs : SigsIn sigs Γ.sigs) : ∀ (key
     simp only [List.map_cons, initAll] at h
     obtain ⟨σ1, h1, h2⟩ := bind_ok h
     simp only [evalKeys]
-    exact IT.bind (evalC_init env sigs call hcall O n Γ k kt σ σ1 hs h1) (initE_shape sigs σ k σ1 h1) (fun _ =>
+    exact IT.bind (evalC_init env sigs call hcall O hmv n Γ k kt σ σ1 hs h1) (initE_shape sigs σ k σ1 h1) (fun _ =>
       IT.bind (evalKeys_init n Γ hs keys σ1 σ' h2) (initAll_shape sigs σ1 _ σ' h2) (fun _ =>
         IT.pure' (fun ρ hρ => ⟨hρ, trivial⟩)))
 
@@ -2459,11 +2460,11 @@ theorem execBind_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (p : Pat) (hint : Option 
   unfold execBind
   cases hint with
   | none =>
-    exact SRes.ofRes (evalS_init env sigs call hcall O n Γ e σ σ1 hs h hfr ρ hρ) (fun a ρ1 k hp hρ1 => fin a ρ1 k hp hρ1)
+    exact SRes.ofRes (evalS_init env sigs call hcall O hmv n Γ e σ σ1 hs h hfr ρ hρ) (fun a ρ1 k hp hρ1 => fin a ρ1 k hp hρ1)
   | some hh =>
     simp only
     split
-    · exact SRes.ofRes (evalC_init env sigs call hcall O n Γ e _ σ σ1 hs h hfr ρ hρ)
+    · exact SRes.ofRes (evalC_init env sigs call hcall O hmv n Γ e _ σ σ1 hs h hfr ρ hρ)
         (fun a ρ1 k hp hρ1 => fin a ρ1 k hp hρ1)
     · trivial
 
@@ -2471,8 +2472,8 @@ end
 
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallInit sigs call)
-  (O : List (String × Bool))
-include hcall
+  (O : List (String × Bool)) (hmv : env.moves = false)
+include hcall hmv
 set_option linter.unusedSectionVars false
 
 theorem execSet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List Step) (op : Option BinOp)
@@ -2517,13 +2518,13 @@ theorem execSet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (x : String) (steps : List
         rw [setPlan_keys hp, ← initKeys_eq]; exact h2
       have inner : ∀ Γe : Ctx, SigsIn sigs Γe.sigs → IT O σ σ4 (fun _ _ => True) (do
           let r ← evalC env call n Γe e vt
-          let kvs ← evalKeys env call n Γ keys
+          let kvs ← evalKeys env call n Γ.key keys
           match (← get).lookup x with
           | some old => Fun.here (writeSteps op t old steps kvs r)
           | none => throw Stop.wrong) := by
         intro Γe hsΓ
-        refine IT.bind (evalC_init env sigs call hcall O n Γe e vt σ σ1 hsΓ h1) hs1
-          (fun r => IT.bind (evalKeys_init env sigs call hcall O n Γ hs keys σ1 σ4 hkeys) hs2 (fun kvs => ?_))
+        refine IT.bind (evalC_init env sigs call hcall O hmv n Γe e vt σ σ1 hsΓ h1) hs1
+          (fun r => IT.bind (evalKeys_init env sigs call hcall O hmv n Γ.key hs keys σ1 σ4 hkeys) hs2 (fun kvs => ?_))
         refine IT.get' (fun ρ1 hfr1 hρ1 => ?_)
         split
         · rename_i old hold
@@ -2566,7 +2567,7 @@ theorem execRet_init (n : Nat) (Γ : Ctx) (ρ : VEnv) (e : Option Expr) (σ : IS
     | some e' =>
       simp only at hk ⊢
       obtain ⟨σ2, h2, -⟩ := bind_ok hk
-      refine SRes.ofRes (evalC_init env sigs call hcall O n Γ e' r σ1 σ2 hs h2 hfr ρ hρ) (fun v ρ' k _ _ => ?_)
+      refine SRes.ofRes (evalC_init env sigs call hcall O hmv n Γ e' r σ1 σ2 hs h2 hfr ρ hρ) (fun v ρ' k _ _ => ?_)
       exact ⟨σ1, hfr, hρ.keeps k, ho⟩
     | none => trivial
   | void =>
@@ -2635,8 +2636,8 @@ theorem SRes.ofLoop {O : List (String × Bool)} {ρ : VEnv} {out : IOut} {B C : 
 
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (call : CallFn) (hcall : CallInit sigs call)
-  (O : List (String × Bool))
-include hcall
+  (O : List (String × Bool)) (hmv : env.moves = false)
+include hcall hmv
 set_option linter.unusedSectionVars false
 
 mutual
@@ -2653,7 +2654,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
       obtain ⟨σ1, h1, hA⟩ := bind_ok h
       simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
       simp only [execStmt]
-      exact execBind_init env sigs call hcall O n Γ ρ p hint e σ σ1 hs h1 hfr hρ rfl
+      exact execBind_init env sigs call hcall O hmv n Γ ρ p hint e σ σ1 hs h1 hfr hρ rfl
     case var_ p hint v =>
       cases v with
       | some e =>
@@ -2661,7 +2662,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
         obtain ⟨σ1, h1, hA⟩ := bind_ok h
         simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
         simp only [execStmt]
-        exact execBind_init env sigs call hcall O n Γ ρ p hint e σ σ1 hs h1 hfr hρ rfl
+        exact execBind_init env sigs call hcall O hmv n Γ ρ p hint e σ σ1 hs h1 hfr hρ rfl
       | none =>
         cases hint with
         | none =>
@@ -2684,14 +2685,14 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
       obtain ⟨σ1, h1, hA⟩ := bind_ok h
       simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
       simp only [execStmt]
-      exact execSet_init env sigs call hcall O n Γ ρ x steps op e σ σ1 hs h1 hfr hρ rfl
+      exact execSet_init env sigs call hcall O hmv n Γ ρ x steps op e σ σ1 hs h1 hfr hρ rfl
     case fun_ f =>
       simp only [initStmt, pure, Except.pure, Except.ok.injEq] at h; subst h
       simp only [execStmt]
       exact ⟨Grew.refl ρ, hρ, rfl⟩
     case ret e =>
       simp only [execStmt]
-      exact execRet_init env sigs call hcall O n Γ ρ e σ out hs h hfr hρ
+      exact execRet_init env sigs call hcall O hmv n Γ ρ e σ out hs h hfr hρ
     case brk =>
       simp only [initStmt, pure, Except.pure, Except.ok.injEq] at h; subst h
       simp only [execStmt]
@@ -2705,21 +2706,21 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
       obtain ⟨σ1, h1, hA⟩ := bind_ok h
       simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
       simp only [execStmt]
-      exact SRes.ofRes (evalS_init env sigs call hcall O n Γ.borrow e σ σ1 hs h1 hfr ρ hρ)
+      exact SRes.ofRes (evalS_init env sigs call hcall O hmv n Γ.borrow e σ σ1 hs h1 hfr ρ hρ)
         (fun _ ρ1 _ _ h1 => ⟨Grew.refl ρ1, h1, rfl⟩)
     case call e =>
       simp only [initStmt] at h
       obtain ⟨σ1, h1, hA⟩ := bind_ok h
       simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
       simp only [execStmt]
-      exact SRes.ofRes (evalS_init env sigs call hcall O n Γ e σ σ1 hs h1 hfr ρ hρ)
+      exact SRes.ofRes (evalS_init env sigs call hcall O hmv n Γ e σ σ1 hs h1 hfr ρ hρ)
         (fun _ ρ1 _ _ h1 => ⟨Grew.refl ρ1, h1, rfl⟩)
     case const_ x hint e =>
       simp only [initStmt] at h
       obtain ⟨σ1, h1, hA⟩ := bind_ok h
       simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
       simp only [execStmt]
-      exact execBind_init env sigs call hcall O n { Γ with constExpr := true } ρ (.name x) hint e σ σ1 hs h1
+      exact execBind_init env sigs call hcall O hmv n { Γ with constExpr := true } ρ (.name x) hint e σ σ1 hs h1
         hfr hρ rfl
     case type_ x hh =>
       simp only [initStmt, pure, Except.pure, Except.ok.injEq] at h; subst h
@@ -2825,7 +2826,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
       cases tB <;> cases eB
       case none.none =>
         simp only [execStmt]
-        refine SRes.ofRes (evalC_init env sigs call hcall O n Γ c .bool σ σc hs hc hfr ρ hρ) (fun cv ρ1 _ _ hρ1 => ?_)
+        refine SRes.ofRes (evalC_init env sigs call hcall O hmv n Γ c .bool σ σc hs hc hfr ρ hρ) (fun cv ρ1 _ _ hρ1 => ?_)
         cases hb : boolOf cv with
         | error s' =>
           have : s' = .wrong := by
@@ -2850,7 +2851,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
           subst this; trivial
         | ok ct =>
           simp only [bind, Except.bind]
-          refine SRes.ofRes (evalS_init env sigs call hcall O n Γ c σ σc hs hc hfr ρ hρ) (fun v ρ1 _ _ hρ1 => ?_)
+          refine SRes.ofRes (evalS_init env sigs call hcall O hmv n Γ c σ σc hs hc hfr ρ hρ) (fun v ρ1 _ _ hρ1 => ?_)
           split
           · exact thenCase _ ρ1 _ (by simp [hs]) hρ1
           · split
@@ -2896,7 +2897,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
           exact ⟨Keeps.refl ρ0, hρ0, fun e => by cases e⟩
         | some c =>
           simp only
-          have := evalC_init env sigs call hcall O n Γ c .bool σ σc hs hc hfr ρ0 hρ0
+          have := evalC_init env sigs call hcall O hmv n Γ c .bool σ σc hs hc hfr ρ0 hρ0
           generalize (evalC env call n Γ c .bool).run ρ0 = r0 at this ⊢
           cases r0 with
           | error s => exact this
@@ -2943,7 +2944,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
         subst this; trivial
       | ok t =>
         simp only [bind, Except.bind]
-        refine SRes.ofRes (evalS_init env sigs call hcall O n Γ e σ σc hs hc hfr ρ hρ) (fun v ρ1 _ _ hρ1 => ?_)
+        refine SRes.ofRes (evalS_init env sigs call hcall O hmv n Γ e σ σc hs hc hfr ρ hρ) (fun v ρ1 _ _ hρ1 => ?_)
         have hl1 : σc.length = ρ1.length := IAg.length hρ1
         split
         · rename_i vs _
@@ -3006,7 +3007,7 @@ theorem execStmt_init : ∀ (n k : Nat) (Γ : Ctx) (ρ : VEnv) (s : Stmt) (σ : 
           subst this; trivial
         | ok t =>
           simp only [bind, Except.bind]
-          refine SRes.ofRes (evalS_init env sigs call hcall O n Γ.borrow coll σ σc hs hc hfr ρ hρ)
+          refine SRes.ofRes (evalS_init env sigs call hcall O hmv n Γ.borrow coll σ σc hs hc hfr ρ hρ)
             (fun v ρ1 _ _ hρ1 => ?_)
           cases hw : walkItems t.expose names v with
           | error s' =>
@@ -3291,6 +3292,8 @@ theorem after_ok (params : List (Mode × String × Hint)) (consts : List (String
 
 section
 variable (env : InferEnv) (sigs : List (String × Sig)) (funs : List (String × FunInfo)) (k : Nat)
+  (hmv : env.moves = false)
+include hmv
 
 /-- **Calls into a program the analysis lets through keep the promise**:
 given a value for every parameter but an `out` one, a call never stops at a
@@ -3334,7 +3337,7 @@ theorem runCall_init {S : List (String × Sig)} (hS : SigsIn sigs S) (hp : ProgI
       have hfr0 : Fr (funStart fi.params (marks)).shape (funStart fi.params (marks)) :=
         ⟨[], by simp, rfl⟩
       have hb := execBlock_init env sigs (runCall env S funs k d) (runCall_init hS hp d)
-        (funStart fi.params (marks)).shape fuel k
+        (funStart fi.params (marks)).shape hmv fuel k
         ((funCtx S fi.aliases fi.consts fi.tps fi.params sig).inst θ) _ fi.body _ r hS hr hfr0 hρ0
       obtain ⟨ir, -⟩ := initBlock_shape sigs _ fi.body r hr
       generalize execBlock env (runCall env S funs k d) fuel k _ _ fi.body = m at hb ⊢
@@ -3378,7 +3381,7 @@ theorem runTop_init (sigs : List (String × Sig)) (funs : List (String × FunInf
     (runTop sigs k d Γ ρ funs log ss).result ≠ .error .uninit
   | [], _, _, _, _, _, _, _, _, _ => by simp [runTop, pure, Except.pure]
   | s :: ss, Γ, Γa, σ, ρ, log, hs, h, hfr, hρ => by
-    have hcall := runCall_init inferEnv sigs funs k (SigsIn.refl sigs) hp d
+    have hcall := runCall_init inferEnv sigs funs k rfl (SigsIn.refl sigs) hp d
     cases s
     case fun_ f =>
       obtain ⟨name, tps, params, ret, body⟩ := f
@@ -3392,7 +3395,7 @@ theorem runTop_init (sigs : List (String × Sig)) (funs : List (String × FunInf
       simp only [initStmt] at h1
       obtain ⟨σ1, he, hA⟩ := bind_ok h1
       simp only [pure, Except.pure, Except.ok.injEq] at hA; subst hA
-      have hev := evalS_init inferEnv sigs (runCall inferEnv sigs funs k d) hcall [] (fuel - 1) Γ.borrow e σ σ1 hs he
+      have hev := evalS_init inferEnv sigs (runCall inferEnv sigs funs k d) hcall [] rfl (fuel - 1) Γ.borrow e σ σ1 hs he
         hfr ρ hρ
       simp only [runTop]
       cases ht : typeOf (synthF inferEnv (fuel - 1) Γ.borrow e) with
@@ -3419,7 +3422,7 @@ theorem runTop_init (sigs : List (String × Sig)) (funs : List (String × FunInf
     all_goals
       simp only [initTop] at h
       obtain ⟨r, h1, h2⟩ := bind_ok h
-      have hex := execStmt_init inferEnv sigs (runCall inferEnv sigs funs k d) hcall [] fuel k Γ ρ _ σ r hs h1 hfr hρ
+      have hex := execStmt_init inferEnv sigs (runCall inferEnv sigs funs k d) hcall [] rfl fuel k Γ ρ _ σ r hs h1 hfr hρ
       obtain ⟨ir, -⟩ := initStmt_shape sigs σ _ r h1
       simp only [runTop]
       generalize execStmt inferEnv (runCall inferEnv sigs funs k d) fuel k Γ ρ _ = m at hex ⊢

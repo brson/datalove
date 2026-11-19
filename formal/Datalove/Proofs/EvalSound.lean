@@ -501,6 +501,16 @@ theorem Agree.lookup {vars : List (String × Ty × Kind)} {ρ : VEnv} (h : Agree
       simp only [h1, h2] at hl ⊢
       exact ih t k hl
 
+theorem Agree.takeVar {vars : List (String × Ty × Kind)} {ρ : VEnv} (h : Agree vars ρ) (x : String) :
+    Agree vars (Fun.takeVar x ρ) := by
+  induction h with
+  | nil => exact .nil
+  | @cons y u k' o vars ρ ho h ih =>
+    simp only [Fun.takeVar]
+    split
+    · exact .cons (fun v hv => by cases hv) h
+    · exact .cons ho ih
+
 theorem setVar_agree {vars : List (String × Ty × Kind)} {ρ : VEnv} (h : Agree vars ρ) {x : String}
     {t : Ty} {k : Kind} (hl : (vars.find? (·.1 == x)).map (·.2) = some (t, k)) {w : Val}
     (hw : HasType w t) : Agree vars (setVar x w ρ) := by
@@ -622,6 +632,15 @@ theorem throw' {s : Stop} (h : StopOkT V R s) : SoundT V R P (throw s) := fun _ 
 theorem unsupported {g : Gap} : SoundT V R P (throw (.unsupported g)) := throw' trivial
 
 theorem uninit : SoundT V R P (throw .uninit) := throw' trivial
+
+/-- Moving a variable's value out, then giving `a`, or giving `a`: what
+holds nothing is of every type. -/
+theorem take' {a : α} (h : P a) (c : Bool) (x : String) :
+    SoundT V R P (if c = true then (do modify (takeVar x); pure a : EvalT α) else pure a) := by
+  intro ρ hρ
+  cases c
+  · exact ⟨h, hρ⟩
+  · exact ⟨h, hρ.takeVar x⟩
 
 /-- Reading the variables. -/
 theorem get' {f : VEnv → EvalT α} (h : ∀ ρ, Agree V ρ → SoundT V R P (f ρ)) : SoundT V R P (get >>= f) :=
@@ -1336,7 +1355,7 @@ theorem evalS_sound : ∀ (n : Nat) (Γ : Ctx) (e : Expr) (t : Ty), Quiet (synth
         simp only [hv]
         cases o with
         | none => exact SoundT.uninit
-        | some v => exact SoundT.pure' (hvt v rfl)
+        | some v => exact SoundT.take' (P := fun w => HasType w u) (a := v) (hvt v rfl) _ x
     case binop op a b =>
       simp only [synthF] at h
       obtain ⟨u, hp, hf⟩ := h.bind_inv
@@ -1871,7 +1890,7 @@ theorem evalStep_sound : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : Step)
     simp only [evalStep, hi]
     refine SoundT.bind' (P := ((et, kt) = ·)) (SoundT.pure' rfl) (fun _ e => ?_)
     subst e
-    exact SoundT.bind' (evalC_sound n Γ k kt hk hb) (fun kv hkv =>
+    exact SoundT.bind' (evalC_sound n Γ.key k kt hk hb) (fun kv hkv =>
       SoundT.here (indexVal_sound hv hi hkv (missing_ok (by simpa using hfit))))
 
 theorem evalPath_sound : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (steps : List Step) (u : Ty),
@@ -1931,7 +1950,7 @@ theorem evalPathStep_sound : ∀ (n : Nat) (Γ : Ctx) (t : Ty) (v : Val) (st : S
     simp only [evalPathStep, hi]
     refine SoundT.bind' (P := ((et, kt) = ·)) (SoundT.pure' rfl) (fun _ e => ?_)
     subst e
-    exact SoundT.bind' (evalC_sound n Γ k kt hk hb) (fun kv hkv =>
+    exact SoundT.bind' (evalC_sound n Γ.key k kt hk hb) (fun kv hkv =>
       SoundT.bind' (SoundT.here (indexVal_sound hv hi hkv (missing_ok (by simpa using hfit)))) (fun x hx =>
         SoundT.pure' ⟨hx, [(k, kt)], by simp [setPlan, hi], ⟨rfl, by simpa using hkv⟩,
           fun k' m' hkm => by simp at hkm; obtain ⟨rfl, rfl⟩ := hkm; simpa using hfit⟩))

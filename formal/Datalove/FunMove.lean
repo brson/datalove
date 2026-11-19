@@ -3,9 +3,9 @@ import Datalove.FunInit
 /-!
 # What is moved (O001, O003, O007, O008, O014, O016)
 
-Reading a variable whose type is not copy, where the checker has the read
-take the value rather than borrow it (`Ctx.borrowed` false: a `let`'s or a
-`set`'s value, an `in` argument, a `ret`, a part of what an expression
+Reading a variable whose type is not copy, where the ownership analysis has
+the read take the value rather than borrow it (`Ctx.lends` false: a `let`'s
+or a `set`'s value, an `in` argument, a `ret`, a part of what an expression
 builds, a condition or `match` that binds), moves its value out, and the
 variable holds nothing until something is written to it again. The ownership
 analysis refuses a program that reads a moved variable (O001), moves a
@@ -23,14 +23,19 @@ The two differ at a join. Where branches disagree about whether a variable
 was given a value, it holds one after only if every branch gave it one; where
 they disagree about whether it was moved, the program is refused.
 
-Moves are decided as the checker decides a position borrows: the analysis
-follows each expression with the flag `Ctx.borrowed` would have there,
-entering an expression as `Ctx.enter` does, borrowing for an operand, `@`,
-`debuglog`, a compound `set`'s value, a `for`'s collection and a `ref`,
-`mut` or `out` argument (`Ctx.borrow`, `Ctx.forArg`), and the base of a
-field or index of a place (`Ctx.under`). A const argument is passed by
-reference and moves nothing. It threads the checker's context through a
-body as the run does (`execBlock`), for each variable's type and kind.
+Moves are decided where the run that moves (`runScriptMoves`) decides
+them: the analysis follows each expression with the flag `Ctx.lends` has
+there, entering an expression as `Ctx.enter` does, lending for an operand,
+`@`, `debuglog`, a compound `set`'s value, a `for`'s collection, a `ref`,
+`mut`, `out` or const argument (`Ctx.borrow`, `Ctx.forArg`), the base of a
+field or index of a place (`Ctx.under`), and an index's key (`Ctx.key`).
+The key a plain `set m[k] = v` inserts the Rust takes, and so does the
+analysis, though the run lends it: there the analysis moves what the run
+does not, which only refuses more. Each statement is followed at the fuel
+and in the context the run gives it (`execStmt`, `execBlock`, `checkStmtF`
+at that fuel, `funCtx` for a body), so that the two see the same types and
+kinds, and `moves_agree` holds the run to the analysis as well as the
+analysis to the Rust.
 
 After an `if` or `match`, what is moved is what one branch left: the first
 that completes, or, where none does, the first (`joinIf`, `joinMatch`), as
@@ -172,7 +177,7 @@ def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) : MSt → Expr → Mo
   | σ, .proj base _ => mE sigs Γ (b || (placeOf base).isSome) σ base
   | σ, .index base k (some _) => do
     let σ ← mE sigs Γ (b || (placeOf base).isSome) σ base
-    let σ ← mE sigs Γ b σ k
+    let σ ← mE sigs Γ true σ k
     exitM σ
   | σ, .index _ _ none => pure σ
   | σ, .call f args => match sigs.lookup f with
@@ -249,11 +254,12 @@ def mRows (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (List Expr) �
 
 end
 
-/-- A `set`'s keys, in order. -/
+/-- A `set`'s keys, in order: one looked up with `?` or `!` borrowed, and
+the one a plain `set m[k] = v` inserts taken, into the map. -/
 def mKeys (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Step → MoveM MSt
   | σ, [] => pure σ
   | σ, .field _ :: rest => mKeys sigs Γ σ rest
-  | σ, .index k _ :: rest => mE sigs Γ true σ k >>= fun σ => mKeys sigs Γ σ rest
+  | σ, .index k m :: rest => mE sigs Γ m.isSome σ k >>= fun σ => mKeys sigs Γ σ rest
 
 /-- What a `set` asks of the variable it writes: a compound one reads it,
 and one through steps writes a part of it, which has to have been given a
@@ -277,18 +283,19 @@ def mSet (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (x : String) (steps
   pure (if steps.isEmpty then σ.give x else σ)
 
 /-- The context the then branch of `if c |x| … else |y| …` runs in, or
-the else branch's if `err`, as `checkStmtF` checks them. -/
-def condCtx (Γ : Ctx) (c : Expr) (x : Option String) (err : Bool) : Ctx :=
-  match (synthF inferEnv fuel Γ c).run.val with
+the else branch's if `err`, as `execStmt` runs them at fuel `n`. -/
+def condCtx (env : InferEnv) (n : Nat) (Γ : Ctx) (c : Expr) (x : Option String) (err : Bool) : Ctx :=
+  match (synthF env n Γ c).run.val with
   | .ok ct => match ct.expose with
     | .option p => if err then Γ else bindOpt Γ x p
     | .result p => if err then bindOpt Γ x .error else bindOpt Γ x p
     | _ => Γ
   | .error _ => Γ
 
-/-- The variants of what a `match` takes apart, as its cases see them. -/
-def matchVariants (Γ : Ctx) (e : Expr) : List (String × Option Ty) :=
-  match (synthF inferEnv fuel Γ e).run.val with
+/-- The variants of what a `match` takes apart, as `execStmt` finds them at
+fuel `n`. -/
+def matchVariants (env : InferEnv) (n : Nat) (Γ : Ctx) (e : Expr) : List (String × Option Ty) :=
+  match (synthF env n Γ e).run.val with
   | .ok t => match t.expose with
     | .enum vs => vs.toList
     | _ => []
@@ -299,6 +306,13 @@ def termCtx (Γ : Ctx) (vs : List (String × Option Ty)) (a x : String) : Ctx :=
   match vs.lookup a with
   | some (some p) => Γ.bind x p .let_
   | _ => Γ
+
+/-- The context a `for`'s body runs in, as `execStmt` binds it at fuel
+`n`. -/
+def forCtx (env : InferEnv) (n : Nat) (Γ : Ctx) (names : List String) (coll : Expr) : Ctx :=
+  match (forBindings env n Γ names coll).run #[] with
+  | (some Δ, _) => { Γ with inLoop := true }.bindAll Δ
+  | (none, _) => { Γ with inLoop := true }
 
 /-- What a statement, a block or a `match`'s cases leave: what holds a value
 where it completes, at each of its `break`s, and at each `continue`. -/
@@ -342,125 +356,129 @@ def loopEnd (σ σc : MSt) (natural : Bool) (body : List Stmt) (r : MOut) : Move
 
 mutual
 
-/-- A statement, as `execStmt` runs it, in the checker's context `Γ`. -/
-def mStmt (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Stmt → MoveM MOut
-  | σ, .let_ p _ e => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
-  | σ, .var_ p _ (some e) => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
-  | σ, .var_ p (some _) none => pure (σ.bind (patNames p) false false, [], [])
-  | σ, .var_ _ none none => pure (σ, [], [])
-  | σ, .set_ x steps op e => do pure (← mSet sigs Γ σ x steps op e, [], [])
-  | σ, .fun_ _ => pure (σ, [], [])
-  | σ, .ret e => do
-    let σ ← exitM σ
-    match e with
-    | some e => pure (← mE sigs Γ false σ e, [], [])
-    | none => pure (σ, [], [])
-  | σ, .if_ c tB eB t e =>
-    mE sigs Γ false σ c >>= fun σc =>
-    mBlock sigs (condCtx Γ c tB false) (σc.bind tB.toList true false) t >>= fun rt =>
-    mElse sigs (condCtx Γ c eB true) (σc.bind eB.toList true false) e >>= fun re =>
-    joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes) >>= fun σ' =>
-    pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
-  | σ, .loop c body =>
-    (match c with
-      | some c => mE sigs Γ false σ c
-      | none => pure σ) >>= fun σc =>
-    mBlock sigs { Γ with inLoop := true } σc body >>= fun r =>
-    loopEnd σ σc c.isSome body r >>= fun σ' =>
-    pure (σ', [], [])
-  | σ, .brk => pure (σ, [σ], [])
-  | σ, .cont => pure (σ, [], [σ])
-  | σ, .debuglog e => do pure (← mE sigs Γ true σ e, [], [])
-  | σ, .call e => do pure (← mE sigs Γ false σ e, [], [])
-  | σ, .const_ x _ e => do
-    let σ ← mE sigs { Γ with constExpr := true } false σ e
-    pure (σ.bind [x] true false, [], [])
-  | σ, .type_ _ _ => pure (σ, [], [])
-  | σ, .match_ e cases dflt =>
-    mE sigs Γ false σ e >>= fun σc =>
-    mCases sigs Γ (matchVariants Γ e) σc cases >>= fun r =>
-    mDflt sigs Γ σc dflt >>= fun d =>
-    joinMatch σc (r.1 ++ d.1) >>= fun σ' =>
-    pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
-  | σ, .for_ names coll body =>
-    mE sigs Γ true σ coll >>= fun σc =>
-    let Γb := match (forBindings inferEnv fuel Γ names coll).run #[] with
-      | (some Δ, _) => { Γ with inLoop := true }.bindAll Δ
-      | (none, _) => { Γ with inLoop := true }
-    mBlock sigs Γb (σc.bind names true true) body >>= fun r =>
-    loopEnd σc σc true body r >>= fun σ' =>
-    pure (σ', [], [])
+/-- A statement, as `execStmt` runs it at fuel `n` in context `Γ`, its
+blocks at the fuel and in the contexts it runs them in. Out of fuel, the
+run stops, and nothing is asked. -/
+def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt → Stmt → MoveM MOut
+  | 0, _, σ, _ => pure (σ, [], [])
+  | n + 1, Γ, σ, s => match s with
+    | .let_ p _ e => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
+    | .var_ p _ (some e) => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
+    | .var_ p (some _) none => pure (σ.bind (patNames p) false false, [], [])
+    | .var_ _ none none => pure (σ, [], [])
+    | .set_ x steps op e => do pure (← mSet sigs Γ σ x steps op e, [], [])
+    | .fun_ _ => pure (σ, [], [])
+    | .ret e => do
+      let σ ← exitM σ
+      match e with
+      | some e => pure (← mE sigs Γ false σ e, [], [])
+      | none => pure (σ, [], [])
+    | .if_ c tB eB t e =>
+      mE sigs Γ false σ c >>= fun σc =>
+      mBlock sigs env n (condCtx env n Γ c tB false) (σc.bind tB.toList true false) t >>= fun rt =>
+      mElse sigs env n (condCtx env n Γ c eB true) (σc.bind eB.toList true false) e >>= fun re =>
+      joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes) >>= fun σ' =>
+      pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
+    | .loop c body =>
+      (match c with
+        | some c => mE sigs Γ false σ c
+        | none => pure σ) >>= fun σc =>
+      mBlock sigs env n { Γ with inLoop := true } σc body >>= fun r =>
+      loopEnd σ σc c.isSome body r >>= fun σ' =>
+      pure (σ', [], [])
+    | .brk => pure (σ, [σ], [])
+    | .cont => pure (σ, [], [σ])
+    | .debuglog e => do pure (← mE sigs Γ true σ e, [], [])
+    | .call e => do pure (← mE sigs Γ false σ e, [], [])
+    | .const_ x _ e => do
+      let σ ← mE sigs { Γ with constExpr := true } false σ e
+      pure (σ.bind [x] true false, [], [])
+    | .type_ _ _ => pure (σ, [], [])
+    | .match_ e cases dflt =>
+      mE sigs Γ false σ e >>= fun σc =>
+      mCases sigs env n Γ (matchVariants env n Γ e) σc cases >>= fun r =>
+      mDflt sigs env n Γ σc dflt >>= fun d =>
+      joinMatch σc (r.1 ++ d.1) >>= fun σ' =>
+      pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
+    | .for_ names coll body =>
+      mE sigs Γ true σ coll >>= fun σc =>
+      mBlock sigs env n (forCtx env n Γ names coll) (σc.bind names true true) body >>= fun r =>
+      loopEnd σc σc true body r >>= fun σ' =>
+      pure (σ', [], [])
 
-/-- An `else`, in its own scope, or nothing. -/
-def mElse (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Option (List Stmt) → MoveM MOut
-  | σ, some e => mBlock sigs Γ σ e
+/-- An `else`, in its own scope, or nothing, as `execElse` runs it. -/
+def mElse (sigs : List (String × Sig)) (env : InferEnv) (n : Nat) (Γ : Ctx) : MSt → Option (List Stmt) → MoveM MOut
+  | σ, some e => mBlock sigs env n Γ σ e
   | σ, none => pure (σ, [], [])
 
-/-- A `match`'s default: what it leaves back in `σ`'s scope and whether it
-completes, and its `break`s and `continue`s. -/
-def mDflt (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Option (List Stmt) →
+/-- A `match`'s default, as `execElse` runs it: what it leaves back in
+`σ`'s scope and whether it completes, and its `break`s and `continue`s. -/
+def mDflt (sigs : List (String × Sig)) (env : InferEnv) (n : Nat) (Γ : Ctx) : MSt → Option (List Stmt) →
     MoveM (List (MSt × Bool) × List MSt × List MSt)
-  | σ, some d => mBlock sigs Γ σ d >>= fun r => pure ([(σ.back r.1, completes d)], r.2.1, r.2.2)
+  | σ, some d => mBlock sigs env n Γ σ d >>= fun r => pure ([(σ.back r.1, completes d)], r.2.1, r.2.2)
   | _, none => pure ([], [], [])
 
-/-- A `match`'s cases, each from `σ`. -/
-def mCases (sigs : List (String × Sig)) (Γ : Ctx) (vs : List (String × Option Ty)) : MSt → List Case →
-    MoveM (List (MSt × Bool) × List MSt × List MSt)
-  | _, [] => pure ([], [], [])
-  | σ, .atom _ b :: cs =>
-    mBlock sigs Γ σ b >>= fun rb =>
-    mCases sigs Γ vs σ cs >>= fun r =>
+/-- A `match`'s cases, each from `σ`, as `execCases` runs them: each at one
+less fuel than the one before. -/
+def mCases (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → List (String × Option Ty) → MSt →
+    List Case → MoveM (List (MSt × Bool) × List MSt × List MSt)
+  | 0, _, _, _, _ => pure ([], [], [])
+  | _ + 1, _, _, _, [] => pure ([], [], [])
+  | n + 1, Γ, vs, σ, .atom _ b :: cs =>
+    mBlock sigs env n Γ σ b >>= fun rb =>
+    mCases sigs env n Γ vs σ cs >>= fun r =>
     pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
-  | σ, .term a x b :: cs =>
-    mBlock sigs (termCtx Γ vs a x) (σ.bind [x] true false) b >>= fun rb =>
-    mCases sigs Γ vs σ cs >>= fun r =>
+  | n + 1, Γ, vs, σ, .term a x b :: cs =>
+    mBlock sigs env n (termCtx Γ vs a x) (σ.bind [x] true false) b >>= fun rb =>
+    mCases sigs env n Γ vs σ cs >>= fun r =>
     pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
 
-/-- A block's statements in order, each in the context the one before it
-leaves, as `execBlock` runs them. -/
-def mBlock (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Stmt → MoveM MOut
-  | σ, [] => pure (σ, [], [])
-  | σ, s :: ss =>
-    mStmt sigs Γ σ s >>= fun r1 =>
-    mBlock sigs ((checkStmt Γ s).run #[]).1 r1.1 ss >>= fun r2 =>
+/-- A block's statements in order, as `execBlock` runs them: each at one
+less fuel, in the context the one before it leaves (`checkStmtF` at that
+fuel). -/
+def mBlock (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt → List Stmt → MoveM MOut
+  | 0, _, σ, _ => pure (σ, [], [])
+  | _ + 1, _, σ, [] => pure (σ, [], [])
+  | n + 1, Γ, σ, s :: ss =>
+    mStmt sigs env n Γ σ s >>= fun r1 =>
+    mBlock sigs env n ((checkStmtF env n Γ s).run #[]).1 r1.1 ss >>= fun r2 =>
     pure (r2.1, r1.2.1 ++ r2.2.1, r1.2.2 ++ r2.2.2)
 
 end
 
-/-- A function's body: its parameters, the last innermost, each given a
-value but an `out` one, a `ref`, `mut` or `out` one borrowed, then the
-consts it sees; its end a way out where it can complete. In the context
-`checkFun` checks it in. -/
-def mFun (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (String × Ty × Kind))
+/-- A function's body, in the context `runCall` runs it in (`funCtx`, with
+no type arguments) at fuel `fuel`: its parameters, the last innermost, each
+given a value but an `out` one, a `ref`, `mut` or `out` one borrowed, then
+the consts it sees; its end a way out where it can complete. -/
+def mFun (sigs : List (String × Sig)) (env : InferEnv) (aliases : Aliases) (consts : List (String × Ty × Kind))
     (cmarks : List (String × Bool)) : FunDecl → MoveM Unit
   | .mk name tps params _ body =>
     match sigs.lookup name with
     | none => pure ()
     | some sig => do
-      let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
-      let Γ : Ctx := { vars := vars ++ consts, ret := sig.ret, sigs, aliases := tparamAliases tps aliases,
-                       bounds := boundsOf tps }
       let σ0 : MSt := params.reverse.map (fun (m, x, _) =>
           { name := x, init := m != .out, live := true, back := m == .out || m == .mut,
             lent := m == .ref || m == .mut || m == .out }) ++
         cmarks.map fun (x, s) => { name := x, init := s, live := true, back := false, lent := false }
-      let (σ, _, _) ← mBlock sigs Γ σ0 body
+      let (σ, _, _) ← mBlock sigs env fuel (funCtx sigs aliases consts tps params sig) σ0 body
       if completes body then discard (exitM σ)
 
-/-- A script's statements, each function's body in the context the checker
-reaches its declaration in, and every other statement on the top level's
-variables. -/
-def mTop (sigs : List (String × Sig)) : Ctx → MSt → List Stmt → MoveM Unit
+/-- A script's statements, as `runScriptMoves` runs them: each at fuel
+`fuel`, the context threaded by `checkStmt`, and each function's body as a
+call runs it. -/
+def mTop (sigs : List (String × Sig)) (env : InferEnv) : Ctx → MSt → List Stmt → MoveM Unit
   | _, _, [] => pure ()
   | Γ, σ, .fun_ f :: ss =>
-    mFun sigs Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f >>= fun _ => mTop sigs Γ σ ss
+    mFun sigs env Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f >>= fun _ =>
+      mTop sigs env Γ σ ss
   | Γ, σ, s :: ss =>
-    mStmt sigs Γ σ s >>= fun r => mTop sigs ((checkStmt Γ s).run #[]).1 r.1 ss
+    mStmt sigs env fuel Γ σ s >>= fun r => mTop sigs env ((checkStmt Γ s).run #[]).1 r.1 ss
 
-/-- What a script's move analysis refuses first, if anything. -/
+/-- What a script's move analysis refuses first, if anything, following
+the run that moves (`runScriptMoves`). -/
 def moveScript (ss : List Stmt) : Option Lit.Code :=
   let sigs := (resolveNames ss).1
-  match mTop sigs { ret := .ty (.result unitTy), sigs } [] ss with
+  match mTop sigs movesEnv { ret := .ty (.result unitTy), sigs } [] ss with
   | .ok _ => none
   | .error c => some c
 

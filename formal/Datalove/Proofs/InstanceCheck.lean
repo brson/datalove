@@ -48,6 +48,8 @@ def Respects (θ : List (String × Ty)) (Γ : Ctx) : Prop :=
     Γ.through.inst θ = (Γ.inst θ).through := rfl
 @[simp] theorem Ctx.inst_forArg (θ : List (String × Ty)) (Γ : Ctx) (m : Mode) :
     (Γ.forArg m).inst θ = (Γ.inst θ).forArg m := rfl
+@[simp] theorem Ctx.inst_key (θ : List (String × Ty)) (Γ : Ctx) :
+    Γ.key.inst θ = (Γ.inst θ).key := rfl
 @[simp] theorem Ctx.inst_bind (θ : List (String × Ty)) (Γ : Ctx) (x : String) (t : Ty) (k : Kind) :
     (Γ.bind x t k).inst θ = (Γ.inst θ).bind x (t.inst θ) k := rfl
 @[simp] theorem Ctx.inst_sigs (θ : List (String × Ty)) (Γ : Ctx) : (Γ.inst θ).sigs = Γ.sigs := rfl
@@ -66,6 +68,8 @@ def Respects (θ : List (String × Ty)) (Γ : Ctx) : Prop :=
     Respects θ Γ.borrow ↔ Respects θ Γ := Iff.rfl
 @[simp] theorem Respects.through {θ : List (String × Ty)} {Γ : Ctx} :
     Respects θ Γ.through ↔ Respects θ Γ := Iff.rfl
+@[simp] theorem Respects.key {θ : List (String × Ty)} {Γ : Ctx} :
+    Respects θ Γ.key ↔ Respects θ Γ := Iff.rfl
 @[simp] theorem Respects.under {θ : List (String × Ty)} {Γ : Ctx} {b : Expr} :
     Respects θ (Γ.under b) ↔ Respects θ Γ := by
   unfold Ctx.under; split <;> rfl

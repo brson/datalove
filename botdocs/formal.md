@@ -766,35 +766,58 @@ Four things are proved of it:
   F089 and six hundred O005, none differ; checking with only a module's own
   signatures makes 164 of a thousand worlds differ, and marking every const
   as holding a value 219.
-- **What is moved is modelled, and held to the Rust, but not yet proved**
-  (`FunMove.lean`, of O001, O003, O007, O008, O014 and O016, with O005,
-  O006 and O009 as `FunInit.lean` has them). A read of a variable whose
-  type is not copy, where the checker has the read take the value rather
-  than borrow it (`Ctx.borrowed`), moves it: a `let`'s or `set`'s value, an
+- **What is moved is modelled, run, and held to the Rust, but not yet
+  proved** (`FunMove.lean`, of O001, O003, O007, O008, O014 and O016, with
+  O005, O006 and O009 as `FunInit.lean` has them). A read of a variable
+  whose type is not copy, where the ownership analysis has the read take
+  the value rather than borrow it, moves it: a `let`'s or `set`'s value, an
   `in` argument, a `ret`, a part of what an expression builds, a condition
-  that binds. The analysis follows each expression with the flag the
-  checker would have there, and threads the checker's context through a
-  body as the run does, for each variable's type and kind. Reading a moved
-  variable is O001, moving a `ref`, `mut` or `out` parameter or a `for`'s
-  element O003, and a const O016. Where branches meet, whether a variable
-  was moved has to agree, where whether it was given a value need not: an
-  `if`'s or `match`'s branches that complete (O008), what is moved after
-  being what the first of them left, or the first branch where none
-  completes, as the Rust's `analyze_if` and `analyze_match` take it; a
-  loop's ways out (O014), running out leaving what the condition left; and
-  each way back to a loop's start, which may not have moved what was
-  unmoved before the condition (O007). `moves_agree` in `fun_tests` holds
-  the Rust's ownership codes to the model's, the first code reported as
-  well as whether there is one, on `datalove_worldgen::moves_script`'s
-  functions, which `ownership_fuzz_tests` runs too, with three operands in
-  ten naming whatever they like, and on a corpus of hand-written bodies in
-  the shapes the generator makes rarely: loop exits, a condition that
-  moves, branches that both return, consts and borrowed bindings. Over
-  twenty-five thousand seeds, four thousand O001, two thousand O008, a
-  thousand O007, five hundred O003 and fifty O014, none differ. Taking no
-  value on a move makes 412 of a thousand differ, the then branch's state
-  after every `if` 12, and checking O007 against what the condition left
-  rather than what was before it the corpus's loop whose condition moves.
+  that binds. That is `Ctx.lends`, which the checker's context carries
+  beside `borrowed` and its transformations keep alike, but for an index's
+  key, which the analysis borrows where the checker does not (F070 for
+  `m[p.s]?`, `Ctx.key`), and a const argument, passed by reference. Nothing
+  the checker decides reads it, so evaluation and checking still pass the
+  same contexts. The run moves where `InferEnv.moves` asks (`Ctx.takes`,
+  `takeVar`): a moved variable holds nothing and a later read stops at
+  `Stop.uninit`. `inferEnv` does not ask, so every theorem about
+  `runScript` stands (`InitSound` takes `env.moves = false`); `movesEnv`
+  does, and `runScriptMoves` runs a script with it. The analysis follows
+  each expression with the flag the run has there, and each statement at
+  the fuel and in the context the run gives it (`checkStmtF` at that fuel,
+  `funCtx` for a body), so that the two decide the same reads take. The
+  key a plain `set m[k] = v` inserts the Rust takes, and so does the
+  analysis; the run lends every key, so there the analysis moves what the
+  run does not, which only refuses more. Reading a moved variable is O001,
+  moving a `ref`, `mut` or `out` parameter or a `for`'s element O003, and
+  a const O016. Where branches meet, whether a variable was moved has to
+  agree, where whether it was given a value need not: an `if`'s or
+  `match`'s branches that complete (O008), what is moved after being what
+  the first of them left, or the first branch where none completes, as the
+  Rust's `analyze_if` and `analyze_match` take it; a loop's ways out
+  (O014), running out leaving what the condition left; and each way back
+  to a loop's start, which may not have moved what was unmoved before the
+  condition (O007). `moves_agree` in `fun_tests` holds the Rust's ownership
+  codes to the model's, the first code reported as well as whether there
+  is one, on `datalove_worldgen::moves_script`'s functions, which
+  `ownership_fuzz_tests` runs too, with three operands in ten naming
+  whatever they like, and on a corpus of hand-written bodies in the shapes
+  the generator makes rarely: loop exits, a condition that moves, branches
+  that both return, keys, consts and borrowed bindings. It also runs each
+  script with `runScriptMoves` and requires that where the analysis lets it
+  through, and the Rust reports neither O010 nor O017, which see that no
+  argument a call writes back through is moved before the call takes it,
+  the run never reads what was moved: the theorem not yet proved, held to
+  the model's run. Over twenty-five thousand seeds, four thousand O001, two
+  thousand O008, a thousand O007, five hundred O003 and fifty O014, none
+  differ and no run reads what was moved. Taking no value on a move makes
+  412 of a thousand differ from the Rust and five runs read what was moved,
+  the then branch's state after every `if` 12 differ, and checking O007
+  against what the condition left rather than what was before it the
+  corpus's loop whose condition moves. The first version followed the
+  checker's `borrowed`, and borrowed a plain `set`'s key the Rust takes:
+  `set m[k] = 1` then `debuglog k` was let through, which the run, moving
+  as the checker has it, read empty; the review that found it, run on the
+  model by hand, is why the run is now held to the analysis directly.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -984,15 +1007,23 @@ it, as it did not find the atom and term case.
 In rough order of what to do next:
 
 - **That a script the move analysis lets through never reads what was
-  moved.** The run does not move yet: a variable read where the checker
-  takes its value keeps it. Making it hold nothing after (`Stop.uninit` on
-  a later read, as for one never set) changes `evalS`, and the typing
-  proofs need a case for it. The init proof then has to give up `Keeps`, a
-  step only ever giving a variable a value, which a move breaks; in its
-  place the analysis's state at each point, and for a loop the O007 check,
-  which says that each way back to its start leaves unmoved what was
-  unmoved, as `Keeps` said of every step. `FunMove.lean`'s analysis then
-  replaces `FunInit.lean`'s.
+  moved.** The run moves (`runScriptMoves`), and `moves_agree` holds it to
+  the analysis, but nothing proves it. The init proof cannot be extended:
+  under a moving run its theorem is false, and every step of it rests on
+  `Keeps`, a step only ever giving a variable a value. A proof against
+  `FunMove.lean`'s state replaces it: `IAg` over what is given a value and
+  not moved, the O007 check in place of `Keeps` for a loop, with a lemma
+  that the analysis never takes back that a variable was given a value,
+  and O010 and O017 as hypotheses, through a lemma between analyses that
+  where they accept, the root of every `mut` or `out` argument is unmoved
+  when the call writes back to it (`f(mut p.x, p)` and `f(mut p.x, g(p))`
+  are let through by the move analysis alone). Generic functions run in
+  their instance's context and are analyzed in their own; instances are
+  only ever more copy (`Ty.isCopy_inst`), so the analysis moves what the
+  run does, and the contexts stay related by `checkStmtF_inst`, whose
+  hypotheses `checkScript` gives. `runScriptMoves` and its parts
+  (`constPassMoves`, `runTopMoves`) copy `runScript`'s with `movesEnv` until
+  then.
 
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Order independence.** The doc claims that where unification's

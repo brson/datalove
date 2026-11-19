@@ -120,7 +120,7 @@ def execSet (env : InferEnv) (call : CallFn) (n : Nat) (Γ : Ctx) (ρ : VEnv) (x
     | some (vt, keys) => do
       let (w, ρ') ← (do
         let r ← evalC env call n (match op with | none => Γ | some _ => Γ.borrow) e vt
-        let kvs ← evalKeys env call n Γ keys
+        let kvs ← evalKeys env call n Γ.key keys
         match (← get).lookup x with
         | some old => here (writeSteps op t old steps kvs r)
         | none => throw Stop.wrong).run ρ

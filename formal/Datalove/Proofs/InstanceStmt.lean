@@ -712,7 +712,7 @@ theorem setIndex_inst (g : Ground θ) (H : InstEnv θ env env') {n : Nat} {Γ : 
         obtain ⟨_, hv, -⟩ := SQuiet.bind_inv (fun _ => Appends.pure _) h
         obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
         obtain ⟨_, -, hv⟩ := SQuiet.chk_inv hv
-        exact SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ k kt hk r sg))
+        exact SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ.key k kt hk r sg))
           (SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ e vt hv r sg)) (SQuiet.pure _))
       · simp at h
   | some m =>
@@ -730,7 +730,7 @@ theorem setIndex_inst (g : Ground θ) (H : InstEnv θ env env') {n : Nat} {Γ : 
         simp only [hv, Bool.false_eq_true, ↓reduceIte]
         obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setValue_appends _ _ _ _ _ _) h
         obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
-        exact SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ k kt hk r sg))
+        exact SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ.key k kt hk r sg))
           (setValue_inst g H h r sg)
 
 theorem setSteps_inst (g : Ground θ) (H : InstEnv θ env env') {n : Nat} {Γ : Ctx}
@@ -755,7 +755,7 @@ theorem setSteps_inst (g : Ground θ) (H : InstEnv θ env env') {n : Nat} {Γ : 
       rw [indexTypes_inst g hi]
       obtain ⟨_, hk, h⟩ := SQuiet.bind_inv (fun _ => setSteps_appends _ _ _ _ _ _ _) h
       obtain ⟨_, -, hk⟩ := SQuiet.chk_inv hk
-      exact SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ k kt hk r sg))
+      exact SQuiet.bind (SQuiet.chk (checkF_inst g H n Γ.key k kt hk r sg))
         (setSteps_inst g H r sg et (st :: rest) h)
 
 theorem reportModes_inst (g : Ground θ) {Γ : Ctx} : ∀ (ms : List IdxMode),
