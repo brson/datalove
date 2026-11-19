@@ -66,16 +66,6 @@ Then add I/O to it &mdash; carefully.
 ---
 
 <br>
-<div id="power">
-
-Datalove is built from <bold>[<em>| 3 sublanguages |</em>]</bold> of increasing power.
-
-</div>
-<br>
-
----
-
-<br>
 
 
 
@@ -195,14 +185,6 @@ debuglog (fine_cents(3, 1599), fine_cents(400, 1599))
 
 
 
-### [| 3, Datalove with Side Effects |]
-
-The complete language with I/O-bearing procedures,
-owned native pointers, objects with identity,
-and stack unwinding.
-_This language is not implemented yet,
-and mostly not discussed in the documentation_,
-but I do have a vision about what it will be.
 
 
 
@@ -212,6 +194,8 @@ but I do have a vision about what it will be.
 
 
 ---
+
+## Topics
 
 <div class="toc toc-repeat-2">
 
