@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
-use datalove_datafun_ir::{CodeUnitContext, CursorKind, IrCodeUnit, ParamMode, ValueId, SlotId, ParamId};
+use datalove_datafun_ir::{CodeUnitContext, CursorKind, IrCodeUnit, Operand, ParamMode, ValueId, SlotId, ParamId};
 use datalove_datafun_ir::frame_layout::tracking;
 
 use crate::error::InterpError;
@@ -464,6 +464,25 @@ impl Frame {
     fn set_tracking_byte(&self, offset: u32, state: u8) {
         // SAFETY: a tracking byte offset is inside the frame, by the layout.
         unsafe { *self.at_offset(offset) = state };
+    }
+
+    /// Check, where liveness is kept, that what a precise drop drops holds
+    /// something: that it was not moved or dropped already.
+    ///
+    /// Nothing else would see a second drop here. A callee destroys an
+    /// argument where the caller has it, and the runtime's destructors leave
+    /// what they destroy empty, so a value dropped after a call took it frees
+    /// nothing in an interpreter, where compiled code frees it twice.
+    #[inline]
+    pub fn debug_assert_held(&self, operand: &Operand) {
+        let index = match operand {
+            Operand::Value(id) | Operand::ValueRef(id) => id.0 as usize,
+            Operand::Slot(id) => self.slot_index(*id),
+            Operand::Param(id) => self.param_index(*id),
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => return,
+        };
+        debug_assert!(self.kept_live(index) != Some(false),
+            "{operand:?} is dropped and holds nothing: moved or dropped already");
     }
 
     /// Whether a value holds something.

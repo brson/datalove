@@ -10,9 +10,11 @@
 //! nothing runs. The generator tracks what it moved and what holds nothing,
 //! so that most scripts run; one operand in twenty names whatever it likes,
 //! for the ownership pass to refuse. What is held here is that the binary
-//! never panics deciding it. A script the binary accepts it runs, twice
-//! over the function, with the runtime's leak check on, and the run must
-//! end cleanly: no panic, no leak, no error.
+//! never panics deciding it. A script the binary accepts it runs, with the
+//! runtime's leak check on, on the bytecode, on the IR walker, which asserts
+//! that every drop finds something to drop, and under the JIT, whose frees
+//! the allocator checks; each run must end cleanly: no panic, no leak, no
+//! error.
 //!
 //! The shapes come from a panic in the ownership pass that a dead `break`
 //! after a `ret` in a loop under a `ref` `for` caused (backend fixture
@@ -328,6 +330,24 @@ impl Gen {
                     fmt!("set {t} = {value}")
                 }
                 19 | 20 => {
+                    // What a way out drops is decided from what was given
+                    // away on the way to it, so half the time something is,
+                    // just before.
+                    let movable: Vec<String> = scope.held(Kind::Str).into_iter()
+                        .filter(|n| scope.movable.contains(n))
+                        .collect();
+                    if self.chance(0.5) && let Some(v) = self.pick(&movable) {
+                        scope.empty.insert(v.C());
+                        let give = match self.rng.random_range(0..3) {
+                            0 => fmt!("call take({v})"),
+                            1 => {
+                                let t = self.target(&mut scope);
+                                fmt!("set {t} = {v}")
+                            }
+                            _ => fmt!("let {} = {v}", self.fresh("v")),
+                        };
+                        out.push_str(&fmt!("{indent}{give}\n"));
+                    }
                     let exit = match self.rng.random_range(0..if scope.in_loop { 4 } else { 2 }) {
                         0 => fmt!("ret some {}", self.string(&mut scope, true)),
                         1 => "ret none".S(),
@@ -474,14 +494,26 @@ enum Outcome {
     Failed(String),
 }
 
-fn check(text: &str) -> Outcome {
-    let dir = rmx::tempfile::tempdir().X();
-    let path = dir.path().join("fuzz.dfs");
-    std::fs::write(&path, text).X();
+/// How an accepted script is run again, each way holding its drops to a
+/// check of its own: the IR walker asserts that what a drop drops holds
+/// something, and compiled code frees what it frees, where the allocator's
+/// record sees a second free. The bytecode, the default, does neither: a
+/// callee destroys an argument where the caller has it and leaves it empty,
+/// so a second drop of it frees nothing there.
+const AGAIN: &[(&str, &[&str], &[(&str, &str)])] = &[
+    ("the IR walker", &[], &[("DATALOVE_INTERP", "ir")]),
+    ("the JIT", &["--jit", "--jit-threshold", "0"], &[]),
+];
+
+/// Run the binary on a script, with the leak check on: what it wrote to
+/// stderr, or `None` if it did not end in time.
+fn run(path: &std::path::Path, args: &[&str], env: &[(&str, &str)]) -> Option<(bool, String)> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_datalove"))
         .arg("script")
-        .arg(&path)
+        .args(args)
+        .arg(path)
         .env("DATALOVE_LEAK_CHECK", "panic")
+        .envs(env.iter().copied())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn().X();
@@ -493,14 +525,23 @@ fn check(text: &str) -> Outcome {
         if start.elapsed() > LIMIT {
             let _ = child.kill();
             let _ = child.wait();
-            return Outcome::Failed("did not end".S());
+            return None;
         }
         std::thread::sleep(Duration::from_millis(5));
     };
     let mut stderr = String::new();
     std::io::Read::read_to_string(&mut child.stderr.take().X(), &mut stderr).X();
     let ansi = rmx::regex::Regex::new("\x1b\\[[0-9;]*m").X();
-    let stderr = ansi.replace_all(&stderr, "").into_owned();
+    Some((status.success(), ansi.replace_all(&stderr, "").into_owned()))
+}
+
+fn check(text: &str) -> Outcome {
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("fuzz.dfs");
+    std::fs::write(&path, text).X();
+    let Some((success, stderr)) = run(&path, &[], &[]) else {
+        return Outcome::Failed("did not end".S());
+    };
     if stderr.contains("panicked at") || stderr.contains("LEAK") {
         return Outcome::Failed(stderr);
     }
@@ -508,10 +549,17 @@ fn check(text: &str) -> Outcome {
     if let Some(c) = code.captures(&stderr) {
         return Outcome::Refused(c[1].S(), stderr.C());
     }
-    match status.success() {
-        true => Outcome::Ran,
-        false => Outcome::Failed(stderr),
+    if !success {
+        return Outcome::Failed(stderr);
     }
+    for (engine, args, env) in AGAIN {
+        match run(&path, args, env) {
+            None => return Outcome::Failed(fmt!("on {engine}, did not end")),
+            Some((true, stderr)) if !stderr.contains("panicked at") && !stderr.contains("LEAK") => {}
+            Some((_, stderr)) => return Outcome::Failed(fmt!("on {engine}:\n{stderr}")),
+        }
+    }
+    Outcome::Ran
 }
 
 #[test]

@@ -500,6 +500,7 @@ impl IrInterpreter {
             }
             Instruction::Drop { operand } => {
                 // Precise drop: ownership analysis guarantees value exists.
+                frame.debug_assert_held(operand);
                 let val = self.read_operand(operand, frame, frames);
                 self.execute_drop(&val);
                 Self::mark_source_dropped_local(operand, frame);
