@@ -22,7 +22,7 @@ Then add I/O to it &mdash; carefully.
 
 > **Latest news**: [Iterating collections without first-class references](posts/) &middot; updated 2026-10-16.
 
-> **Roadmap**: [0 of 15 complete](roadmap.md) &middot; updated 2026-10-09.
+> **Roadmap**: [4 of 14 complete](roadmap.md) &middot; updated 2026-11-17.
 
 
 
