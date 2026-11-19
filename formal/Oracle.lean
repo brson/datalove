@@ -16,7 +16,7 @@ line, and writes one answer per line to stdout, in order:
 {"alias": S}     →  {"codes": [code, ...], "calls": [b, ...]} or {"unsupported": what}
 {"held": S}      →  {"codes": [code, ...], "held": [b, ...]} or {"unsupported": what}
 {"init": S}      →  {"codes": [code, ...], "init": code or null} or {"unsupported": what}
-{"consts": S}    →  {"codes": [code, ...], "consts": code or null} or {"unsupported": what}
+{"consts": S}    →  {"codes": [code, ...], "consts": code or null, "init": code or null} or {"unsupported": what}
 ```
 
 A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
@@ -34,7 +34,8 @@ whether it is O017 (`Fun.heldScript`). An `init` is the script checked,
 and what the analysis of what holds a value refuses first, O005, O006 or
 O009, if anything (`Fun.initScript`). A `consts` is the script checked, and
 F089 if one of its consts reads one not evaluated before it
-(`Fun.constScript`).
+(`Fun.constScript`), with what `init` would answer, since the two are held
+to the Rust's F089 alike only where the analysis lets the script through.
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -103,6 +104,9 @@ def answer (q : Json) : Except String Json := do
     return match Fun.scriptFromSerde script with
       | .ok ss => Json.mkObj [("codes", Json.arr ((Fun.checkScript ss).map Json.str)),
           ("consts", match Fun.constScript ss with
+            | .some c => Json.str c
+            | .none => Json.null),
+          ("init", match Fun.initScript ss with
             | .some c => Json.str c
             | .none => Json.null)]
       | .error e => Json.mkObj [("unsupported", e)]

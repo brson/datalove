@@ -2075,11 +2075,24 @@ fn const_expr(rng: &mut SeededRng, consts: &[String], funs: usize, depth: u32) -
     }
 }
 
+/// Code for `consts_script` that never runs, after a `ret` or a `break`,
+/// sometimes naming a const or calling a function: there the Rust's F089,
+/// which asks which consts a function names, and the model's, which asks
+/// which it reads, come apart.
+fn dead_read(rng: &mut SeededRng, consts: &[String], funs: usize, indent: &str) -> String {
+    if rng.random_bool(0.5) {
+        return String::new();
+    }
+    fmt!("{indent}debuglog {}\n", const_expr(rng, consts, funs, 0))
+}
+
 /// A script for `consts_agrees`: consts and functions declared in a random
 /// order, each const's value and each function's body reading the consts
 /// declared above it and calling any of the functions, one above or below,
 /// so that some const reaches, through calls, one declared at or after it.
-/// A function's body may shadow a const with a local of its name.
+/// A function's body may shadow a const with a local of its name, may name
+/// consts in code that never runs, and may read a local `v` that is not
+/// always written, which the analysis refuses (O005).
 fn consts_script(rng: &mut SeededRng) -> String {
     let funs = rng.random_range(1..=4);
     let const_count = rng.random_range(1..=4);
@@ -2099,10 +2112,24 @@ fn consts_script(rng: &mut SeededRng) -> String {
                     let shadow = consts[rng.random_range(0..consts.len())].C();
                     text.push_str(&fmt!("  let {shadow}: int = 1\n"));
                 }
-                if rng.random_bool(0.4) {
-                    text.push_str(&fmt!("  if n == 0\n    ret {}\n  end if\n", const_expr(rng, &seen, funs, 1)));
+                if rng.random_bool(0.3) {
+                    text.push_str("  var v: int\n");
+                    if rng.random_bool(0.6) {
+                        text.push_str(&fmt!("  set v = {}\n", const_expr(rng, &seen, funs, 1)));
+                    }
+                    seen.push("v".S());
                 }
-                text.push_str(&fmt!("  ret {}\nend fun\n", const_expr(rng, &seen, funs, 0)));
+                if rng.random_bool(0.4) {
+                    let dead = dead_read(rng, &seen, funs, "    ");
+                    text.push_str(&fmt!("  if n == 0\n    ret {}\n{dead}  end if\n", const_expr(rng, &seen, funs, 1)));
+                }
+                if rng.random_bool(0.2) {
+                    let dead = dead_read(rng, &seen, funs, "    ");
+                    text.push_str(&fmt!("  loop\n    break\n{dead}  end loop\n"));
+                }
+                text.push_str(&fmt!("  ret {}\n", const_expr(rng, &seen, funs, 0)));
+                text.push_str(&dead_read(rng, &seen, funs, "  "));
+                text.push_str("end fun\n");
             }
             None => {
                 let name = fmt!("c{}", consts.len());
@@ -2116,8 +2143,10 @@ fn consts_script(rng: &mut SeededRng) -> String {
 
 /// F089 as the model decides it (`formal/Datalove/FunConsts.lean`) held to
 /// the Rust's, on scripts whose consts call functions declared above and
-/// below them: the model refuses a script where, and only where, the Rust
-/// reports F089, and the two checkers agree on everything else.
+/// below them: where the analysis of what holds a value lets a script
+/// through, the model refuses it where, and only where, the Rust reports
+/// F089; where it does not, the model refuses wherever the Rust does. The two
+/// checkers agree on everything else.
 #[test]
 fn consts_agrees() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -2151,6 +2180,17 @@ fn consts_agrees() {
             continue;
         }
         let model_f089 = oracle["consts"].as_str() == Some("F089");
+        // Where the analysis refuses a function a const reaches for its own
+        // variables, the model refuses the const too, and the Rust, which
+        // asks only what the function names, may not.
+        if let Some(init) = oracle["init"].as_str() {
+            let agree = if model_f089 == rust_f089 { "agree" } else { "only the model's" };
+            *outcomes.entry(fmt!("{init}, F089 {agree}")).or_default() += 1;
+            if rust_f089 && !model_f089 {
+                mismatches.push(fmt!("{what}:\n{text}    rust F089 and the model's not, under {init}"));
+            }
+            continue;
+        }
         *outcomes.entry(if model_f089 { "F089" } else { "accepted" }.S()).or_default() += 1;
         if model_f089 != rust_f089 {
             mismatches.push(fmt!("{what}:\n{text}    rust F089: {rust_f089}, model F089: {model_f089}"));

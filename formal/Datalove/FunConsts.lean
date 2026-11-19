@@ -21,8 +21,11 @@ its value. A const that reads a later one, itself, or a variable that is not
 a const, directly or through a call, is refused.
 
 The Rust looks for the consts each function names; this asks the analysis
-whether one is read. They differ only where the analysis refuses a function
-for its own variables, which `initScript` refuses too.
+whether one is read. The analysis reads on through code after a `ret` or
+`break` as if it ran, so a const named there is read too. They differ only
+where the analysis refuses a function for its own variables, where this
+refuses the const and `initScript` the script; `consts_agrees` in
+`fun_tests` tests that.
 
 `Proofs/ConstSound.lean` shows that where this lets a script through, and
 the analysis does, evaluating its consts never reads what holds nothing.

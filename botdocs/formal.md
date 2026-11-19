@@ -728,13 +728,20 @@ Four things are proved of it:
   `Stop.uninit` (`constPass_init`). With the result above, a script that
   checks and that both let through never stops there. The Rust looks for
   the consts each reached function names; the model asks the analysis
-  whether one is read, and the two differ only where the analysis refuses a
-  function for its own variables, which `initScript` does too.
-  `consts_agrees` in `fun_tests` holds the Rust's F089 to the model's on
-  scripts of consts and functions in random order, calling one another and
-  reading the consts above them, some shadowed by a local; over three
-  thousand seeds, four hundred of them F089, none differ, and marking every
-  const as holding a value makes 151 of a thousand differ.
+  whether one is read. The analysis reads on through code after a `ret` or
+  `break` as if it ran, so a const named there is read, as the Rust has it
+  named; the two differ only where the analysis refuses a function for its
+  own variables, where the model refuses the const too and `initScript`
+  refuses the script. `consts_agrees` in `fun_tests` holds the Rust's F089
+  to the model's on scripts of consts and functions in random order,
+  calling one another and reading the consts above them, some shadowed by a
+  local, some named in code that never runs, and some functions reading a
+  local not always written. Where the analysis lets a script through the
+  two must agree, and where it does not the model may refuse where the Rust
+  does not, never the reverse. Over three thousand seeds, five hundred F089
+  and four hundred O005, none differ, seventy-seven are refused by the
+  model's F089 alone, all under O005, and marking every const as holding a
+  value makes 172 of a thousand differ.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
