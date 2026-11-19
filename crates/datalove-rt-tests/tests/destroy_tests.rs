@@ -8,6 +8,14 @@ use datalove_datalit::tydesc_table::TyDescTable;
 use datalove_rt::rust::Runtime;
 use datalove_rtdt;
 
+/// Assert that the `size` bytes at `ptr` are poison throughout, as a value
+/// destroyed with the leak check on is left.
+fn assert_poisoned(ptr: *const u8, size: usize) {
+    // SAFETY: the callers' buffers hold a value of `size` bytes.
+    let bytes = unsafe { std::slice::from_raw_parts(ptr, size) };
+    assert!(bytes.iter().all(|b| *b == datalove_rt::rust::POISON), "a destroyed value is poisoned");
+}
+
 #[salsa::tracked(returns(copy))]
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
@@ -57,10 +65,15 @@ fn test_destroy_int_small() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify int is cleared.
-    let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Int) };
-    assert!(int_val.data.is_null());
-    assert_eq!(int_val.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Int>());
+    } else {
+        let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Int) };
+        assert!(int_val.data.is_null());
+        assert_eq!(int_val.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -110,10 +123,15 @@ fn test_destroy_int_large() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify int is cleared.
-    let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Int) };
-    assert!(int_val.data.is_null());
-    assert_eq!(int_val.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Int>());
+    } else {
+        let int_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Int) };
+        assert!(int_val.data.is_null());
+        assert_eq!(int_val.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -162,11 +180,16 @@ fn test_destroy_list_empty() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify list is cleared.
-    let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
-    assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
-    assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::List>());
+    } else {
+        let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
+        assert!(list_val.data.is_null());
+        assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
+        assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -215,11 +238,16 @@ fn test_destroy_list_primitives() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify list is cleared.
-    let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
-    assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
-    assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::List>());
+    } else {
+        let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
+        assert!(list_val.data.is_null());
+        assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
+        assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -268,11 +296,16 @@ fn test_destroy_list_strings() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify list is cleared.
-    let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
-    assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
-    assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::List>());
+    } else {
+        let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
+        assert!(list_val.data.is_null());
+        assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
+        assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -321,11 +354,16 @@ fn test_destroy_list_nested() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify list is cleared.
-    let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
-    assert!(list_val.data.is_null());
-    assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
-    assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::List>());
+    } else {
+        let list_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::List) };
+        assert!(list_val.data.is_null());
+        assert_eq!(list_val.size, datalove_rtdt::Index::ZERO);
+        assert_eq!(list_val.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -375,10 +413,15 @@ fn test_destroy_set_empty() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify set is cleared.
-    let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
-    assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Set>());
+    } else {
+        let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
+        assert!(set_val.root.is_null());
+        assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -430,10 +473,15 @@ fn test_destroy_set_primitives() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify set is cleared.
-    let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
-    assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Set>());
+    } else {
+        let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
+        assert!(set_val.root.is_null());
+        assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -485,10 +533,15 @@ fn test_destroy_set_strings() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify set is cleared.
-    let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
-    assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Set>());
+    } else {
+        let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
+        assert!(set_val.root.is_null());
+        assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -540,10 +593,15 @@ fn test_destroy_set_tuples() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify set is cleared.
-    let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
-    assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Set>());
+    } else {
+        let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
+        assert!(set_val.root.is_null());
+        assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -596,10 +654,15 @@ fn test_destroy_set_large() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify set is cleared.
-    let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
-    assert!(set_val.root.is_null());
-    assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Set>());
+    } else {
+        let set_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
+        assert!(set_val.root.is_null());
+        assert_eq!(set_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -795,9 +858,15 @@ fn test_destroy_map_empty() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
-    assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Map>());
+    } else {
+        let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
+        assert!(map_val.root.is_null());
+        assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -844,9 +913,15 @@ fn test_destroy_map_primitives() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
-    assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Map>());
+    } else {
+        let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
+        assert!(map_val.root.is_null());
+        assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -893,9 +968,15 @@ fn test_destroy_map_strings() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
-    assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Map>());
+    } else {
+        let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
+        assert!(map_val.root.is_null());
+        assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -942,9 +1023,15 @@ fn test_destroy_map_tuples() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
-    assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Map>());
+    } else {
+        let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
+        assert!(map_val.root.is_null());
+        assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -991,9 +1078,15 @@ fn test_destroy_map_nested() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
-    assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Map>());
+    } else {
+        let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
+        assert!(map_val.root.is_null());
+        assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1049,9 +1142,15 @@ fn test_destroy_map_large() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
-    assert!(map_val.root.is_null());
-    assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Map>());
+    } else {
+        let map_val = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
+        assert!(map_val.root.is_null());
+        assert_eq!(map_val.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1273,11 +1372,16 @@ fn test_destroy_empty_table() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify table is cleared.
-    let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
-    assert!(table.data.is_null());
-    assert_eq!(table.len, datalove_rtdt::Index::ZERO);
-    assert_eq!(table.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Table>());
+    } else {
+        let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+        assert!(table.data.is_null());
+        assert_eq!(table.len, datalove_rtdt::Index::ZERO);
+        assert_eq!(table.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1331,11 +1435,16 @@ fn test_destroy_table_with_rows() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify table is cleared.
-    let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
-    assert!(table.data.is_null());
-    assert_eq!(table.len, datalove_rtdt::Index::ZERO);
-    assert_eq!(table.capacity, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Table>());
+    } else {
+        let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+        assert!(table.data.is_null());
+        assert_eq!(table.len, datalove_rtdt::Index::ZERO);
+        assert_eq!(table.capacity, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -1384,10 +1493,15 @@ fn test_destroy_table_with_strings() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    // Verify table is cleared.
-    let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
-    assert!(table.data.is_null());
-    assert_eq!(table.len, datalove_rtdt::Index::ZERO);
+    // What destroying left: poison where the leak check is on, and the
+    // value cleared otherwise.
+    if datalove_rt::rust::poisons_destroyed() {
+        assert_poisoned(cloned_buffer.as_ptr(), size_of::<datalove_rtdt::Table>());
+    } else {
+        let table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
+        assert!(table.data.is_null());
+        assert_eq!(table.len, datalove_rtdt::Index::ZERO);
+    }
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt2) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);

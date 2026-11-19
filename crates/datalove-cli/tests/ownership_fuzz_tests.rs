@@ -495,11 +495,11 @@ enum Outcome {
 }
 
 /// How an accepted script is run again, each way holding its drops to a
-/// check of its own: the IR walker asserts that what a drop drops holds
-/// something, and compiled code frees what it frees, where the allocator's
-/// record sees a second free. The bytecode, the default, does neither: a
-/// callee destroys an argument where the caller has it and leaves it empty,
-/// so a second drop of it frees nothing there.
+/// check of its own. Every engine refuses to destroy what the runtime
+/// destroyed already, which the leak check leaves poisoned; the IR walker
+/// also asserts that what a drop drops holds something, which sees a second
+/// drop of a value whose destruction went another way, and compiled code
+/// frees what it frees, where the allocator's record sees a second free.
 const AGAIN: &[(&str, &[&str], &[(&str, &str)])] = &[
     ("the IR walker", &[], &[("DATALOVE_INTERP", "ir")]),
     ("the JIT", &["--jit", "--jit-threshold", "0"], &[]),

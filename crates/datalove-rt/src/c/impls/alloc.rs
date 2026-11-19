@@ -76,7 +76,7 @@ pub enum LeakCheckMode {
 
 impl LeakCheckMode {
     /// Read leak check mode from environment variable.
-    fn from_env() -> Self {
+    pub(crate) fn from_env() -> Self {
         match std::env::var("DATALOVE_LEAK_CHECK").as_deref() {
             Ok("warn") => LeakCheckMode::Warn,
             Ok("panic") => LeakCheckMode::Panic,
@@ -159,6 +159,12 @@ mod unix_impl {
                 active_allocations: FxHashMap::default(),
                 leak_check_mode: mode,
             }
+        }
+
+        /// Whether a record of allocations is kept, against which `free`'s
+        /// arguments are checked: whether the leak check is on.
+        pub fn checks(&self) -> bool {
+            self.leak_check_mode != LeakCheckMode::Ignore
         }
 
         /// Allocate room for `count` values of `size` bytes aligned to
@@ -579,6 +585,12 @@ mod wasm_impl {
                 allocations: Vec::new(),
                 leak_check_mode: mode,
             }
+        }
+
+        /// Whether a record of allocations is kept, against which `free`'s
+        /// arguments are checked: whether the leak check is on.
+        pub fn checks(&self) -> bool {
+            self.leak_check_mode != LeakCheckMode::Ignore
         }
 
         pub unsafe fn alloc(&mut self, size: u32, align: u32, count: IndexRepr) -> *mut u8 {

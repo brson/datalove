@@ -2382,15 +2382,8 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted2, 0);
     assert_eq!(set.len, rtdt::Index(1));
-
-    let status = unsafe {
-        datalove_rt::c::dtlv_rti_string_destroy_local(
-            rt,
-            rtdt::AnyOwned::new(&mut element2 as *mut rtdt::String as *mut u8),
-            &*element_tydesc,
-        )
-    };
-    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    // The insert took `element2` and, the set holding it already, destroyed
+    // it: it is not this test's to destroy again.
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(

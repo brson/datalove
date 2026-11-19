@@ -4,7 +4,6 @@ use crate::c::impls::rt_local;
 use datalove_rtdt as rtdt;
 use crate::c::RtStatus;
 
-/// Destroys any type of value, freeing allocations recursively.
 /// Destroy `count` values of `ty` laid out one after another, which for values
 /// that own nothing is nothing.
 pub(crate) unsafe fn destroy_array(
@@ -22,7 +21,42 @@ pub(crate) unsafe fn destroy_array(
     }
 }
 
+/// Destroy any value, freeing what it owns recursively.
+///
+/// Where the leak check is on, a value that owns something is left poisoned,
+/// every byte [`POISON`], and one found poisoned is refused: it was destroyed
+/// already, or never written, since a debug build's frames start poisoned too.
+/// Without this a value destroyed is left empty, as one that never allocated
+/// is, and a second destroy of it frees nothing, so a drop the compiler
+/// lowered twice passes. No value that owns something is poison throughout:
+/// its pointer would be all ones.
+///
+/// [`POISON`]: crate::rust::POISON
 pub unsafe fn any_destroy_local(
+    rt: &mut rt_local::RtLocal,
+    value_in: *mut u8,
+    tydesc: &rtdt::TyDesc,
+) -> RtStatus {
+    // Plain by the type's structure, not its flag, which a producer may leave
+    // clear: poisoning a value that owns nothing would change what it reads as.
+    let checked = rt.alloc.checks() && tydesc.computed_flags() & rtdt::TyDesc::PLAIN == 0 && tydesc.size > 0;
+    let size = tydesc.size as usize;
+    if checked {
+        // SAFETY: the value is `size` bytes.
+        let bytes = unsafe { std::slice::from_raw_parts(value_in, size) };
+        assert!(!bytes.iter().all(|b| *b == crate::rust::POISON),
+            "destroying a value already destroyed, or never written: {:?} at {value_in:p}", tydesc.type_tag);
+    }
+    let status = unsafe { destroy_value(rt, value_in, tydesc) };
+    if checked {
+        // SAFETY: the value is `size` bytes, and destroyed.
+        unsafe { std::ptr::write_bytes(value_in, crate::rust::POISON, size) };
+    }
+    status
+}
+
+/// Destroy a value, leaving it empty: [`any_destroy_local`] without the check.
+unsafe fn destroy_value(
     rt: &mut rt_local::RtLocal,
     value_in: *mut u8,
     tydesc: &rtdt::TyDesc,
@@ -412,6 +446,22 @@ mod tests {
         }
     }
 
+    /// Assert what destroying left of a value: poison throughout where the
+    /// leak check is on, and otherwise a string emptied, as these tests'
+    /// values hold one last.
+    unsafe fn assert_destroyed<T>(rt_handle: LocalRtHandle, value: &T) {
+        let bytes = unsafe { std::slice::from_raw_parts(value as *const T as *const u8, size_of::<T>()) };
+        if unsafe { crate::c::impls::rt_local::from_handle(rt_handle) }.alloc.checks() {
+            assert!(bytes.iter().all(|b| *b == crate::rust::POISON), "a destroyed value is poisoned");
+        } else {
+            let tail = &bytes[size_of::<T>() - size_of::<rtdt::String>()..];
+            let string = unsafe { &*(tail.as_ptr() as *const rtdt::String) };
+            assert!(string.data().is_null());
+            assert_eq!(string.size(), rtdt::Index::ZERO);
+            assert_eq!(string.capacity(), rtdt::Index::ZERO);
+        }
+    }
+
     #[test]
     fn test_any_destroy_string() {
         let rt = rt_local::RtLocal::new();
@@ -441,9 +491,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert!(string.data().is_null());
-            assert_eq!(string.size(), rtdt::Index::ZERO);
-            assert_eq!(string.capacity(), rtdt::Index::ZERO);
+            assert_destroyed(rt_handle, &string);
 
             let rt = Box::from_raw(rt_handle as *mut rt_local::RtLocal);
             rt.shutdown();
@@ -527,9 +575,7 @@ mod tests {
             );
 
             assert_eq!(status, RtStatus::Ok);
-            assert!(tuple.field1.data().is_null());
-            assert_eq!(tuple.field1.size(), rtdt::Index::ZERO);
-            assert_eq!(tuple.field1.capacity(), rtdt::Index::ZERO);
+            assert_destroyed(rt_handle, &tuple);
 
             // Reconstruct and drop the fields Vec to avoid leaking.
             drop(Vec::from_raw_parts(fields_ptr as *mut rtdt::TyInfoTupleField, 2, 2));

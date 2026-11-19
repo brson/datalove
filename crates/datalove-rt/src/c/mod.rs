@@ -667,6 +667,12 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_from_limbs(
 }
 
 /// Destroys any type of value, freeing allocations recursively.
+/// Whether a runtime made now leaves what it destroys poisoned; see
+/// `crate::rust::poisons_destroyed`.
+pub(crate) fn poisons_destroyed() -> bool {
+    impls::alloc::LeakCheckMode::from_env() != impls::alloc::LeakCheckMode::Ignore
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_any_destroy_local(
     rt: LocalRtHandle,

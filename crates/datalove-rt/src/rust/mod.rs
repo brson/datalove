@@ -7,6 +7,13 @@ mod aligned_buffer;
 pub use aligned_buffer::{AlignedBuffer, DataScratch, POISON};
 
 use crate::c::{LocalRtHandle, RtStatus};
+
+/// Whether a runtime made now leaves what it destroys poisoned, every byte
+/// [`POISON`], rather than empty: whether `DATALOVE_LEAK_CHECK` turns the
+/// leak check on. See `any_destroy_local`.
+pub fn poisons_destroyed() -> bool {
+    crate::c::poisons_destroyed()
+}
 use datalove_rtdt as rtdt;
 
 /// Safe wrapper around a Datalove runtime instance.

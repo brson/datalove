@@ -469,10 +469,11 @@ impl Frame {
     /// Check, where liveness is kept, that what a precise drop drops holds
     /// something: that it was not moved or dropped already.
     ///
-    /// Nothing else would see a second drop here. A callee destroys an
-    /// argument where the caller has it, and the runtime's destructors leave
-    /// what they destroy empty, so a value dropped after a call took it frees
-    /// nothing in an interpreter, where compiled code frees it twice.
+    /// A callee destroys an argument where the caller has it, so a value
+    /// dropped after a call took it is destroyed twice in one place. With the
+    /// leak check on the runtime refuses that, having left the value poisoned
+    /// (`any_destroy_local`); this sees it whether or not the check is on, and
+    /// at the drop rather than inside the destructor.
     #[inline]
     pub fn debug_assert_held(&self, operand: &Operand) {
         let index = match operand {
