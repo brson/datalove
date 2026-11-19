@@ -142,23 +142,6 @@ Inside a tensor, gluing is what separates `[| 1 -2 |]`, two elements,
 from `[| 1 - 2 |]`, an error.
 
 
-### EBNF · Lexical
-
-```ebnf
-ws             = { whitespace | newline | comment } ;
-whitespace     = ? any Unicode whitespace character ? ;
-newline        = "\n" | ";" ;
-comment        = line_comment | block_comment ;
-line_comment   = "//", { ? any char except newline ? } ;
-block_comment  = "/*", { block_comment | ? any char ? }, "*/" ;
-
-ident          = ident_start, { ident_start | digit } ;
-ident_start    = "a" .. "z" | "A" .. "Z" | "_" ;
-digit          = "0" .. "9" ;
-hex_digit      = digit | "a" .. "f" | "A" .. "F" ;
-```
-
-
 
 
 ## Expressions
@@ -249,45 +232,6 @@ The comma closes the last item and means nothing more,
 so one is allowed and two are not.
 Tensors are the exception, as their commas carry shape;
 see [Tensor](#user-content-tensor).
-
-
-### EBNF · Expressions
-
-```ebnf
-datalit        = ws, full_expr, ws ;
-full_expr      = [ type_hint, ws ], expr ;
-type_hint      = ":", ws, type, ws, "/" ;
-type           = primitive_type
-               | tuple_type
-               | struct_type
-               | option_type
-               | result_type
-               | list_type
-               | map_type
-               | set_type
-               | table_type
-               | tensor_type
-               | atom_type
-               | term_type
-               | enum_type
-               | dynamic_type ;
-expr           = primitive_lit
-               | group_expr
-               | tuple_expr
-               | struct_expr
-               | option_expr
-               | result_expr
-               | list_expr
-               | map_expr
-               | set_expr
-               | table_expr
-               | tensor_expr
-               | atom_expr
-               | term_expr
-               | enum_expr
-               | dynamic_expr ;
-group_expr     = "(", ws, full_expr, ws, ")" ;
-```
 
 
 
@@ -404,37 +348,6 @@ Any other escape is an error,
 as is a `\u{..}` naming a surrogate or a value above `10FFFF`.
 
 
-### EBNF · Primitive types
-
-```ebnf
-primitive_type = "bool"
-               | "u8" | "u16" | "u32" | "u64"
-               | "i8" | "i16" | "i32" | "i64"
-               | "index" | "offset"
-               | "f32" | "f64"
-               | "int" | "string" ;
-
-primitive_lit  = bool_lit | numeric_lit | string_lit ;
-bool_lit       = "true" | "false" ;
-numeric_lit    = float_lit | hex_lit | int_lit ;
-int_lit        = [ "-" ], digit_run ;
-float_lit      = [ "-" ], digit_run,
-                 ( ".", digit_run, [ exponent ] | exponent ) ;
-exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
-hex_lit        = "0", ( "x" | "X" ), hex_run ;
-digit_run      = digit, [ { digit | "_" }, digit ] ;
-hex_run        = hex_digit, [ { hex_digit | "_" }, hex_digit ] ;
-
-string_lit     = '"', { string_char }, '"' ;
-string_char    = escape_seq | ? any char except '"' and '\' ? ;
-escape_seq     = "\", ( '"' | "\" | "n" | "r" | "t" | "0"
-                      | "u{", hex_digit, { hex_digit }, "}" ) ;
-                      (* 1 to 6 hex digits *)
-```
-
-A numeric literal contains no whitespace or comments.
-
-
 
 
 ## Collections
@@ -533,6 +446,9 @@ A data structure with named, typed columns.
 The first row names the columns;
 subsequent rows provide data.
 Rows are delimited by newlines or semicolons.
+A newline inside brackets nested in the table,
+or inside a block comment,
+does not end a row.
 
 ```datalove
 : {| x: int, y: int |} / {| x, y; 1, 2; 3, 4 |}
@@ -647,55 +563,6 @@ All elements have the same type,
 and are typed together as a list's are.
 An empty tensor needs a type hint for its element type;
 its rank is its shape's, hint or not.
-
-
-### EBNF · Collections
-
-```ebnf
-list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
-map_type       = "%{", ws, type, ws, "->", ws, type, [ ws, "," ], ws, "}" ;
-set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
-table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
-tensor_type    = "[|", ws, type, ws, ",", ws, rank, [ ws, "," ], ws, "|]" ;
-rank           = digit, { digit } ;  (* not zero *)
-
-list_expr      = "[", ws, [ expr_list ], ws, "]" ;
-map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
-set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
-table_expr     = "{|", tbl_ws,
-                 [ table_header,
-                   { ws, newline, tbl_ws, table_row } ],
-                 tbl_ws, "|}" ;
-tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
-tensor_header  = extent, { ws, extent }, ws, "|", ws ;
-extent         = digit_run ;
-
-expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
-entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
-entry          = full_expr, ws, "->", ws, full_expr ;
-
-table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ] ;
-table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
-tbl_ws         = { ws | newline } ;
-
-tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row } ;
-tensor_row     = full_expr, { ws, full_expr } ;
-comma_run      = ",", { ws, "," } ;
-```
-
-Within a table, outside any brackets nested in it,
-`ws` does not include newlines, which separate rows;
-a newline inside a block comment is not one.
-Some rules for these forms cannot be expressed in EBNF:
-
-- every table row has exactly as many values as the header has columns,
-  and the column names match the type hint's in order;
-- every group along a tensor axis has the same shape,
-  so `[| 1 2, 3 |]` is refused;
-- a tensor's rank is its longest comma run plus one,
-  and shorter runs nest inside longer ones;
-- a tensor header's extents multiply to the number of elements in a flat body,
-  or equal the shape of a structured one.
 
 
 
@@ -876,38 +743,6 @@ as a `u8` value is not an `int` value,
 and in Datalove each is converted with `@`.
 
 
-### EBNF · Aggregates
-
-```ebnf
-tuple_type     = "(", ws, [ type_list ], ws, ")" ;
-struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
-option_type    = "?", type ;
-result_type    = "!", type ;
-atom_type      = "atom", ws, ident ;
-term_type      = "term", ws, ident, ws, type ;
-enum_type      = "enum", ws, "{", ws, enum_variant_list, ws, "}" ;
-
-tuple_expr     = "(", ws, ")"
-               | "(", ws, full_expr, ws, ",", ws, ")"
-               | "(", ws, full_expr, ws, ",", ws, expr_list, ws, ")" ;
-struct_expr    = "{", ws, [ field_list ], ws, "}" ;
-option_expr    = "none" | "some", ws, full_expr ;
-result_expr    = ( "ok" | "er" ), ws, full_expr ;
-atom_expr      = atom_type ;
-term_expr      = "term", ws, ident, ws, full_expr ;
-enum_expr      = "enum", ws, "{", ws, ( atom_expr | term_expr ), [ ws, "," ], ws, "}" ;
-
-type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;
-type_field_list= type_field, { ws, ",", ws, type_field }, [ ws, "," ] ;
-type_field     = ident, ws, ":", ws, type ;
-field_list     = field, { ws, ",", ws, field }, [ ws, "," ] ;
-field          = ident, ws, "=", ws, full_expr ;
-enum_variant_list = enum_variant, { ws, ",", ws, enum_variant },
-                    [ ws, "," ] ;
-enum_variant   = atom_type | term_type ;
-```
-
-
 
 
 ## Dynamic types
@@ -932,14 +767,6 @@ and becomes a result's failure under `er`: `er error e`.
 
 A value is only a `data` or `error` when written as one:
 `: data / 5` is an error, and is written `data 5`.
-
-
-### EBNF · Dynamic types
-
-```ebnf
-dynamic_type   = "data" | "error" ;
-dynamic_expr   = ( "data" | "error" ), ws, full_expr ;
-```
 
 
 

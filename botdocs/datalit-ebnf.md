@@ -10,9 +10,8 @@ What a well-formed literal means, and which ones type-check, is in
 [Datalit Typing Rules](datalit-typing-rules.md). Datafun embeds most of this
 grammar, with differences listed in
 [Datafun Grammar](datafun-ebnf.md#user-content-differences-from-datalit). The
-user manual, `mandocs/datalit.md`, carries the same grammar in pieces beside
-its prose; where the two disagree, see
-[The manual's grammar](#user-content-the-manuals-grammar).
+user manual, `mandocs/datalit.md`, describes the syntax in prose; where it
+disagrees with the parser, see [The manual](#user-content-the-manual).
 
 ## Contents
 
@@ -21,7 +20,7 @@ its prose; where the two disagree, see
 - [Rules outside the grammar](#user-content-rules-outside-the-grammar)
 - [Diagnostics](#user-content-diagnostics)
 - [Divergences](#user-content-divergences)
-  - [The manual's grammar](#user-content-the-manuals-grammar)
+  - [The manual](#user-content-the-manual)
   - [The specification](#user-content-the-specification)
 
 ## Notation
@@ -261,24 +260,10 @@ Type errors (T-codes) are listed in
 
 ## Divergences
 
-### The manual's grammar
+### The manual
 
-`mandocs/datalit.md` is right, and this document was wrong, on grouping and
-one-tuples, optional table type columns, tensor ranks, table literal rows,
-comma runs with space inside them, Unicode whitespace, a line comment at end
-of file, and `\u{}` taking 1 to 6 digits. Those are corrected above. Where the
-manual still differs from the parser:
-
-- Its `enum_expr` takes only an atom or term, which is what type-checks; the
-  parser takes any `full_expr` and leaves the rest to the checker
-  (`: enum { atom A } / enum { 1 }` is T032).
-- It has no production for a type name; the parser takes one and the checker
-  refuses it (T059). Both should say so.
-- It requires an enum type to have a variant. `enum {}` parses and
-  type-checks.
-- It allows no space after `?` or `!` in a type; the parser does.
-- Its prose says spaces separate tensor elements (lines 100 and 576); they are
-  written one after another, as above.
+Its prose says spaces separate tensor elements (`mandocs/datalit.md`, Lexical
+structure and Tensor); they are written one after another, as above.
 
 ### The specification
 
