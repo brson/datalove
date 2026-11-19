@@ -914,12 +914,18 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     ///
     /// Only includes bindings that were created within the scopes being traversed,
     /// not bindings from outer scopes that happen to be live.
+    ///
+    /// What each holds is read from the innermost frame, which carries every
+    /// state as of here: the frame a binding was made in still has it as it
+    /// was when that frame was left for a nested one, so a value moved inside
+    /// an `if` within a loop would be dropped again by a `break` there.
     fn live_bindings_in_scopes(&self, stop_at: ScopeKind) -> Vec<BindingId> {
         let mut result = Vec::new();
+        let innermost = self.scope_stack.last().expect("a way out of a loop is inside its scope");
         for frame in self.scope_stack.iter().rev() {
             // Only include bindings defined in this frame.
             for &id in &frame.bindings {
-                if self.owned_here(id, frame.current_state.get(&id)) {
+                if self.owned_here(id, innermost.current_state.get(&id)) {
                     let info = &self.bindings[id.0 as usize];
                     // A copy owns nothing, and a borrowed binding -- a `ref`
                     // parameter, a `for`'s element -- is someone else's to drop.

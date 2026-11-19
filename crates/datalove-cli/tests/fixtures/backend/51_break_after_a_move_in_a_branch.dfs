@@ -1,0 +1,41 @@
+// A value moved inside an `if` within a loop is not dropped again by a
+// `break` there.
+//
+// A `break` dropped what each binding of the loop held as the scope it was
+// made in had it, not as it stood at the `break`. A value moved inside a
+// nested `if` still read as held there, and was dropped after the move: here
+// `b` was left pointing at freed memory.
+
+fun take(x: string)
+  debuglog x
+end fun
+
+fun keep(c: bool): string
+  var b: string = "b"
+  loop
+    let v = b@
+    if c
+      set b = v
+      break
+    else
+      break
+    end if
+  end loop
+  ret b
+end fun
+
+fun give(c: bool): string
+  var b: string = "b"
+  loop
+    let v = b@
+    if c
+      call take(v)
+      break
+    end if
+  end loop
+  ret b
+end fun
+
+debuglog keep(true)
+debuglog keep(false)
+debuglog give(true)

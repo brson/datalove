@@ -86,12 +86,20 @@ test-generative-reactive SEED='1000000' COUNT='1000':
 test-literal-equiv SEED='1000000' COUNT='100000':
     LITERAL_EQUIV_SEED={{SEED}} LITERAL_EQUIV_COUNT={{COUNT}} cargo test -p datalove-datafun --test literal_equiv_tests
 
+# Generated functions that move, clone, lend and change heap values across
+# nested branches, loops and ways out, through the binary, which must never
+# panic and must run what it accepts without a leak. `just test` runs 2000
+# seeds from 0; this runs 100000 from 1000000.
+test-ownership-fuzz SEED='1000000' COUNT='100000':
+    OWNERSHIP_FUZZ_SEED={{SEED}} OWNERSHIP_FUZZ_COUNT={{COUNT}} DATALOVE_LEAK_CHECK=panic cargo test -p datalove-cli --test ownership_fuzz_tests -- --nocapture
+
 # Every generative suite from seeds drawn from the OS, COUNT of each.
 test-generative-random COUNT='100':
     just test-literal-equiv random {{COUNT}}
     just test-worldgen-coverage random {{COUNT}}
     just test-worldgen-engines random {{COUNT}}
     just test-generative-reactive random {{COUNT}}
+    just test-ownership-fuzz random {{COUNT}}
 
 # Build the Lean model of the type system in formal/, which checks its
 # proofs, and the oracle the Rust is tested against. Any warning fails it, a
