@@ -20,7 +20,7 @@ use datalove_datafun_ir::{
     Operand, Terminator,
 };
 
-use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit};
+use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, remove_folded_inputs};
 
 /// Inline const values into an IrCodeUnit (script unit).
 ///
@@ -45,9 +45,11 @@ pub fn inline_script_consts(
     }
 
     // Inline consts in the main unit blocks.
+    let mut inputs = Vec::new();
     for block in &mut unit.blocks {
-        inline_block_consts(block, &value_to_const);
+        inputs.extend(inline_block_consts(block, &value_to_const));
     }
+    remove_folded_inputs(&mut unit, inputs, &value_to_const);
 
     // Remove dead code (instructions producing unused values).
     // This is needed because CTFE inlining may replace a Pack/struct-building
@@ -84,14 +86,16 @@ pub fn inline_function_consts(
     }
 
     // Inline consts in all blocks.
+    let mut inputs = Vec::new();
     for block in &mut func.blocks {
-        inline_block_consts(block, &value_to_const);
+        inputs.extend(inline_block_consts(block, &value_to_const));
     }
 
     // Eliminate dead blocks that are no longer reachable after branch simplification.
     // This is critical because simplified branches may leave unreachable blocks that
     // reference undefined values (like err_dest when is_ok is constant true).
     eliminate_dead_blocks_func(func);
+    remove_folded_inputs(func, inputs, &value_to_const);
 
     // Then the instructions left behind computing what the consts replaced, for the
     // same reason the script path does it. A const folded from a call keeps the
@@ -108,7 +112,10 @@ pub fn inline_function_consts(
 ///
 /// Also simplifies constant branches: if a Branch terminator has a condition that
 /// is defined as a constant bool, replaces it with an unconditional Goto.
-fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, Arc<ConstValue>>) {
+///
+/// Returns the values the replaced instructions read, for `remove_folded_inputs`.
+fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, Arc<ConstValue>>) -> Vec<ValueId> {
+    let mut inputs = Vec::new();
     // Track which ValueIds are known to be constant bools (from both the passed-in
     // const values and from newly inserted is_ok/is_some/overflow values).
     let mut const_bools: LookupMap<ValueId, bool> = LookupMap::default();
@@ -120,6 +127,11 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, 
         // Check if this instruction defines a const value.
         if let Some(dest) = instr.dest() {
             if let Some(const_value) = value_to_const.get(&dest) {
+                instr.for_each_operand(|op| {
+                    if let Operand::Value(id) | Operand::ValueRef(id) = op {
+                        inputs.push(*id);
+                    }
+                });
                 // Build replacement instructions.
                 let mut new_instrs = vec![Instruction::Const {
                     dest,
@@ -216,6 +228,8 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &LookupMap<ValueId, 
             }
         }
     }
+
+    inputs
 }
 
 /// Inline const values into a collection of module functions.
@@ -266,12 +280,14 @@ fn inline_module_function_consts(
     }
 
     // Inline consts in all blocks.
+    let mut inputs = Vec::new();
     for block in &mut func.blocks {
-        inline_block_consts(block, &value_to_const);
+        inputs.extend(inline_block_consts(block, &value_to_const));
     }
 
     // Eliminate dead blocks that are no longer reachable after branch simplification.
     eliminate_dead_blocks_func(func);
+    remove_folded_inputs(func, inputs, &value_to_const);
 
     // Then the instructions the inlined consts orphaned. See inline_function_consts.
     eliminate_dead_code_unit(func);

@@ -21,11 +21,7 @@ Analysis(
                     
                     fn get_value():
                     block0:
-                        v0 = const 100int
-                        v1 = const 200int
                         v2 = staticref 300int
-                        drop v0
-                        drop v1
                         v3 = clone *v2
                         return v3
                 """,

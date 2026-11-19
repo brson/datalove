@@ -36,6 +36,75 @@ pub fn eliminate_dead_code_unit(unit: &mut IrCodeUnit) {
     }
 }
 
+/// Remove what computed the consts inlining folded: each of `inputs`, a value
+/// a replaced instruction read, that nothing else reads, with the instruction
+/// defining it and its drops, and then the same of that instruction's inputs.
+///
+/// A const's initializer ran at compile time. Left to
+/// [`eliminate_dead_code_unit`], which keeps a call for its side effects, the
+/// calls under the one a const folded ran again at run time, printing what
+/// they print, and the value the innermost returned, which the folded call
+/// would have taken, was never dropped. A value another const holds stays: it
+/// is that const's.
+pub fn remove_folded_inputs<C>(unit: &mut IrCodeUnit, mut inputs: Vec<ValueId>, consts: &LookupMap<ValueId, C>) {
+    while let Some(value) = inputs.pop() {
+        if consts.contains_key(&value) || read_elsewhere(unit, value) {
+            continue;
+        }
+        let Some((b, i)) = unit.blocks.iter().enumerate().find_map(|(b, block)| {
+            block.instructions.iter().position(|instr| instr.dests().contains(&value)).map(|i| (b, i))
+        }) else {
+            // A block parameter, which an edge passes in.
+            continue;
+        };
+        let instr = &unit.blocks[b].instructions[i];
+        let dests = instr.dests();
+        if dests.iter().any(|d| *d != value && read_elsewhere(unit, *d)) {
+            continue;
+        }
+        instr.for_each_operand(|op| {
+            if let Operand::Value(id) | Operand::ValueRef(id) = op {
+                inputs.push(*id);
+            }
+        });
+        unit.blocks[b].instructions.remove(i);
+        for block in &mut unit.blocks {
+            block.instructions.retain(|instr| !drops_one_of(instr, &dests));
+        }
+    }
+}
+
+/// Whether anything but a drop of it reads `value`: an instruction, a
+/// terminator, or the script unit's exports, result or end-of-unit values.
+fn read_elsewhere(unit: &IrCodeUnit, value: ValueId) -> bool {
+    if let Some(script) = unit.script_context() {
+        let exported = script.exports.iter().any(|(_, b)| matches!(b, ExportBinding::Value(v) if *v == value));
+        if exported || script.unit_end_values.contains(&value) || script.result == Some(value) {
+            return true;
+        }
+    }
+    let names = |op: &Operand| matches!(op, Operand::Value(id) | Operand::ValueRef(id) if *id == value);
+    unit.blocks.iter().any(|block| {
+        let mut read = false;
+        block.terminator.for_each_operand(|op| read |= names(op));
+        for instr in &block.instructions {
+            if !drops_one_of(instr, &[value]) {
+                instr.for_each_operand(|op| read |= names(op));
+            }
+        }
+        read
+    })
+}
+
+/// Whether `instr` drops one of `values` and does nothing else.
+fn drops_one_of(instr: &Instruction, values: &[ValueId]) -> bool {
+    match instr {
+        Instruction::Drop { operand: Operand::Value(id) }
+        | Instruction::DropTracked { operand: Operand::Value(id) } => values.contains(id),
+        _ => false,
+    }
+}
+
 /// Eliminate dead (unreachable) blocks from an IrCodeUnit.
 ///
 /// After constant branch simplification, some blocks may become unreachable.

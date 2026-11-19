@@ -1,0 +1,22 @@
+// A const's initializer runs once, when the const is evaluated, and not
+// again when the script runs, however deeply its calls nest.
+//
+// Const inlining replaced the instruction defining a const's value and left
+// what fed it to dead code elimination, which keeps a call. The calls under
+// the outermost ran again at run time, printing, and the value the innermost
+// returned, which the folded call would have taken, leaked.
+
+fun f(n: string): string
+  debuglog "f"
+  ret n
+end fun
+
+const c: string = f(f(f("top")))
+
+fun g(): string
+  const d: string = f(f("body"))
+  ret d@
+end fun
+
+debuglog c
+debuglog g()

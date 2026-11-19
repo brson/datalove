@@ -14,11 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10int
-                        v1 = const 20int
                         v2 = const 30int
-                        drop v0
-                        drop v1
                         debuglog v2
                         unit_end_drop v2
                         unit_end

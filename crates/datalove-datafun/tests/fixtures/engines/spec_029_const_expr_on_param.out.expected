@@ -53,12 +53,8 @@ Analysis(
                     
                     fn uses_consts__ct4(p0):
                     block0:
-                        v0 = const 1int
-                        drop v0
                         v3 = staticref 30int
-                        v4 = const 2int
                         v5 = staticref 8int
-                        drop v4
                         v6 = call m0.u5(p0)
                         v7 = add v6, *v3
                         drop v6
@@ -104,12 +100,8 @@ Analysis(
                     
                     fn uses_consts__ct0(p0):
                     block0:
-                        v0 = const 1int
-                        drop v0
                         v3 = staticref 50int
-                        v4 = const 2int
                         v5 = staticref 12int
-                        drop v4
                         v6 = call u1(p0)
                         v7 = add v6, *v3
                         drop v6
