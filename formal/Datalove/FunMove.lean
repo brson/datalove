@@ -1,0 +1,467 @@
+import Datalove.FunInit
+
+/-!
+# What is moved (O001, O003, O007, O008, O014, O016)
+
+Reading a variable whose type is not copy, where the checker has the read
+take the value rather than borrow it (`Ctx.borrowed` false: a `let`'s or a
+`set`'s value, an `in` argument, a `ret`, a part of what an expression
+builds, a condition or `match` that binds), moves its value out, and the
+variable holds nothing until something is written to it again. The ownership
+analysis refuses a program that reads a moved variable (O001), moves a
+borrowed binding -- a `ref`, `mut` or `out` parameter, or a `for`'s element
+(O003) -- or a const (O016), or whose ways to one point disagree about
+whether a variable was moved: the branches of an `if` or `match` that
+complete (O008), a loop's ways out (O014), or a loop body's way back to its
+start, which may not have moved what it was given (O007). This is that
+analysis, as `datalove-datafun-ownership` makes it with its `BindingState`,
+beside what holds a value (`FunInit.lean`), which it takes in: a variable
+declared with no value holds nothing until written (O005), and an `out`
+parameter has to hold a value at every way out (O006), as there.
+
+The two differ at a join. Where branches disagree about whether a variable
+was given a value, it holds one after only if every branch gave it one; where
+they disagree about whether it was moved, the program is refused.
+
+Moves are decided as the checker decides a position borrows: the analysis
+follows each expression with the flag `Ctx.borrowed` would have there,
+entering an expression as `Ctx.enter` does, borrowing for an operand, `@`,
+`debuglog`, a compound `set`'s value, a `for`'s collection and a `ref`,
+`mut` or `out` argument (`Ctx.borrow`, `Ctx.forArg`), and the base of a
+field or index of a place (`Ctx.under`). A const argument is passed by
+reference and moves nothing. It threads the checker's context through a
+body as the run does (`execBlock`), for each variable's type and kind.
+
+After an `if` or `match`, what is moved is what one branch left: the first
+that completes, or, where none does, the first (`joinIf`, `joinMatch`), as
+the Rust does. A loop is left with what its ways out agree on: its
+condition or the end of its elements, taken to leave what the loop was
+entered with, and each `break`.
+-/
+
+namespace Datalove.Fun
+
+/-- A variable as the move analysis keeps it. -/
+structure MVar where
+  name : String
+  /-- Given a value on every way here: false for a `var` declared with none
+  and an `out` parameter, until something is written to it. -/
+  init : Bool
+  /-- Not moved: false once a move takes its value, and true again once
+  something is written to it. -/
+  live : Bool
+  /-- A `mut` or `out` parameter, which the caller reads back. -/
+  back : Bool
+  /-- A borrowed binding, which a move may not take (O003). -/
+  lent : Bool
+
+/-- The variables in scope, innermost first, as the run keeps them. -/
+abbrev MSt := List MVar
+
+/-- The innermost variable named `x`. -/
+def MSt.find (σ : MSt) (x : String) : Option MVar := σ.find? (·.name == x)
+
+/-- The innermost variable named `x` changed by `f`. -/
+def MSt.update (f : MVar → MVar) (x : String) : MSt → MSt
+  | [] => []
+  | v :: σ => if v.name == x then f v :: σ else v :: MSt.update f x σ
+
+/-- `x` written: it holds a value, moved or not before. -/
+def MSt.give (x : String) : MSt → MSt := MSt.update (fun v => { v with init := true, live := true }) x
+
+/-- `x` moved. -/
+def MSt.take (x : String) : MSt → MSt := MSt.update (fun v => { v with live := false }) x
+
+/-- Names bound in order, each innermost of those before it. -/
+def MSt.bind (σ : MSt) (xs : List String) (init lent : Bool) : MSt :=
+  xs.foldl (fun σ x => { name := x, init, live := true, back := false, lent } :: σ) σ
+
+/-- `τ`, of a scope inside `σ`'s, back to `σ`'s. -/
+def MSt.back (σ τ : MSt) : MSt := τ.drop (τ.length - σ.length)
+
+/-- Whether every `mut` and `out` parameter holds a value. -/
+def MSt.outsSet (σ : MSt) : Bool := σ.all fun v => (v.init && v.live) || !v.back
+
+/-- `σ`'s variables, each given a value as `τ`'s is. -/
+def MSt.initFrom (σ τ : MSt) : MSt := List.zipWith (fun v w => { v with init := w.init }) σ τ
+
+/-- `σ`'s variables, each given a value only where `τ`'s is too. -/
+def MSt.initMeet (σ τ : MSt) : MSt := List.zipWith (fun v w => { v with init := v.init && w.init }) σ τ
+
+/-- Whether `σ` and `τ` agree about what is moved. -/
+def MSt.sameMoves (σ τ : MSt) : Bool := (σ.zip τ).all fun (v, w) => v.live == w.live
+
+/-- What two ways to one point leave, where they have to agree about what
+is moved, or none if they do not. -/
+def MSt.join (σ τ : MSt) : Option MSt := if σ.sameMoves τ then some (σ.initMeet τ) else none
+
+/-- Whether `τ` has moved nothing `σ` held unmoved. -/
+def MSt.keepsLive (σ τ : MSt) : Bool :=
+  (σ.zip τ).all fun (v, w) => !v.live || w.live
+
+abbrev MoveM := Except Lit.Code
+
+/-- What the ways in `L` agree on, `code` where they disagree, or `σ` with
+none. -/
+def joinAll (code : Lit.Code) (σ : MSt) : List MSt → MoveM MSt
+  | [] => pure σ
+  | τ :: L => L.foldlM (fun acc w => match acc.join w with
+      | some j => pure j
+      | none => throw code) τ
+
+/-- A read of `x`, which has to hold a value: written (O005) and not moved
+(O001). -/
+def readM (σ : MSt) (x : String) : MoveM MSt :=
+  match σ.find x with
+  | some v => if !v.init then throw "O005" else if !v.live then throw "O001" else pure σ
+  | none => pure σ
+
+/-- A read of `x` that takes its value, where its type is not copy: not a
+const (O016), nor borrowed (O003). -/
+def moveM (Γ : Ctx) (σ : MSt) (x : String) : MoveM MSt := do
+  match Γ.lookup x with
+  | some (t, .const_) => if t.isCopy then readM σ x else throw "O016"
+  | some (t, _) =>
+    let σ ← readM σ x
+    if t.isCopy then pure σ
+    else match σ.find x with
+      | some v => if v.lent then throw "O003" else pure (σ.take x)
+      | none => pure σ
+  | none => readM σ x
+
+/-- A way out of the function, where every `out` parameter has to hold a
+value (O006). -/
+def exitM (σ : MSt) : MoveM MSt :=
+  if σ.outsSet then pure σ else throw "O006"
+
+/-- What a call's `mut` and `out` arguments' variables hold once it
+returns: each a value. -/
+def giveArgsM : MSt → List (Option Mode × Expr) → List Mode → MSt
+  | σ, (_, e) :: args, m :: ms =>
+    let σ := if m == .mut || m == .out then
+        match placeOf e with
+        | some (x, []) => σ.give x
+        | _ => σ
+      else σ
+    giveArgsM σ args ms
+  | σ, _, _ => σ
+
+mutual
+
+/-- An expression, as `evalS` runs it, from a position borrowing or not as
+`b` says: what holds a value after it, or the first thing refused. -/
+def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) : MSt → Expr → MoveM MSt
+  | σ, .var x => if b then readM σ x else moveM Γ σ x
+  | σ, .place x steps => readM σ x >>= fun σ => mSteps sigs Γ σ steps
+  | σ, .hinted _ a => mE sigs Γ (b && !buildsFromParts a) σ a
+  | σ, .adapt a => mE sigs Γ true σ a
+  | σ, .some_ a | σ, .ok a | σ, .er a | σ, .data a | σ, .error a | σ, .term _ a =>
+    mE sigs Γ false σ a
+  | σ, .enum a => mE sigs Γ b σ a
+  | σ, .binop op a c => do
+    let σ ← mE sigs Γ true σ a
+    let σ ← mE sigs Γ true σ c
+    if op.exits then exitM σ else pure σ
+  | σ, .unop op a => do
+    let σ ← mE sigs Γ true σ a
+    match op with
+    | .negC | .negO => exitM σ
+    | _ => pure σ
+  | σ, .tryOpt a => mE sigs Γ b σ a >>= exitM
+  | σ, .tryRes a => mE sigs Γ b σ a >>= exitM
+  | σ, .proj base _ => mE sigs Γ (b || (placeOf base).isSome) σ base
+  | σ, .index base k (some _) => do
+    let σ ← mE sigs Γ (b || (placeOf base).isSome) σ base
+    let σ ← mE sigs Γ b σ k
+    exitM σ
+  | σ, .index _ _ none => pure σ
+  | σ, .call f args => match sigs.lookup f with
+    | some sig => do
+      let ms := sig.params.map (·.1)
+      let σ ← mArgs sigs Γ σ args ms
+      let σ ← if argsExit args ms then exitM σ else pure σ
+      pure (giveArgsM σ args ms)
+    | none => throw "F089"
+  | σ, .tuple es | σ, .list es | σ, .set es | σ, .tensor _ es => mAll sigs Γ σ es
+  | σ, .struct fs => mFields sigs Γ σ fs
+  | σ, .map es => mEntries sigs Γ σ es
+  | σ, .table _ rows => mRows sigs Γ σ rows
+  | σ, .none_ | σ, .tt | σ, .ff | σ, .str _ | σ, .int _ | σ, .float | σ, .hex _ | σ, .atom _ => pure σ
+
+/-- A place's steps, each key in order, an index with `?` or `!` a way out. -/
+def mSteps (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Step → MoveM MSt
+  | σ, [] => pure σ
+  | σ, .field _ :: rest => mSteps sigs Γ σ rest
+  | σ, .index k m :: rest => do
+    let σ ← mE sigs Γ true σ k
+    let σ ← match m with
+      | some _ => exitM σ
+      | none => pure σ
+    mSteps sigs Γ σ rest
+
+/-- A `mut` or `out` argument's place: its variable holds a value where a
+part of it is reached, or where `need` asks, for a `mut` one, and is not
+moved, for an `out` one too, as the Rust checks of a bare name. -/
+def mPlace (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Expr → Bool → MoveM MSt
+  | σ, .var x, need =>
+    if need then readM σ x
+    else match σ.find x with
+      | some v => if !v.live then throw "O001" else pure σ
+      | none => pure σ
+  | σ, .place x steps, _ => readM σ x >>= fun σ => mSteps sigs Γ σ steps
+  | σ, .hinted _ a, need => mPlace sigs Γ σ a need
+  | σ, .proj base _, _ => mPlace sigs Γ σ base true
+  | σ, .index base k (some _), _ => do
+    let σ ← mPlace sigs Γ σ base true
+    let σ ← mE sigs Γ true σ k
+    exitM σ
+  | σ, _, _ => pure σ
+
+/-- A call's arguments, in order, each as its parameter takes it. -/
+def mArgs (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Option Mode × Expr) → List Mode → MoveM MSt
+  | σ, (_, e) :: args, m :: ms => do
+    let σ ← match placeOf e with
+      | some _ =>
+        if m == .mut || m == .out then mPlace sigs Γ σ e (m == .mut)
+        else mE sigs Γ (m != .in_) σ e
+      | none => if m == .out then pure σ else mE sigs Γ (m != .in_) σ e
+    mArgs sigs Γ σ args ms
+  | σ, _, _ => pure σ
+
+def mAll (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Expr → MoveM MSt
+  | σ, [] => pure σ
+  | σ, e :: es => mE sigs Γ false σ e >>= fun σ => mAll sigs Γ σ es
+
+def mFields (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (String × Expr) → MoveM MSt
+  | σ, [] => pure σ
+  | σ, (_, e) :: fs => mE sigs Γ false σ e >>= fun σ => mFields sigs Γ σ fs
+
+def mEntries (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Expr × Expr) → MoveM MSt
+  | σ, [] => pure σ
+  | σ, (k, v) :: es => do
+    let σ ← mE sigs Γ false σ k
+    let σ ← mE sigs Γ false σ v
+    mEntries sigs Γ σ es
+
+def mRows (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (List Expr) → MoveM MSt
+  | σ, [] => pure σ
+  | σ, r :: rs => mAll sigs Γ σ r >>= fun σ => mRows sigs Γ σ rs
+
+end
+
+/-- A `set`'s keys, in order. -/
+def mKeys (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Step → MoveM MSt
+  | σ, [] => pure σ
+  | σ, .field _ :: rest => mKeys sigs Γ σ rest
+  | σ, .index k _ :: rest => mE sigs Γ true σ k >>= fun σ => mKeys sigs Γ σ rest
+
+/-- What a `set` asks of the variable it writes: a compound one reads it,
+and one through steps writes a part of it, which has to have been given a
+value (O009) and not moved (O001). -/
+def mTarget (σ : MSt) (x : String) (steps : List Step) : Option BinOp → MoveM MSt
+  | some _ => readM σ x
+  | none =>
+    if steps.isEmpty then pure σ
+    else match σ.find x with
+      | some v => if !v.init then throw "O009" else if !v.live then throw "O001" else pure σ
+      | none => pure σ
+
+/-- `set x … = e` or `set x … ⊕= e`: the value, then the keys, then the
+place. -/
+def mSet (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (x : String) (steps : List Step)
+    (op : Option BinOp) (e : Expr) : MoveM MSt :=
+  mE sigs Γ op.isSome σ e >>= fun σ =>
+  mKeys sigs Γ σ steps >>= fun σ =>
+  mTarget σ x steps op >>= fun σ =>
+  (if stepsExit steps || op.any BinOp.exits then exitM σ else pure σ) >>= fun σ =>
+  pure (if steps.isEmpty then σ.give x else σ)
+
+/-- The context the then branch of `if c |x| … else |y| …` runs in, or
+the else branch's if `err`, as `checkStmtF` checks them. -/
+def condCtx (Γ : Ctx) (c : Expr) (x : Option String) (err : Bool) : Ctx :=
+  match (synthF inferEnv fuel Γ c).run.val with
+  | .ok ct => match ct.expose with
+    | .option p => if err then Γ else bindOpt Γ x p
+    | .result p => if err then bindOpt Γ x .error else bindOpt Γ x p
+    | _ => Γ
+  | .error _ => Γ
+
+/-- The variants of what a `match` takes apart, as its cases see them. -/
+def matchVariants (Γ : Ctx) (e : Expr) : List (String × Option Ty) :=
+  match (synthF inferEnv fuel Γ e).run.val with
+  | .ok t => match t.expose with
+    | .enum vs => vs.toList
+    | _ => []
+  | .error _ => []
+
+/-- The context a `match`'s case `term a x` runs in. -/
+def termCtx (Γ : Ctx) (vs : List (String × Option Ty)) (a x : String) : Ctx :=
+  match vs.lookup a with
+  | some (some p) => Γ.bind x p .let_
+  | _ => Γ
+
+/-- What a statement, a block or a `match`'s cases leave: what holds a value
+where it completes, at each of its `break`s, and at each `continue`. -/
+abbrev MOut := MSt × List MSt × List MSt
+
+/-- What an `if` leaves, from what its branches leave, back in the scope
+before it, and whether each completes, as the Rust's `analyze_if` has it:
+where both complete they have to agree about what is moved (O008), and what
+is moved after is what the then branch left, unless it alone leaves; a
+variable is given a value after only if both branches gave it one. -/
+def joinIf (t : MSt) (tc : Bool) (e : MSt) (ec : Bool) : MoveM MSt := do
+  if tc && ec && !t.sameMoves e then throw "O008"
+  pure ((if !tc && ec then e else t).initFrom (t.initMeet e))
+
+/-- What a `match` leaves, from what each arm leaves, back in the scope
+before it, and whether it completes, in order, as the Rust's
+`analyze_match` has it: the arms that complete have to agree about what is
+moved (O008), what is moved after is what the first of them left, and a
+variable is given a value only if every one of them gave it one. With none
+completing, what is moved is the first arm's and what is given a value the
+last's, and with no arms, what it was entered with. -/
+def joinMatch (σ : MSt) (arms : List (MSt × Bool)) : MoveM MSt := do
+  let merging := (arms.filter (·.2)).map (·.1)
+  match merging with
+  | m :: ms =>
+    if !ms.all m.sameMoves then throw "O008"
+    pure (ms.foldl MSt.initMeet m)
+  | [] => match arms.head?, arms.getLast? with
+    | some (f, _), some (l, _) => pure (f.initFrom l)
+    | _, _ => pure σ
+
+/-- A loop's ends, `σ` what it was entered with and `σc` what its condition
+left: each way back to its start, which reads the condition again, keeps
+unmoved what was unmoved before the condition (O007), and its ways out
+agree (O014), running out of the condition or of the elements leaving what
+the condition left the first time. -/
+def loopEnd (σ σc : MSt) (natural : Bool) (body : List Stmt) (r : MOut) : MoveM MSt := do
+  let again := (if completes body then [σc.back r.1] else []) ++ r.2.2.map σc.back
+  if !again.all σ.keepsLive then throw "O007"
+  joinAll "O014" σc ((if natural then [σc] else []) ++ r.2.1.map σc.back)
+
+mutual
+
+/-- A statement, as `execStmt` runs it, in the checker's context `Γ`. -/
+def mStmt (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Stmt → MoveM MOut
+  | σ, .let_ p _ e => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
+  | σ, .var_ p _ (some e) => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
+  | σ, .var_ p (some _) none => pure (σ.bind (patNames p) false false, [], [])
+  | σ, .var_ _ none none => pure (σ, [], [])
+  | σ, .set_ x steps op e => do pure (← mSet sigs Γ σ x steps op e, [], [])
+  | σ, .fun_ _ => pure (σ, [], [])
+  | σ, .ret e => do
+    let σ ← exitM σ
+    match e with
+    | some e => pure (← mE sigs Γ false σ e, [], [])
+    | none => pure (σ, [], [])
+  | σ, .if_ c tB eB t e =>
+    mE sigs Γ false σ c >>= fun σc =>
+    mBlock sigs (condCtx Γ c tB false) (σc.bind tB.toList true false) t >>= fun rt =>
+    mElse sigs (condCtx Γ c eB true) (σc.bind eB.toList true false) e >>= fun re =>
+    joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes) >>= fun σ' =>
+    pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
+  | σ, .loop c body =>
+    (match c with
+      | some c => mE sigs Γ false σ c
+      | none => pure σ) >>= fun σc =>
+    mBlock sigs { Γ with inLoop := true } σc body >>= fun r =>
+    loopEnd σ σc c.isSome body r >>= fun σ' =>
+    pure (σ', [], [])
+  | σ, .brk => pure (σ, [σ], [])
+  | σ, .cont => pure (σ, [], [σ])
+  | σ, .debuglog e => do pure (← mE sigs Γ true σ e, [], [])
+  | σ, .call e => do pure (← mE sigs Γ false σ e, [], [])
+  | σ, .const_ x _ e => do
+    let σ ← mE sigs { Γ with constExpr := true } false σ e
+    pure (σ.bind [x] true false, [], [])
+  | σ, .type_ _ _ => pure (σ, [], [])
+  | σ, .match_ e cases dflt =>
+    mE sigs Γ false σ e >>= fun σc =>
+    mCases sigs Γ (matchVariants Γ e) σc cases >>= fun r =>
+    mDflt sigs Γ σc dflt >>= fun d =>
+    joinMatch σc (r.1 ++ d.1) >>= fun σ' =>
+    pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
+  | σ, .for_ names coll body =>
+    mE sigs Γ true σ coll >>= fun σc =>
+    let Γb := match (forBindings inferEnv fuel Γ names coll).run #[] with
+      | (some Δ, _) => { Γ with inLoop := true }.bindAll Δ
+      | (none, _) => { Γ with inLoop := true }
+    mBlock sigs Γb (σc.bind names true true) body >>= fun r =>
+    loopEnd σc σc true body r >>= fun σ' =>
+    pure (σ', [], [])
+
+/-- An `else`, in its own scope, or nothing. -/
+def mElse (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Option (List Stmt) → MoveM MOut
+  | σ, some e => mBlock sigs Γ σ e
+  | σ, none => pure (σ, [], [])
+
+/-- A `match`'s default: what it leaves back in `σ`'s scope and whether it
+completes, and its `break`s and `continue`s. -/
+def mDflt (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Option (List Stmt) →
+    MoveM (List (MSt × Bool) × List MSt × List MSt)
+  | σ, some d => mBlock sigs Γ σ d >>= fun r => pure ([(σ.back r.1, completes d)], r.2.1, r.2.2)
+  | _, none => pure ([], [], [])
+
+/-- A `match`'s cases, each from `σ`. -/
+def mCases (sigs : List (String × Sig)) (Γ : Ctx) (vs : List (String × Option Ty)) : MSt → List Case →
+    MoveM (List (MSt × Bool) × List MSt × List MSt)
+  | _, [] => pure ([], [], [])
+  | σ, .atom _ b :: cs =>
+    mBlock sigs Γ σ b >>= fun rb =>
+    mCases sigs Γ vs σ cs >>= fun r =>
+    pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
+  | σ, .term a x b :: cs =>
+    mBlock sigs (termCtx Γ vs a x) (σ.bind [x] true false) b >>= fun rb =>
+    mCases sigs Γ vs σ cs >>= fun r =>
+    pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
+
+/-- A block's statements in order, each in the context the one before it
+leaves, as `execBlock` runs them. -/
+def mBlock (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Stmt → MoveM MOut
+  | σ, [] => pure (σ, [], [])
+  | σ, s :: ss =>
+    mStmt sigs Γ σ s >>= fun r1 =>
+    mBlock sigs ((checkStmt Γ s).run #[]).1 r1.1 ss >>= fun r2 =>
+    pure (r2.1, r1.2.1 ++ r2.2.1, r1.2.2 ++ r2.2.2)
+
+end
+
+/-- A function's body: its parameters, the last innermost, each given a
+value but an `out` one, a `ref`, `mut` or `out` one borrowed, then the
+consts it sees; its end a way out where it can complete. In the context
+`checkFun` checks it in. -/
+def mFun (sigs : List (String × Sig)) (aliases : Aliases) (consts : List (String × Ty × Kind))
+    (cmarks : List (String × Bool)) : FunDecl → MoveM Unit
+  | .mk name tps params _ body =>
+    match sigs.lookup name with
+    | none => pure ()
+    | some sig => do
+      let vars := (params.zip sig.params).reverse.map fun ((m, x, _), (_, t)) => (x, t, kindOf m)
+      let Γ : Ctx := { vars := vars ++ consts, ret := sig.ret, sigs, aliases := tparamAliases tps aliases,
+                       bounds := boundsOf tps }
+      let σ0 : MSt := params.reverse.map (fun (m, x, _) =>
+          { name := x, init := m != .out, live := true, back := m == .out || m == .mut,
+            lent := m == .ref || m == .mut || m == .out }) ++
+        cmarks.map fun (x, s) => { name := x, init := s, live := true, back := false, lent := false }
+      let (σ, _, _) ← mBlock sigs Γ σ0 body
+      if completes body then discard (exitM σ)
+
+/-- A script's statements, each function's body in the context the checker
+reaches its declaration in, and every other statement on the top level's
+variables. -/
+def mTop (sigs : List (String × Sig)) : Ctx → MSt → List Stmt → MoveM Unit
+  | _, _, [] => pure ()
+  | Γ, σ, .fun_ f :: ss =>
+    mFun sigs Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f >>= fun _ => mTop sigs Γ σ ss
+  | Γ, σ, s :: ss =>
+    mStmt sigs Γ σ s >>= fun r => mTop sigs ((checkStmt Γ s).run #[]).1 r.1 ss
+
+/-- What a script's move analysis refuses first, if anything. -/
+def moveScript (ss : List Stmt) : Option Lit.Code :=
+  let sigs := (resolveNames ss).1
+  match mTop sigs { ret := .ty (.result unitTy), sigs } [] ss with
+  | .ok _ => none
+  | .error c => some c
+
+end Datalove.Fun

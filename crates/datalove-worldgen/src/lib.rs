@@ -17,7 +17,9 @@ mod gen_script;
 mod pretty;
 mod std_lib;
 mod worldfile;
+mod moves;
 
 pub use config::WorldGenConfig;
+pub use moves::moves_script;
 pub use datalove_datalit::Database;
 pub use worldfile::{GenSession, GenUnit, gen_session_seeded, gen_worldfile_seeded};

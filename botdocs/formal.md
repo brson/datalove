@@ -766,6 +766,35 @@ Four things are proved of it:
   F089 and six hundred O005, none differ; checking with only a module's own
   signatures makes 164 of a thousand worlds differ, and marking every const
   as holding a value 219.
+- **What is moved is modelled, and held to the Rust, but not yet proved**
+  (`FunMove.lean`, of O001, O003, O007, O008, O014 and O016, with O005,
+  O006 and O009 as `FunInit.lean` has them). A read of a variable whose
+  type is not copy, where the checker has the read take the value rather
+  than borrow it (`Ctx.borrowed`), moves it: a `let`'s or `set`'s value, an
+  `in` argument, a `ret`, a part of what an expression builds, a condition
+  that binds. The analysis follows each expression with the flag the
+  checker would have there, and threads the checker's context through a
+  body as the run does, for each variable's type and kind. Reading a moved
+  variable is O001, moving a `ref`, `mut` or `out` parameter or a `for`'s
+  element O003, and a const O016. Where branches meet, whether a variable
+  was moved has to agree, where whether it was given a value need not: an
+  `if`'s or `match`'s branches that complete (O008), what is moved after
+  being what the first of them left, or the first branch where none
+  completes, as the Rust's `analyze_if` and `analyze_match` take it; a
+  loop's ways out (O014), running out leaving what the condition left; and
+  each way back to a loop's start, which may not have moved what was
+  unmoved before the condition (O007). `moves_agree` in `fun_tests` holds
+  the Rust's ownership codes to the model's, the first code reported as
+  well as whether there is one, on `datalove_worldgen::moves_script`'s
+  functions, which `ownership_fuzz_tests` runs too, with three operands in
+  ten naming whatever they like, and on a corpus of hand-written bodies in
+  the shapes the generator makes rarely: loop exits, a condition that
+  moves, branches that both return, consts and borrowed bindings. Over
+  twenty-five thousand seeds, four thousand O001, two thousand O008, a
+  thousand O007, five hundred O003 and fifty O014, none differ. Taking no
+  value on a move makes 412 of a thousand differ, the then branch's state
+  after every `if` 12, and checking O007 against what the condition left
+  rather than what was before it the corpus's loop whose condition moves.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -953,6 +982,17 @@ it, as it did not find the atom and term case.
 ## What is not covered
 
 In rough order of what to do next:
+
+- **That a script the move analysis lets through never reads what was
+  moved.** The run does not move yet: a variable read where the checker
+  takes its value keeps it. Making it hold nothing after (`Stop.uninit` on
+  a later read, as for one never set) changes `evalS`, and the typing
+  proofs need a case for it. The init proof then has to give up `Keeps`, a
+  step only ever giving a variable a value, which a move breaks; in its
+  place the analysis's state at each point, and for a loop the O007 check,
+  which says that each way back to its start leaves unmoved what was
+  unmoved, as `Keeps` said of every step. `FunMove.lean`'s analysis then
+  replaces `FunInit.lean`'s.
 
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Order independence.** The doc claims that where unification's

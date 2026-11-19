@@ -2147,6 +2147,133 @@ fn init_agrees() {
     assert!(mismatches.is_empty(), "the Rust and the model decide what holds a value differently on {} functions", mismatches.len());
 }
 
+/// What `MOVES_CORPUS`' bodies call.
+const MOVES_PRELUDE: &str = "fun take(x: string)\nend fun\n\
+fun look(ref x: string): int\n  ret 1\nend fun\n\
+fun maybe(c: bool): ?string\n  ret none\nend fun\n\
+fun pass(x: string): bool\n  ret true\nend fun\n\
+const ka: string = \"ka\"\n";
+
+/// Bodies written by hand for `moves_agree`, of `go(c, s, ref r, mut u, l)`
+/// with `var x: string`, in the shapes the generator makes rarely or not at
+/// all: each was asked of the Rust while the move analysis was written.
+const MOVES_CORPUS: &[&str] = &[
+    // Moves and reads.
+    "  let y = x\n  debuglog x\n",
+    "  call take(x)\n  call take(x)\n",
+    "  let y = some x\n  debuglog x\n",
+    "  let y = : string / x\n  debuglog x\n",
+    "  let b = x == \"a\"\n  debuglog x\n  let n = look(ref x)\n  let y = x@\n",
+    "  call take(x)\n  set x = \"y\"\n  debuglog x\n",
+    "  let o = maybe(c)\n  if o |v|\n    debuglog v\n  end if\n  debuglog o\n",
+    // A borrowed binding and a const.
+    "  call take(s)\n  call take(r)\n",
+    "  call take(u)\n",
+    "  for w in ref l\n    call take(w)\n  end for\n",
+    "  call take(ka)\n",
+    "  const kb: string = ka\n  debuglog kb\n",
+    // Branches.
+    "  if c\n    call take(x)\n  end if\n",
+    "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
+    "  call take(x)\n  if c\n    set x = \"a\"\n  end if\n",
+    "  var v: string\n  if c\n    set v = \"a\"\n  end if\n",
+    "  if c\n    ret x\n  end if\n  debuglog x\n",
+    "  if c\n    ret \"a\"\n  else\n    call take(x)\n    ret \"b\"\n  end if\n  debuglog x\n",
+    "  if c\n    call take(x)\n    ret \"a\"\n  else\n    ret \"b\"\n  end if\n  debuglog x\n",
+    "  if c\n    ret \"a\"\n  else\n    ret x\n  end if\n  debuglog x\n",
+    // Loops.
+    "  loop\n    call take(x)\n    break\n  end loop\n",
+    "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    call take(x)\n  end loop\n",
+    "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    call take(x)\n    set x = \"again\"\n  end loop\n",
+    "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    call take(x)\n    continue\n  end loop\n",
+    "  call take(x)\n  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    set x = \"y\"\n  end loop\n",
+    "  call take(x)\n  for w in ref l\n    set x = \"y\"\n  end for\n  debuglog x\n",
+    "  for w in ref l\n    if c\n      call take(x)\n      break\n    end if\n  end for\n",
+    "  for w in ref l\n    call take(x)\n    break\n  end for\n",
+    "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      call take(x)\n      break\n    end if\n  end loop\n  debuglog x\n",
+    "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      call take(x)\n      break\n    end if\n  end loop\n",
+    "  loop\n    if c\n      call take(x)\n      break\n    end if\n    break\n  end loop\n",
+    "  var v: string\n  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    set v = \"a\"\n  end loop\n  debuglog v\n",
+    // A condition that moves, read again before every pass.
+    "  var i: int = 0\n  loop while pass(x)\n    set i = i + 1\n    if i == 3\n      break\n    end if\n  end loop\n",
+    "  var i: int = 0\n  loop while pass(x)\n    set i = i + 1\n    set x = \"y\"\n    if i == 3\n      break\n    end if\n  end loop\n",
+];
+
+/// The ownership codes the formal model's move analysis decides
+/// (`formal/Datalove/FunMove.lean`), with what holds a value.
+const MOVE_CODES: [&str; 9] = ["O001", "O003", "O005", "O006", "O007", "O008", "O009", "O014", "O016"];
+
+/// The move analysis (`formal/Datalove/FunMove.lean`) held to the Rust's
+/// ownership pass, on `datalove_worldgen::moves_script`'s functions with
+/// three operands in ten naming whatever they like: the model refuses a
+/// script where, and only where, the Rust does, and with the code the Rust
+/// reports first. A script the checkers refuse, or the Rust refuses first
+/// with a code the model does not decide, is counted and skipped.
+///
+/// `FORMAL_MOVES_TEXT` checks one script, from a file, rather than any seed,
+/// and `FORMAL_MOVES_WRITE` writes each script that differs to a directory.
+#[test]
+fn moves_agree() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the moves tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let texts: Vec<(String, String)> = match std::env::var("FORMAL_MOVES_TEXT") {
+        Ok(path) => vec![(path.C(), std::fs::read_to_string(&path).X())],
+        Err(_) => MOVES_CORPUS.iter().enumerate()
+            .map(|(i, body)| (fmt!("corpus {i}"), fmt!("{MOVES_PRELUDE}fun go(c: bool, s: string, ref r: string, mut u: string, l: [string]): string\n  var x: string = \"x\"\n{body}  ret \"end\"\nend fun\nvar uu: string = \"u\"\ndebuglog go(true, \"s\", ref \"r\", mut uu, [\"a\"])\ndebuglog uu\n")))
+            .chain(seeds.iter().map(|seed| (fmt!("seed {seed}"), datalove_worldgen::moves_script(seed, 0.3))))
+            .collect(),
+    };
+    let mut cases = Vec::new();
+    for (what, text) in texts {
+        let (codes, script, _) = rust_side(&text);
+        cases.push((what, text, script, codes));
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script, _)| json!({ "moves": script })).collect();
+    let answers = ask_oracle(&queries);
+
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    let mut mismatches = Vec::new();
+    for ((what, text, _, rust_codes), oracle) in cases.iter().zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
+            continue;
+        }
+        let codes: Vec<&str> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X()).collect();
+        assert_eq!(codes, rust_codes.iter().map(|c| c.as_str()).collect::<Vec<_>>(), "the checkers differ:\n{text}");
+        if !codes.is_empty() {
+            *outcomes.entry(fmt!("checker refuses {}", codes[0])).or_default() += 1;
+            continue;
+        }
+        let model = oracle["moves"].as_str().map(|c| c.S());
+        let rust = rust_ownership_codes(text);
+        if let Some(first) = rust.first() && !MOVE_CODES.contains(&first.as_str()) {
+            *outcomes.entry(fmt!("rust refuses {first}")).or_default() += 1;
+            continue;
+        }
+        *outcomes.entry(match &model {
+            Some(c) => c.C(),
+            None => "accepted".S(),
+        }).or_default() += 1;
+        if model.as_ref() != rust.first() {
+            if let Ok(dir) = std::env::var("FORMAL_MOVES_WRITE") {
+                std::fs::write(std::path::Path::new(&dir).join(fmt!("{}.dfs", what.replace(' ', "_"))), text).X();
+            }
+            mismatches.push(fmt!("{what}:\n{text}    rust: {rust:?}, model: {model:?}"));
+        }
+    }
+    println!(
+        "{} scripts over seeds {}..{}: {} differ; {outcomes:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model decide moves differently on {} scripts", mismatches.len());
+}
+
 /// An expression of `consts_script`'s: a number, a const among `consts`, or
 /// a call to one of the functions `calls` names, added up.
 fn const_expr(rng: &mut SeededRng, consts: &[String], calls: &[String], depth: u32) -> String {

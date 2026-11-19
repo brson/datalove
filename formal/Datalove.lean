@@ -43,5 +43,6 @@ import Datalove.FunHeld
 import Datalove.Proofs.HeldSound
 import Datalove.FunInit
 import Datalove.FunConsts
+import Datalove.FunMove
 import Datalove.Proofs.InitSound
 import Datalove.Proofs.ConstSound
