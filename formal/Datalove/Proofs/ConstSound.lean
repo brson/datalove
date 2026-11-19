@@ -6,8 +6,9 @@ import Datalove.Proofs.InitSound
 
 `Fun.constPass_init`: where the F089 check lets a script's consts through
 (`constTop`), evaluating them (`constPass`) never stops at `Stop.uninit`.
-With `Fun.runScript_init`, a script that checks and that the analysis of
-what holds a value and the F089 check let through never stops there at all
+With `Fun.runScript_init`, a script the model refuses nothing of
+(`scriptCodes`), one that checks and that the analysis of what holds a
+value and the F089 check let through, never stops there at all
 (`Fun.runScript_noUninit`).
 
 Evaluating a const runs on the consts' values, those evaluated before it
@@ -178,12 +179,15 @@ theorem constPass_init (sigs : List (String × Sig)) (defs : List FunDef) (k d :
       exact constPass_init sigs defs k d hm ss _ store
         (by rw [← hΓ]; exact checkStmtF_sigs inferEnv fuel Γ _ #[]) hs h
 
-/-- **A script the analyses let through never reads what holds nothing**:
-where a script checks, and the analysis of what holds a value (O005, O006,
-O009) and the F089 check let it through, running it never stops at
-`Stop.uninit`: not while evaluating its consts, and not after. -/
-theorem runScript_noUninit (ss : List Stmt) (h : checkScript ss = #[]) (hi : initScript ss = none)
-    (hc : constScript ss = none) (k d : Nat) : (runScript k d ss).result ≠ .error .uninit := by
+/-- **A script the model refuses nothing of never reads what holds
+nothing**: where a script checks, and the analysis of what holds a value
+(O005, O006, O009) and the F089 check let it through (`scriptCodes`),
+running it never stops at `Stop.uninit`: not while evaluating its consts,
+and not after. -/
+theorem runScript_noUninit (ss : List Stmt) (hs : scriptCodes ss = #[]) (k d : Nat) :
+    (runScript k d ss).result ≠ .error .uninit := by
+  simp only [scriptCodes, Array.append_eq_empty_iff, Option.toArray_eq_empty_iff] at hs
+  obtain ⟨⟨h, hi⟩, hc⟩ := hs
   intro hu
   have hcp := runScript_init ss h hi k d hu
   have hn := checkScript_names h

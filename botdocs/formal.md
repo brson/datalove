@@ -726,7 +726,10 @@ Four things are proved of it:
   lets through (`constProg`, `ProgInit`), with the analysis's signatures
   among the run's (`SigsIn`), and evaluating the consts never stops at
   `Stop.uninit` (`constPass_init`). With the result above, a script that
-  checks and that both let through never stops there. The Rust looks for
+  checks and that both let through, one the model refuses nothing of
+  (`scriptCodes`), never stops there. F089 is among the Rust's type
+  diagnostics, but the model's comes with the analysis, which decides it:
+  in the checker it would refuse where the Rust's does not. The Rust looks for
   the consts each reached function names; the model asks the analysis
   whether one is read. The analysis reads on through code after a `ret` or
   `break` as if it ran, so a const named there is read, as the Rust has it
@@ -741,7 +744,14 @@ Four things are proved of it:
   does not, never the reverse. Over three thousand seeds, five hundred F089
   and four hundred O005, none differ, seventy-seven are refused by the
   model's F089 alone, all under O005, and marking every const as holding a
-  value makes 172 of a thousand differ.
+  value makes 172 of a thousand differ. The same test holds `scriptCodes`
+  to the Rust: the model refuses nothing of a script where, and only where,
+  the Rust reports none of the codes the model decides, its type checker's
+  and O005, O006 and O009; the rest of its ownership pass, O016 for a const
+  moved out of among it, the model does not decide. Running the scripts
+  for it found consts folded from nested calls running the inner calls
+  again at run time and leaking (backend fixture
+  `50_const_folds_nested_calls`).
 
   A module's consts are checked the same way, with what it imports in scope
   (`constModuleWith`, `constWorld`). A const may call a function of a module

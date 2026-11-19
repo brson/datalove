@@ -169,6 +169,15 @@ def constScript (ss : List Stmt) : Option Lit.Code :=
   | .ok _ => none
   | .error _ => some "F089"
 
+/-- Everything the model refuses of a script, in order: what the checker
+reports, then, if anything, what the analysis of what holds a value refuses
+first (O005, O006, O009), then F089. The Rust reports F089 among its type
+diagnostics, but the model decides it by the analysis, which may refuse a
+const the Rust lets through where the analysis refuses a function it
+reaches anyway, so it comes with the analysis rather than the checker. -/
+def scriptCodes (ss : List Stmt) : Array Lit.Code :=
+  checkScript ss ++ (initScript ss).toArray ++ (constScript ss).toArray
+
 /-- Whether a module's consts are F089, its own functions' signatures and
 `extra`, those it imports, in scope. A const may call an imported function,
 whose module's consts are all evaluated before this module's are, so the

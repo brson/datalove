@@ -2067,6 +2067,10 @@ fn init_script(rng: &mut SeededRng) -> String {
     fmt!("{INIT_PRELUDE}fun f(out p: int, c: bool, o: ?int, e: E, l: [int]): ?int\n{body}end fun\n")
 }
 
+/// The ownership codes of what holds a value, which the model decides
+/// (`formal/Datalove/FunInit.lean`).
+const INIT_CODES: [&str; 3] = ["O005", "O006", "O009"];
+
 /// The ownership codes the CLI reports for a script, in order.
 fn rust_ownership_codes(text: &str) -> Vec<String> {
     let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
@@ -2105,7 +2109,6 @@ fn init_agrees() {
     }
     let queries: Vec<Value> = cases.iter().map(|(_, _, script, _)| json!({ "init": script })).collect();
     let answers = ask_oracle(&queries);
-    const INIT_CODES: [&str; 3] = ["O005", "O006", "O009"];
 
     let mut outcomes = BTreeMap::<String, usize>::new();
     let mut mismatches = Vec::new();
@@ -2272,7 +2275,9 @@ fn consts_world(rng: &mut SeededRng) -> Vec<(String, String)> {
 /// below them: where the analysis of what holds a value lets a script
 /// through, the model refuses it where, and only where, the Rust reports
 /// F089; where it does not, the model refuses wherever the Rust does. The two
-/// checkers agree on everything else.
+/// checkers agree on everything else, and the model refuses nothing of a
+/// script (`scriptCodes`) where, and only where, the Rust reports none of
+/// the codes the model decides.
 #[test]
 fn consts_agrees() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -2296,6 +2301,18 @@ fn consts_agrees() {
         if let Some(why) = oracle.get("unsupported") {
             *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
             continue;
+        }
+        // Everything the model refuses (`scriptCodes`), against everything
+        // the Rust does that the model decides, its type checker's codes and
+        // of its ownership pass's those of what holds a value:
+        // `runScript_noUninit`'s hypothesis, held to the Rust. The rest of the
+        // ownership pass, a const moved out of (O016) among it, is not
+        // modelled.
+        let model_all = oracle["all"].as_array().X().is_empty();
+        let rust_all = rust_codes.is_empty()
+            && !rust_ownership_codes(text).iter().any(|c| INIT_CODES.contains(&c.as_str()));
+        if model_all != rust_all {
+            mismatches.push(fmt!("{what}:\n{text}    rust accepts: {rust_all}, model accepts: {model_all}"));
         }
         let codes: Vec<&str> = oracle["codes"].as_array().X().iter().map(|c| c.as_str().X()).collect();
         let rust_f089 = rust_codes.iter().any(|c| c == "F089");
