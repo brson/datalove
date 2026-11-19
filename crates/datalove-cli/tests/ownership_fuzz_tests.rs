@@ -1,13 +1,16 @@
 //! Generated functions through the binary, which must never panic.
 //!
-//! Each seed writes a function over heap values -- strings, a list it
-//! borrows and one it changes -- that moves, clones, lends and changes them
-//! across nested `if`s, `for`s over either list, counted `loop`s and an
-//! option's binding, leaves by `ret`, `break` and `continue` at any depth,
-//! and sometimes writes on past a way out, where nothing runs. Most are
-//! refused, for a value used after it moved among other things: that is
-//! the ownership pass's to decide, and what is held here is only that
-//! deciding it does not panic. A script the binary accepts it runs, twice
+//! Each seed writes a function over heap values -- strings, a struct of
+//! two, an enum with a string payload, a list it borrows and one it changes
+//! -- that moves, clones, lends and changes them, and their fields, across
+//! nested `if`s, `match`es, `for`s over either list, counted `loop`s and an
+//! option's binding. It declares variables with no value for an `out`
+//! argument or a `set` to give one, leaves by `ret`, `?`, `break` and
+//! `continue` at any depth, and sometimes writes on past a way out, where
+//! nothing runs. The generator tracks what it moved and what holds nothing,
+//! so that most scripts run; one operand in twenty names whatever it likes,
+//! for the ownership pass to refuse. What is held here is that the binary
+//! never panics deciding it. A script the binary accepts it runs, twice
 //! over the function, with the runtime's leak check on, and the run must
 //! end cleanly: no panic, no leak, no error.
 //!
@@ -32,6 +35,8 @@ use std::time::{Duration, Instant};
 const LIMIT: Duration = Duration::from_secs(30);
 
 const PRELUDE: &str = "\
+type E = enum { atom N, term T string }
+type P = {x: string, y: string}
 fun take(x: string)
   debuglog x
 end fun
@@ -41,25 +46,47 @@ end fun
 fun change(mut x: string)
   set x = \"changed\"
 end fun
+fun fill(out x: string)
+  set x = \"filled\"
+end fun
 fun maybe(c: bool): ?string
   if c
     ret some \"m\"
   end if
   ret none
 end fun
+fun mk(c: bool): E
+  if c
+    ret term T \"t\"
+  end if
+  ret atom N
+end fun
 ";
 
-/// What a block may name, and what of it the generator takes to be moved.
+/// A kind of value the generator names.
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    Str,
+    Struct,
+    Enum,
+}
+
+/// What a block may name, and what of it the generator takes to hold
+/// nothing.
 #[derive(Clone)]
 struct Scope {
-    /// The owned values in scope.
-    owned: Vec<String>,
+    /// The owned values in scope, each with its kind.
+    owned: Vec<(String, Kind)>,
+    /// Those of `owned` that are variables, which `set` and an `out`
+    /// argument may give a value.
+    vars: Vec<String>,
     /// Those of `owned` a move may take: not one declared outside the
     /// innermost loop, whose move the loop's next round would repeat.
     movable: Vec<String>,
-    /// Those of `owned` moved on the way here.
-    moved: BTreeSet<String>,
-    /// Borrowed values in scope, the elements a `for` walks.
+    /// Those of `owned` that hold nothing here: moved, or declared with no
+    /// value and not given one yet.
+    empty: BTreeSet<String>,
+    /// Borrowed strings in scope, the elements a `for` walks.
     borrowed: Vec<String>,
     in_loop: bool,
     depth: usize,
@@ -77,12 +104,41 @@ impl Scope {
         inner
     }
 
-    /// Take what a nested block moved of this scope's values, where the
+    /// Take what a nested block left empty of this scope's values, where the
     /// block went on to its end: `None` where it left by a way out.
     fn join(&mut self, after: Option<BTreeSet<String>>) {
-        if let Some(moved) = after {
-            self.moved.extend(moved.into_iter().filter(|n| self.owned.contains(n)));
+        if let Some(empty) = after {
+            let owned: Vec<String> = self.owned.iter().map(|(n, _)| n.C()).collect();
+            self.empty.extend(empty.into_iter().filter(|n| owned.contains(n)));
         }
+    }
+
+    /// Declare an owned value, holding one or not.
+    fn declare(&mut self, name: &str, kind: Kind, var: bool, holds: bool) {
+        self.owned.push((name.S(), kind));
+        self.movable.push(name.S());
+        if var {
+            self.vars.push(name.S());
+        }
+        if !holds {
+            self.empty.insert(name.S());
+        }
+    }
+
+    /// The owned values of a kind that hold one.
+    fn held(&self, kind: Kind) -> Vec<String> {
+        self.owned.iter()
+            .filter(|(n, k)| *k == kind && !self.empty.contains(n))
+            .map(|(n, _)| n.C())
+            .collect()
+    }
+
+    /// The variables of a kind.
+    fn vars_of(&self, kind: Kind) -> Vec<String> {
+        self.owned.iter()
+            .filter(|(n, k)| *k == kind && self.vars.contains(n))
+            .map(|(n, _)| n.C())
+            .collect()
     }
 }
 
@@ -101,86 +157,195 @@ impl Gen {
         (!names.is_empty()).then(|| names[self.rng.random_range(0..names.len())].C())
     }
 
-    /// A string to read, `consumed` if where it goes takes it: a name in
-    /// scope, moved where the generator lets a move be, cloned or borrowed
-    /// otherwise, or a literal. One in twenty is any name, bare, whatever it
-    /// holds, for the ownership pass to refuse.
-    fn operand(&mut self, scope: &mut Scope, consumed: bool) -> String {
-        if self.rng.random_bool(0.05) {
-            let all: Vec<String> = scope.owned.iter().chain(&scope.borrowed).cloned().collect();
-            return self.pick(&all).X();
-        }
-        let held: Vec<String> = scope.owned.iter()
-            .filter(|n| !scope.moved.contains(*n))
-            .chain(&scope.borrowed)
-            .cloned()
-            .collect();
-        let Some(name) = self.pick(&held).filter(|_| !self.rng.random_bool(0.2)) else {
-            return "\"lit\"".S();
-        };
-        if !consumed {
-            return name;
-        }
-        if scope.movable.contains(&name) && !scope.moved.contains(&name) && self.rng.random_bool(0.3) {
-            scope.moved.insert(name.C());
-            return name;
-        }
-        fmt!("{name}@")
+    fn chance(&mut self, p: f64) -> bool {
+        self.rng.random_bool(p)
     }
 
-    /// A variable to set, which then holds a value again.
-    fn target(&mut self, scope: &mut Scope) -> &'static str {
-        let t = ["a", "b"][self.rng.random_range(0..2)];
-        scope.moved.remove(t);
+    /// One in twenty operands names any value of its kind, bare, whatever
+    /// it holds, for the ownership pass to refuse.
+    fn chaos(&mut self, scope: &Scope, kind: Kind) -> Option<String> {
+        if !self.chance(0.05) {
+            return None;
+        }
+        let mut all: Vec<String> = scope.owned.iter().filter(|(_, k)| *k == kind).map(|(n, _)| n.C()).collect();
+        if kind == Kind::Str {
+            all.extend(scope.borrowed.iter().cloned());
+        }
+        self.pick(&all)
+    }
+
+    /// A value of `kind` held in scope, moved if `consumed` and a move may
+    /// take it, cloned if consumed otherwise, and named as it is if not.
+    fn named(&mut self, scope: &mut Scope, kind: Kind, consumed: bool) -> Option<String> {
+        let mut held = scope.held(kind);
+        if kind == Kind::Str {
+            held.extend(scope.borrowed.iter().cloned());
+        }
+        let name = self.pick(&held)?;
+        if !consumed {
+            return Some(name);
+        }
+        if scope.movable.contains(&name) && !scope.empty.contains(&name) && self.chance(0.3) {
+            scope.empty.insert(name.C());
+            return Some(name);
+        }
+        Some(fmt!("{name}@"))
+    }
+
+    /// A string to read, `consumed` if where it goes takes it: a name in
+    /// scope, a field of a struct that holds one, or a literal.
+    fn string(&mut self, scope: &mut Scope, consumed: bool) -> String {
+        if let Some(any) = self.chaos(scope, Kind::Str) {
+            return any;
+        }
+        if self.chance(0.15) {
+            if let Some(p) = self.pick(&scope.held(Kind::Struct)) {
+                let field = ["x", "y"][self.rng.random_range(0..2)];
+                return if consumed { fmt!("{p}.{field}@") } else { fmt!("{p}.{field}") };
+            }
+        }
+        if self.chance(0.2) {
+            return "\"lit\"".S();
+        }
+        self.named(scope, Kind::Str, consumed).unwrap_or_else(|| "\"lit\"".S())
+    }
+
+    /// A struct to read, as `string` reads a string, or a literal.
+    fn structure(&mut self, scope: &mut Scope, consumed: bool) -> String {
+        if let Some(any) = self.chaos(scope, Kind::Struct) {
+            return any;
+        }
+        if !self.chance(0.3) {
+            if let Some(name) = self.named(scope, Kind::Struct, consumed) {
+                return name;
+            }
+        }
+        let x = self.string(scope, true);
+        let y = self.string(scope, true);
+        fmt!("{{x = {x}, y = {y}}}")
+    }
+
+    /// An enum to match on or to keep: a fresh one, or a variable's, cloned.
+    fn enumeration(&mut self, scope: &mut Scope, consumed: bool) -> String {
+        if let Some(any) = self.chaos(scope, Kind::Enum) {
+            return any;
+        }
+        match self.chance(0.5) {
+            true => self.named(scope, Kind::Enum, consumed).unwrap_or_else(|| "mk(c)".S()),
+            false => "mk(c)".S(),
+        }
+    }
+
+    /// A string variable to give a value, which then holds one.
+    fn target(&mut self, scope: &mut Scope) -> String {
+        let t = self.pick(&scope.vars_of(Kind::Str)).X();
+        scope.empty.remove(&t);
         t
     }
 
-    /// Statements, and what the block moved where it goes on to its end, or
-    /// `None` where it leaves by a way out.
+    /// A string variable or field to lend `mut`: one that holds a value.
+    fn lent(&mut self, scope: &mut Scope) -> Option<String> {
+        if self.chance(0.3) {
+            let vars: Vec<String> = scope.held(Kind::Struct).into_iter().filter(|n| scope.vars.contains(n)).collect();
+            if let Some(p) = self.pick(&vars) {
+                return Some(fmt!("{p}.{}", ["x", "y"][self.rng.random_range(0..2)]));
+            }
+        }
+        let held: Vec<String> = scope.held(Kind::Str).into_iter().filter(|n| scope.vars.contains(n)).collect();
+        self.pick(&held)
+    }
+
+    /// Statements, and what the block left empty where it goes on to its
+    /// end, or `None` where it leaves by a way out.
     fn block(&mut self, scope: &Scope, out: &mut String) -> Option<BTreeSet<String>> {
         let mut scope = scope.C();
         let indent = "  ".repeat(scope.depth + 1);
         let nested = scope.depth < 4;
         for _ in 0..self.rng.random_range(1..=4) {
-            let line = match self.rng.random_range(0..if nested { 22 } else { 14 }) {
-                0 | 1 => fmt!("debuglog {}", self.operand(&mut scope, false)),
+            let line = match self.rng.random_range(0..if nested { 30 } else { 21 }) {
+                0 | 1 => fmt!("debuglog {}", self.string(&mut scope, false)),
                 2 | 3 => {
                     let v = self.fresh("v");
-                    let line = fmt!("let {v} = {}", self.operand(&mut scope, true));
-                    scope.owned.push(v.C());
-                    scope.movable.push(v);
+                    let line = fmt!("let {v} = {}", self.string(&mut scope, true));
+                    scope.declare(&v, Kind::Str, false, true);
                     line
                 }
                 4 | 5 => {
-                    let value = self.operand(&mut scope, true);
+                    let value = self.string(&mut scope, true);
                     fmt!("set {} = {value}", self.target(&mut scope))
                 }
-                6 => fmt!("call take({})", self.operand(&mut scope, true)),
+                6 => fmt!("call take({})", self.string(&mut scope, true)),
                 7 => {
                     let n = self.fresh("n");
-                    fmt!("let {n} = look(ref {})", self.operand(&mut scope, false))
+                    fmt!("let {n} = look(ref {})", self.string(&mut scope, false))
                 }
-                8 => fmt!("call change(mut {})", self.target(&mut scope)),
-                9 => fmt!("set m = [{}]", self.operand(&mut scope, true)),
+                8 => match self.lent(&mut scope) {
+                    Some(place) => fmt!("call change(mut {place})"),
+                    None => continue,
+                },
+                9 => fmt!("set m = [{}]", self.string(&mut scope, true)),
                 10 => "debuglog m".S(),
-                11..=13 => {
-                    let exit = match self.rng.random_range(0..if scope.in_loop { 3 } else { 1 }) {
-                        0 => fmt!("ret {}", self.operand(&mut scope, true)),
-                        1 => "break".S(),
+                11 => fmt!("debuglog {}", self.structure(&mut scope, false)),
+                12 => {
+                    let v = self.fresh("p");
+                    let line = fmt!("let {v} = {}", self.structure(&mut scope, true));
+                    scope.declare(&v, Kind::Struct, false, true);
+                    line
+                }
+                13 => {
+                    let value = self.structure(&mut scope, true);
+                    let t = self.pick(&scope.vars_of(Kind::Struct)).X();
+                    scope.empty.remove(&t);
+                    fmt!("set {t} = {value}")
+                }
+                14 => match self.pick(&scope.held(Kind::Struct).into_iter().filter(|n| scope.vars.contains(n)).collect::<Vec<_>>()) {
+                    Some(p) => {
+                        let field = ["x", "y"][self.rng.random_range(0..2)];
+                        match self.rng.random_range(0..2) {
+                            0 => fmt!("set {p}.{field} = {}", self.string(&mut scope, true)),
+                            _ => fmt!("call fill(out {p}.{field})"),
+                        }
+                    }
+                    None => continue,
+                },
+                15 => {
+                    // A variable that holds nothing until something gives
+                    // it a value.
+                    let o = self.fresh("u");
+                    scope.declare(&o, Kind::Str, true, false);
+                    fmt!("var {o}: string")
+                }
+                16 => fmt!("call fill(out {})", self.target(&mut scope)),
+                17 => {
+                    let g = self.fresh("g");
+                    scope.declare(&g, Kind::Str, false, true);
+                    fmt!("let {g} = maybe(c)?")
+                }
+                18 => {
+                    let value = self.enumeration(&mut scope, true);
+                    let t = self.pick(&scope.vars_of(Kind::Enum)).X();
+                    scope.empty.remove(&t);
+                    fmt!("set {t} = {value}")
+                }
+                19 | 20 => {
+                    let exit = match self.rng.random_range(0..if scope.in_loop { 4 } else { 2 }) {
+                        0 => fmt!("ret some {}", self.string(&mut scope, true)),
+                        1 => "ret none".S(),
+                        2 => "break".S(),
                         _ => "continue".S(),
                     };
                     out.push_str(&fmt!("{indent}{exit}\n"));
                     // Sometimes code nothing reaches, which the ownership
                     // pass still walks.
-                    if self.rng.random_bool(0.3) {
+                    if self.chance(0.3) {
                         self.block(&scope, out);
                     }
                     return None;
                 }
-                14 | 15 => {
+                21 | 22 => {
                     out.push_str(&fmt!("{indent}if c\n"));
                     let then = self.block(&scope.nested(false), out);
-                    let otherwise = match self.rng.random_bool(0.6) {
+                    let otherwise = match self.chance(0.6) {
                         true => {
                             out.push_str(&fmt!("{indent}else\n"));
                             self.block(&scope.nested(false), out)
@@ -192,12 +357,11 @@ impl Gen {
                     scope.join(otherwise);
                     continue;
                 }
-                16 => {
+                23 => {
                     let v = self.fresh("o");
                     out.push_str(&fmt!("{indent}if maybe(c) |{v}|\n"));
                     let mut then = scope.nested(false);
-                    then.owned.push(v.C());
-                    then.movable.push(v);
+                    then.declare(&v, Kind::Str, false, true);
                     let then = self.block(&then, out);
                     out.push_str(&fmt!("{indent}else\n"));
                     let otherwise = self.block(&scope.nested(false), out);
@@ -206,15 +370,42 @@ impl Gen {
                     scope.join(otherwise);
                     continue;
                 }
-                17..=19 => {
+                24 | 25 => {
+                    let scrutinee = self.enumeration(&mut scope, true);
+                    out.push_str(&fmt!("{indent}match {scrutinee}\n"));
+                    let t = self.fresh("t");
+                    let mut term = scope.nested(false);
+                    term.declare(&t, Kind::Str, false, true);
+                    // The atom's arm first or last, and sometimes as the
+                    // default.
+                    let default = self.chance(0.3);
+                    let atom_first = !default && self.chance(0.5);
+                    let mut arms = Vec::new();
+                    if atom_first {
+                        out.push_str(&fmt!("{indent}case atom N\n"));
+                        arms.push(self.block(&scope.nested(false), out));
+                    }
+                    out.push_str(&fmt!("{indent}case term T {t}\n"));
+                    arms.push(self.block(&term, out));
+                    if !atom_first {
+                        out.push_str(&fmt!("{indent}case {}\n", if default { "default" } else { "atom N" }));
+                        arms.push(self.block(&scope.nested(false), out));
+                    }
+                    out.push_str(&fmt!("{indent}end match\n"));
+                    for arm in arms {
+                        scope.join(arm);
+                    }
+                    continue;
+                }
+                26 | 27 => {
                     let w = self.fresh("w");
-                    let list = if self.rng.random_bool(0.7) { "l" } else { "m" };
+                    let list = if self.chance(0.7) { "l" } else { "m" };
                     out.push_str(&fmt!("{indent}for {w} in ref {list}\n"));
                     let mut body = scope.nested(true);
                     body.borrowed.push(w);
-                    let moved = self.block(&body, out);
+                    let left = self.block(&body, out);
                     out.push_str(&fmt!("{indent}end for\n"));
-                    scope.join(moved);
+                    scope.join(left);
                     continue;
                 }
                 _ => {
@@ -223,39 +414,46 @@ impl Gen {
                     let k = self.fresh("k");
                     out.push_str(&fmt!("{indent}var {k}: int = 0\n{indent}loop\n"));
                     out.push_str(&fmt!("{indent}  set {k} = {k} + 1\n{indent}  if {k} == 3\n{indent}    break\n{indent}  end if\n"));
-                    let moved = self.block(&scope.nested(true), out);
+                    let left = self.block(&scope.nested(true), out);
                     out.push_str(&fmt!("{indent}end loop\n"));
-                    scope.join(moved);
+                    scope.join(left);
                     continue;
                 }
             };
             out.push_str(&fmt!("{indent}{line}\n"));
         }
-        Some(scope.moved)
+        Some(scope.empty)
     }
 }
 
 /// A script for a seed: the prelude, the function, and two calls of it.
 fn script(seed: u64) -> String {
     let mut g = Gen { rng: SeededRng::derive(seed, "ownership-fuzz"), fresh: 0 };
-    let names = vec!["a".S(), "b".S(), "s".S()];
-    let scope = Scope {
-        owned: names.C(),
-        movable: names,
-        moved: BTreeSet::new(),
+    let mut scope = Scope {
+        owned: Vec::new(),
+        vars: Vec::new(),
+        movable: Vec::new(),
+        empty: BTreeSet::new(),
         borrowed: Vec::new(),
         in_loop: false,
         depth: 0,
     };
+    scope.declare("a", Kind::Str, true, true);
+    scope.declare("b", Kind::Str, true, true);
+    scope.declare("s", Kind::Str, false, true);
+    scope.declare("p", Kind::Struct, true, true);
+    scope.declare("e", Kind::Enum, true, true);
     let mut body = String::new();
     let end = match g.block(&scope, &mut body) {
-        Some(moved) if moved.contains("a") => "  ret \"end\"\n",
-        _ => "  ret a\n",
+        Some(empty) if empty.contains("a") => "  ret none\n",
+        _ => "  ret some a\n",
     };
     fmt!("{PRELUDE}\
-fun go(ref l: [string], mut m: [string], s: string, c: bool): string
+fun go(ref l: [string], mut m: [string], s: string, c: bool): ?string
   var a: string = \"a\"
   var b: string = \"b\"
+  var p: P = {{x = \"px\", y = \"py\"}}
+  var e: E = mk(c)
 {body}{end}end fun
 let l: [string] = [\"x\", \"y\"]
 var m: [string] = [\"z\"]

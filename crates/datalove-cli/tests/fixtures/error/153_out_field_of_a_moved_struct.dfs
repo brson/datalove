@@ -1,0 +1,17 @@
+// An `out` argument that is a field of a struct moved away is a use after
+// the move, as a `set` of the field and a `mut` argument of it are.
+//
+// The check was made of a bare name alone. A field went unchecked, and the
+// call dropped the field's old value before writing it, out of the struct
+// that now held it.
+type P = {x: string, y: string}
+fun fill(out x: string)
+  set x = "filled"
+end fun
+fun go(): string
+  var p: P = {x = "px", y = "py"}
+  let q = p
+  call fill(out p.x)
+  ret q.x@
+end fun
+debuglog go()

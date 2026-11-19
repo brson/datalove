@@ -1320,6 +1320,22 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     // For Out params: the callee writes to the arg, so this is NOT a read.
                     // Skip the uninitialized Out param check and mark as initialized after.
                     if callee_mode == Some(ParamMode::Out) {
+                        // Part of a value, a field or an element, is written
+                        // where the rest is still held, as a `set` of it is
+                        // (`analyze_set`): its root has to hold a value, and
+                        // its keys are read. Unchecked, a field of a struct
+                        // moved away had its old value dropped before the
+                        // call, out of the struct that now held it.
+                        if let ExprFunKind::Place(place) = arg.kind() && !place.steps.is_empty() {
+                            if let Some(id) = self.expr_to_place_root(*arg) {
+                                self.check_not_moved(id, arg.key());
+                            }
+                            for step in &place.steps {
+                                if let PlaceStep::Index(idx) = step {
+                                    self.analyze_expr_moves(self.expr(idx.index), idx.error_mode.is_none());
+                                }
+                            }
+                        }
                         // For Out args, we only need to check use-after-move, not uninitialized.
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
                             if self.get_state(binding_id) == Some(BindingState::Moved) {
