@@ -372,4 +372,12 @@ def initScript (ss : List Stmt) : Option Lit.Code :=
   | .ok _ => none
   | .error c => some c
 
+/-- What a module's analysis refuses first, if anything, its own functions'
+signatures and `extra`, those it imports, in scope. -/
+def initModuleWith (extra : List (String × Sig)) (ss : List Stmt) : Option Lit.Code :=
+  let sigs := (resolveNames ss).1 ++ extra
+  match initTop sigs { ret := .void, sigs, inModule := true } [] ss with
+  | .ok _ => none
+  | .error c => some c
+
 end Datalove.Fun

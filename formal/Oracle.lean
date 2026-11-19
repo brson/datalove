@@ -17,6 +17,9 @@ line, and writes one answer per line to stdout, in order:
 {"held": S}      →  {"codes": [code, ...], "held": [b, ...]} or {"unsupported": what}
 {"init": S}      →  {"codes": [code, ...], "init": code or null} or {"unsupported": what}
 {"consts": S}    →  {"codes": [code, ...], "consts": code or null, "init": code or null} or {"unsupported": what}
+{"world": [{"path": P, "script": S}, ...]}
+                 →  {"modules": [[code, ...], ...], "init": [code or null, ...], "consts": [code or null, ...]}
+                    or {"unsupported": what}
 ```
 
 A script `S` is the JSON `datalove-datafun-ast`'s serde AST writes. Its
@@ -36,6 +39,9 @@ O009, if anything (`Fun.initScript`). A `consts` is the script checked, and
 F089 if one of its consts reads one not evaluated before it
 (`Fun.constScript`), with what `init` would answer, since the two are held
 to the Rust's F089 alike only where the analysis lets the script through.
+A `world` is its modules checked in order (`Fun.checkWorld`), and for each
+what the analysis refuses and whether it is F089, as of a script but with
+what the module imports in scope (`Fun.constWorld`).
 
 `synth` on a hinted expression `: T / e` is checking `e` against `T`, so it
 asks about both modes.
@@ -128,8 +134,13 @@ def answer (q : Json) : Except String Json := do
         Fun.moduleFromSerde (← (← m.getObjVal? "path").getStr?) (← m.getObjVal? "script")
       if !ms.all (·.body.all Fun.Stmt.isDecl) then throw "a module statement that is not a declaration"
       pure ms
-    return match read >>= Fun.checkWorld with
-      | .ok codes => Json.mkObj [("modules", Json.arr (codes.toArray.map fun cs => Json.arr (cs.map Json.str)))]
+    let opt : Option Lit.Code → Json := fun | .some c => Json.str c | .none => Json.null
+    return match read >>= fun ms => (ms, ·) <$> Fun.checkWorld ms with
+      | .ok (ms, codes) =>
+        let cw := Fun.constWorld ms
+        Json.mkObj [("modules", Json.arr (codes.toArray.map fun cs => Json.arr (cs.map Json.str))),
+          ("init", Json.arr (cw.toArray.map (opt ·.1))),
+          ("consts", Json.arr (cw.toArray.map (opt ·.2)))]
       | .error e => Json.mkObj [("unsupported", e)]
   throw s!"unknown query: {q.compress}"
 

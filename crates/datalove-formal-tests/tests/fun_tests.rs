@@ -600,9 +600,8 @@ fn rust_world_side(modules: &[(String, String)]) -> Vec<Vec<String>> {
 /// modules, which require the ones before them, import their functions and
 /// call them qualified, changed as the scripts are, one module at a time, and
 /// checked as a library's modules are. A module's top level has no function
-/// to return early from (F105). A world the Rust reports F089 in, a const that
-/// depends on itself through a function, is skipped: the Rust finds those by
-/// what its checker looked up, which the model does not follow.
+/// to return early from (F105). F089 is held to the model as
+/// `world_differs` says.
 #[test]
 fn world_typing_agrees() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -648,18 +647,12 @@ fn world_typing_agrees() {
             *skipped.entry(why.as_str().X().S()).or_default() += 1;
             continue;
         }
-        if rust.iter().flatten().any(|c| c == "F089") {
-            *skipped.entry("F089".S()).or_default() += 1;
-            continue;
-        }
-        let model: Vec<Vec<String>> = oracle["modules"].as_array().X().iter()
-            .map(|m| m.as_array().X().iter().map(|c| c.as_str().X().S()).collect())
-            .collect();
-        if *rust == model {
-            agreed += 1;
-        } else {
-            let text: String = modules.iter().map(|(p, t)| fmt!("-- {p}\n{t}\n")).collect();
-            mismatches.push(fmt!("{what}:\n{text}    rust:  {rust:?}\n    model: {model:?}"));
+        match world_differs(rust, oracle, &mut BTreeMap::new()) {
+            None => agreed += 1,
+            Some(why) => {
+                let text: String = modules.iter().map(|(p, t)| fmt!("-- {p}\n{t}\n")).collect();
+                mismatches.push(fmt!("{what}:\n{text}    {why}"));
+            }
         }
     }
     println!(
@@ -670,6 +663,95 @@ fn world_typing_agrees() {
         println!("{m}");
     }
     assert!(mismatches.is_empty(), "the Rust and the typing rules disagree on {} worlds", mismatches.len());
+}
+
+/// How the Rust's codes for each module of a world differ from the model's
+/// answer, if they do, counting what each module comes to in `outcomes`.
+///
+/// The checkers must agree on each module's codes but for F089, which the
+/// model decides apart (`constWorld`), as `consts_agrees` holds a script's:
+/// where the analysis of what holds a value lets a module through, the model
+/// says F089 where, and only where, the Rust reports it; where it does not,
+/// the model may say F089 where the Rust does not, never the reverse. The
+/// model says whether a module is F089, not how many of its consts are.
+fn world_differs(rust: &[Vec<String>], oracle: &Value, outcomes: &mut BTreeMap<String, usize>) -> Option<String> {
+    let model: Vec<Vec<&str>> = oracle["modules"].as_array().X().iter()
+        .map(|m| m.as_array().X().iter().map(|c| c.as_str().X()).collect())
+        .collect();
+    let rust_rest: Vec<Vec<&str>> = rust.iter()
+        .map(|codes| codes.iter().map(|c| c.as_str()).filter(|c| *c != "F089").collect())
+        .collect();
+    if rust_rest != model {
+        return Some(fmt!("rust:  {rust:?}\n    model: {model:?}"));
+    }
+    for (m, codes) in model.iter().enumerate() {
+        if let Some(code) = codes.first() {
+            *outcomes.entry(fmt!("checker refuses {code}")).or_default() += 1;
+            continue;
+        }
+        let rust_f089 = rust[m].iter().any(|c| c == "F089");
+        let model_f089 = oracle["consts"][m].as_str() == Some("F089");
+        if let Some(init) = oracle["init"][m].as_str() {
+            let agree = if model_f089 == rust_f089 { "agree" } else { "only the model's" };
+            *outcomes.entry(fmt!("{init}, F089 {agree}")).or_default() += 1;
+            if rust_f089 && !model_f089 {
+                return Some(fmt!("module {m}: rust F089 and the model's not, under {init}"));
+            }
+            continue;
+        }
+        *outcomes.entry(if model_f089 { "F089" } else { "accepted" }.S()).or_default() += 1;
+        if model_f089 != rust_f089 {
+            return Some(fmt!("module {m}: rust F089: {rust_f089}, model F089: {model_f089}"));
+        }
+    }
+    None
+}
+
+/// Module F089 as the model decides it (`constWorld`) held to the Rust's, on
+/// `consts_world`'s worlds, whose consts call their own module's functions,
+/// above and below them, and those of modules they require, imported and
+/// qualified.
+#[test]
+fn world_consts_agrees() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the world consts tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let mut cases = Vec::new();
+    for seed in seeds.iter() {
+        let mut rng = SeededRng::derive(seed, "consts-world");
+        cases.push((fmt!("seed {seed}"), consts_world(&mut rng)));
+    }
+    let queries: Vec<Value> = cases.iter()
+        .map(|(_, modules)| {
+            let world: Vec<_> = modules.iter()
+                .map(|(path, text)| json!({ "path": path, "script": rust_side(text).1 }))
+                .collect();
+            json!({ "world": world })
+        })
+        .collect();
+    let answers = ask_oracle(&queries);
+    let mut outcomes = BTreeMap::<String, usize>::new();
+    let mut mismatches = Vec::new();
+    for ((what, modules), oracle) in cases.iter().zip(&answers) {
+        if let Some(why) = oracle.get("unsupported") {
+            *outcomes.entry(fmt!("unsupported: {why}")).or_default() += 1;
+            continue;
+        }
+        if let Some(why) = world_differs(&rust_world_side(modules), oracle, &mut outcomes) {
+            let text: String = modules.iter().map(|(p, t)| fmt!("-- {p}\n{t}\n")).collect();
+            mismatches.push(fmt!("{what}:\n{text}    {why}"));
+        }
+    }
+    println!(
+        "{} worlds over seeds {}..{}: {} differ; modules {outcomes:?}",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(10) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model decide F089 differently on {} worlds", mismatches.len());
 }
 
 /// Worlds written by hand, each module a path and its text.
@@ -2063,15 +2145,15 @@ fn init_agrees() {
 }
 
 /// An expression of `consts_script`'s: a number, a const among `consts`, or
-/// a call to one of the `funs` functions, added up.
-fn const_expr(rng: &mut SeededRng, consts: &[String], funs: usize, depth: u32) -> String {
+/// a call to one of the functions `calls` names, added up.
+fn const_expr(rng: &mut SeededRng, consts: &[String], calls: &[String], depth: u32) -> String {
     let pick = rng.random_range(0..if depth < 2 { 5 } else { 3 });
     match pick {
         0 => fmt!("{}", rng.random_range(0..4)),
         1 | 2 if !consts.is_empty() => consts[rng.random_range(0..consts.len())].C(),
         1 | 2 => "1".S(),
-        3 => fmt!("f{}({})", rng.random_range(0..funs), const_expr(rng, consts, funs, depth + 1)),
-        _ => fmt!("{} + {}", const_expr(rng, consts, funs, depth + 1), const_expr(rng, consts, funs, depth + 1)),
+        3 => fmt!("{}({})", calls[rng.random_range(0..calls.len())], const_expr(rng, consts, calls, depth + 1)),
+        _ => fmt!("{} + {}", const_expr(rng, consts, calls, depth + 1), const_expr(rng, consts, calls, depth + 1)),
     }
 }
 
@@ -2079,11 +2161,11 @@ fn const_expr(rng: &mut SeededRng, consts: &[String], funs: usize, depth: u32) -
 /// sometimes naming a const or calling a function: there the Rust's F089,
 /// which asks which consts a function names, and the model's, which asks
 /// which it reads, come apart.
-fn dead_read(rng: &mut SeededRng, consts: &[String], funs: usize, indent: &str) -> String {
+fn dead_read(rng: &mut SeededRng, consts: &[String], calls: &[String], indent: &str) -> String {
     if rng.random_bool(0.5) {
         return String::new();
     }
-    fmt!("{indent}debuglog {}\n", const_expr(rng, consts, funs, 0))
+    fmt!("{indent}debuglog {}\n", const_expr(rng, consts, calls, 0))
 }
 
 /// A script for `consts_agrees`: consts and functions declared in a random
@@ -2096,7 +2178,14 @@ fn dead_read(rng: &mut SeededRng, consts: &[String], funs: usize, indent: &str) 
 fn consts_script(rng: &mut SeededRng) -> String {
     let funs = rng.random_range(1..=4);
     let const_count = rng.random_range(1..=4);
-    let mut order: Vec<Option<usize>> = (0..funs).map(Some).chain((0..const_count).map(|_| None)).collect();
+    let names: Vec<String> = (0..funs).map(|f| fmt!("f{f}")).collect();
+    consts_decls(rng, &names, &names, const_count)
+}
+
+/// The declarations of `consts_script`: the functions `names` and
+/// `const_count` consts, in a random order, calling the functions `calls`.
+fn consts_decls(rng: &mut SeededRng, names: &[String], calls: &[String], const_count: usize) -> String {
+    let mut order: Vec<Option<usize>> = (0..names.len()).map(Some).chain((0..const_count).map(|_| None)).collect();
     for i in (1..order.len()).rev() {
         order.swap(i, rng.random_range(0..=i));
     }
@@ -2105,7 +2194,7 @@ fn consts_script(rng: &mut SeededRng) -> String {
     for item in order {
         match item {
             Some(f) => {
-                text.push_str(&fmt!("fun f{f}(n: int): int\n"));
+                text.push_str(&fmt!("fun {}(n: int): int\n", names[f]));
                 let mut seen = consts.C();
                 seen.push("n".S());
                 if !consts.is_empty() && rng.random_bool(0.3) {
@@ -2115,30 +2204,67 @@ fn consts_script(rng: &mut SeededRng) -> String {
                 if rng.random_bool(0.3) {
                     text.push_str("  var v: int\n");
                     if rng.random_bool(0.6) {
-                        text.push_str(&fmt!("  set v = {}\n", const_expr(rng, &seen, funs, 1)));
+                        text.push_str(&fmt!("  set v = {}\n", const_expr(rng, &seen, calls, 1)));
                     }
                     seen.push("v".S());
                 }
                 if rng.random_bool(0.4) {
-                    let dead = dead_read(rng, &seen, funs, "    ");
-                    text.push_str(&fmt!("  if n == 0\n    ret {}\n{dead}  end if\n", const_expr(rng, &seen, funs, 1)));
+                    let dead = dead_read(rng, &seen, calls, "    ");
+                    text.push_str(&fmt!("  if n == 0\n    ret {}\n{dead}  end if\n", const_expr(rng, &seen, calls, 1)));
                 }
                 if rng.random_bool(0.2) {
-                    let dead = dead_read(rng, &seen, funs, "    ");
+                    let dead = dead_read(rng, &seen, calls, "    ");
                     text.push_str(&fmt!("  loop\n    break\n{dead}  end loop\n"));
                 }
-                text.push_str(&fmt!("  ret {}\n", const_expr(rng, &seen, funs, 0)));
-                text.push_str(&dead_read(rng, &seen, funs, "  "));
+                text.push_str(&fmt!("  ret {}\n", const_expr(rng, &seen, calls, 0)));
+                text.push_str(&dead_read(rng, &seen, calls, "  "));
                 text.push_str("end fun\n");
             }
             None => {
                 let name = fmt!("c{}", consts.len());
-                text.push_str(&fmt!("const {name}: int = {}\n", const_expr(rng, &consts, funs, 0)));
+                text.push_str(&fmt!("const {name}: int = {}\n", const_expr(rng, &consts, calls, 0)));
                 consts.push(name);
             }
         }
     }
     text
+}
+
+/// A world for `world_consts_agrees`: up to three modules, each of
+/// `consts_decls`' declarations, and each requiring some of the modules
+/// before it, importing some of their functions and calling others
+/// qualified, so that a const may call into a module whose consts are all
+/// evaluated.
+fn consts_world(rng: &mut SeededRng) -> Vec<(String, String)> {
+    let mut modules = Vec::new();
+    let mut exported: Vec<Vec<String>> = Vec::new();
+    for j in 0..rng.random_range(1..=3) {
+        let names: Vec<String> = (0..rng.random_range(1..=3)).map(|k| fmt!("f{j}{k}")).collect();
+        let mut calls = names.C();
+        let mut requires = String::new();
+        let mut imports = String::new();
+        for (i, theirs) in exported.iter().enumerate() {
+            if !rng.random_bool(0.7) {
+                continue;
+            }
+            requires.push_str(&fmt!("require module local/pkg/m{i}\n"));
+            for f in theirs {
+                match rng.random_range(0..3) {
+                    0 => {
+                        imports.push_str(&fmt!("import m{i}.{f}\n"));
+                        calls.push(f.C());
+                    }
+                    1 => calls.push(fmt!("m{i}.{f}")),
+                    _ => {}
+                }
+            }
+        }
+        let const_count = rng.random_range(1..=3);
+        let decls = consts_decls(rng, &names, &calls, const_count);
+        modules.push((fmt!("local/pkg/m{j}"), fmt!("{requires}{imports}{decls}")));
+        exported.push(names);
+    }
+    modules
 }
 
 /// F089 as the model decides it (`formal/Datalove/FunConsts.lean`) held to

@@ -1862,14 +1862,16 @@ resolve. -/
 def definedFuns (ss : List Stmt) : List String :=
   ss.filterMap fun | .fun_ f => Option.some f.name | _ => Option.none
 
-/-- One module of a world, given every module's own signatures by path. A
+/-- What one module of a world imports, given every module's own signatures
+by path: what its imports were found to have wrong, and the signatures it
+sees beside its own, those it imports and those it calls qualified. A
 module exports its functions' signatures and nothing else. Each import whose
 alias nothing is required under is F078, and one its module has no function
 of is F002, in the order written; then, of the rest, one of a name the module
 defines a function by is F106, and a second of one name is F059 if it comes
 from another module and nothing if from the same. A qualified call sees every
 function of the module its alias names. -/
-def checkWorldModule (own : List (String × List (String × Sig))) (m : ModuleSrc) : Array Code := Id.run do
+def worldImports (own : List (String × List (String × Sig))) (m : ModuleSrc) : Array Code × List (String × Sig) := Id.run do
   let reqSigs := m.requires.filterMap fun (a, p) => (own.lookup p).map (a, ·)
   let qualified := reqSigs.flatMap fun (a, ss) =>
     (a ++ ".", ({ params := [], ret := .void } : Sig)) :: ss.map fun (n, sig) => (a ++ "." ++ n, sig)
@@ -1892,7 +1894,13 @@ def checkWorldModule (own : List (String × List (String × Sig))) (m : ModuleSr
       | Option.none =>
         bound := (n, source) :: bound
         imported := imported ++ [(n, sig)]
-  checkModuleWith (imported ++ qualified) pre m.body
+  (pre, imported ++ qualified)
+
+/-- One module of a world, given every module's own signatures by path, as
+`worldImports` finds what it imports. -/
+def checkWorldModule (own : List (String × List (String × Sig))) (m : ModuleSrc) : Array Code :=
+  let (pre, extra) := worldImports own m
+  checkModuleWith extra pre m.body
 
 /-- The diagnostics of each module of a world, in order. Only a world whose
 modules each require only modules before them, each once under one alias,

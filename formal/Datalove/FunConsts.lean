@@ -29,6 +29,10 @@ refuses the const and `initScript` the script; `consts_agrees` in
 
 `Proofs/ConstSound.lean` shows that where this lets a script through, and
 the analysis does, evaluating its consts never reads what holds nothing.
+
+A module's consts are checked the same way, with what it imports in scope
+(`constModuleWith`, `constWorld`); the model does not run a world, so that
+is held to the Rust by `world_consts_agrees` alone.
 -/
 
 namespace Datalove.Fun
@@ -164,5 +168,26 @@ def constScript (ss : List Stmt) : Option Lit.Code :=
   match constTop sigs (funDefs sigs Γ 0 ss) Γ [] ss with
   | .ok _ => none
   | .error _ => some "F089"
+
+/-- Whether a module's consts are F089, its own functions' signatures and
+`extra`, those it imports, in scope. A const may call an imported function,
+whose module's consts are all evaluated before this module's are, so the
+search follows only the module's own functions, as `check_const_deps` does,
+and the analysis needs only the imported signatures. -/
+def constModuleWith (extra : List (String × Sig)) (ss : List Stmt) : Option Lit.Code :=
+  let sigs := (resolveNames ss).1 ++ extra
+  let Γ : Ctx := { ret := .void, sigs, inModule := true }
+  match constTop sigs (funDefs sigs Γ 0 ss) Γ [] ss with
+  | .ok _ => none
+  | .error _ => some "F089"
+
+/-- For each module of a world, in order, what the analysis of what holds a
+value refuses first, and F089 if one of its consts reads one not evaluated
+before it. -/
+def constWorld (ms : List ModuleSrc) : List (Option Lit.Code × Option Lit.Code) :=
+  let own := ms.map fun m => (m.path, (resolveNames m.body).1)
+  ms.map fun m =>
+    let extra := (worldImports own m).2
+    (initModuleWith extra m.body, constModuleWith extra m.body)
 
 end Datalove.Fun
