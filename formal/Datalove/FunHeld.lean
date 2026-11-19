@@ -107,6 +107,18 @@ def stepClashes (Γ : Ctx) (hs : List Held) (depth : Nat) (direct : Option Nat) 
   | .field _ :: ss => stepClashes Γ hs depth direct ss
   | .index k _ :: ss => clashes Γ hs depth direct false k ++ stepClashes Γ hs depth direct ss
 
+/-- The keys of a place an `out` argument writes part of, with it held, as
+a `set`'s keys are read: one with no `?` or `!` taken, into the map it is
+inserted in. A bare variable has none. -/
+def outKeyClashes (Γ : Ctx) (hs : List Held) (depth : Nat) : Expr → List Clash
+  | .place _ steps => outStepClashes Γ hs depth steps
+  | _ => []
+
+def outStepClashes (Γ : Ctx) (hs : List Held) (depth : Nat) : List Step → List Clash
+  | [] => []
+  | .field _ :: ss => outStepClashes Γ hs depth ss
+  | .index k m :: ss => clashes Γ hs depth none m.isNone k ++ outStepClashes Γ hs depth ss
+
 /-- Elements, each taken. -/
 def allClashes (Γ : Ctx) (hs : List Held) (depth : Nat) (direct : Option Nat) : List Expr → List Clash
   | [] => []
@@ -130,8 +142,8 @@ def rowClashes (Γ : Ctx) (hs : List Held) (depth : Nat) (direct : Option Nat) :
 
 /-- A call's arguments at depth `depth`, each with its parameter's mode: one
 passed `ref`, `mut` or `out` is held until the call, one passed `mut` or
-`out` is a write, one passed `out` is not read, and one passed `in` is
-taken. A const argument is not passed, and nothing of it is analyzed. Calls
+`out` is a write, one passed `out` is not read but for the keys of its
+steps (`outKeyClashes`), and one passed `in` is taken. A const argument is not passed, and nothing of it is analyzed. Calls
 inside an argument are one deeper. -/
 def argClashes (Γ : Ctx) (depth : Nat) (hs : List Held) : List Mode → List (Option Mode × Expr) → List Clash
   | p :: ps, (m, e) :: args =>
@@ -146,7 +158,7 @@ def argClashes (Γ : Ctx) (depth : Nat) (hs : List Held) : List Mode → List (O
       let write := match placeKey e with
         | some k => if written then against hs' (some depth) k else []
         | none => []
-      let read := if mode == .out then []
+      let read := if mode == .out then outKeyClashes Γ hs' (depth + 1) e
         else clashes Γ hs' (depth + 1) (match placeOf e with
           | some (_, []) => some depth
           | _ => none) (mode == .in_) e

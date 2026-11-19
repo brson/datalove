@@ -825,9 +825,10 @@ Four things are proved of it:
   reads what the model read early. `held_agrees` in `fun_tests` holds the
   Rust's O017 to the model's on statements that hold a place while they
   write or move one beside it, a field of it, the variable it is of or the
-  one it reads: over a thousand seeds none differ, 351 O017 and 2323
+  one it reads: over a thousand seeds none differ, 358 O017 and 2315
   accepted. Breaking one of the walk's rules, an operator's left operand not
-  held, makes 32 of 900 differ.
+  held, makes 32 of 900 differ. An `out` argument's keys are read as a
+  `set`'s are, with the place held (`outKeyClashes`).
 
 - **A script that checks runs soundly** (`Fun.runScript_sound`, in
   `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
