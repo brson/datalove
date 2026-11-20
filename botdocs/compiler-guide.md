@@ -1493,7 +1493,8 @@ and, for a `set`, at the move before the branches that it undoes.
 and a const parameter are ref bindings: a move out of one of a non-copy type is
 `CannotMoveConst` (O016) unless written with `@`. A const the analysis declared
 is a binding with `is_const`. One declared outside the body is only a name, and
-`OuterConsts` says which: in a function body every name it cannot resolve,
+`OuterConsts` says which, and a `mut` or `out` argument rooted in one is
+O011, as one rooted in a const binding is: in a function body every name it cannot resolve,
 since a body sees only its parameters, what it binds, consts and functions, and
 a function is never named as a value; in a script or expression unit the
 earlier units' consts, from `external_consts_over`, because an earlier unit's

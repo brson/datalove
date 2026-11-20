@@ -1070,7 +1070,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         if self.check_not_held(path, expr_key, Some(call)) {
             return;
         }
+        // A const declared outside the analysis is only a name here, and no
+        // more mutable than one declared in it.
         let Some(root) = self.expr_to_place_root(arg) else {
+            let name = place.root.text(self.db);
+            if self.is_outer_const(name) {
+                self.errors.push(AnalysisError::CannotMutateImmutable { expr_key, name: name.S() });
+            }
             return;
         };
         if self.binding_is_mutable(root) {

@@ -1,0 +1,29 @@
+----------
+module local/test/main
+----------
+
+// A const the function does not declare is only a name to the ownership
+// analysis of its body, and was let through as a `mut` argument: the callee
+// changed the const. It is as immutable as one the body declares.
+fun bump(mut x: [string])
+    set x = ["changed"]
+end fun
+
+const K: [string] = ["a"]
+
+fun outer(): [string]
+    call bump(mut K)
+    ret K@
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true
