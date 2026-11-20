@@ -153,7 +153,10 @@ impl Gen {
 
     /// An operand, at the chaos rate, naming any value of its kind, bare,
     /// whatever it holds, for the ownership pass to refuse.
-    fn chaos(&mut self, scope: &Scope, kind: Kind) -> Option<String> {
+    ///
+    /// Where the operand is `consumed`, naming an owned value bare moves it,
+    /// which the pass lets through if it held one, so it holds nothing after.
+    fn chaos(&mut self, scope: &mut Scope, kind: Kind, consumed: bool) -> Option<String> {
         if !self.chance(self.chaos_rate) {
             return None;
         }
@@ -161,7 +164,11 @@ impl Gen {
         if kind == Kind::Str {
             all.extend(scope.borrowed.iter().cloned());
         }
-        self.pick(&all)
+        let name = self.pick(&all)?;
+        if consumed && scope.owned.iter().any(|(n, _)| *n == name) {
+            scope.empty.insert(name.C());
+        }
+        Some(name)
     }
 
     /// A value of `kind` held in scope, moved if `consumed` and a move may
@@ -185,7 +192,7 @@ impl Gen {
     /// A string to read, `consumed` if where it goes takes it: a name in
     /// scope, a field of a struct that holds one, or a literal.
     fn string(&mut self, scope: &mut Scope, consumed: bool) -> String {
-        if let Some(any) = self.chaos(scope, Kind::Str) {
+        if let Some(any) = self.chaos(scope, Kind::Str, consumed) {
             return any;
         }
         if self.chance(0.15) {
@@ -202,7 +209,7 @@ impl Gen {
 
     /// A struct to read, as `string` reads a string, or a literal.
     fn structure(&mut self, scope: &mut Scope, consumed: bool) -> String {
-        if let Some(any) = self.chaos(scope, Kind::Struct) {
+        if let Some(any) = self.chaos(scope, Kind::Struct, consumed) {
             return any;
         }
         if !self.chance(0.3) {
@@ -217,7 +224,7 @@ impl Gen {
 
     /// An enum to match on or to keep: a fresh one, or a variable's, cloned.
     fn enumeration(&mut self, scope: &mut Scope, consumed: bool) -> String {
-        if let Some(any) = self.chaos(scope, Kind::Enum) {
+        if let Some(any) = self.chaos(scope, Kind::Enum, consumed) {
             return any;
         }
         match self.chance(0.5) {
@@ -247,6 +254,11 @@ impl Gen {
 
     /// Statements, and what the block left empty where it goes on to its
     /// end, or `None` where it leaves by a way out.
+    ///
+    /// Where every arm of a branch leaves, so does the block, and nothing
+    /// follows the branch: the ownership pass walks what would follow with
+    /// what the arms moved on their way out, which the generator does not
+    /// track.
     fn block(&mut self, scope: &Scope, out: &mut String) -> Option<BTreeSet<String>> {
         let mut scope = scope.C();
         let indent = "  ".repeat(scope.depth + 1);
@@ -361,6 +373,9 @@ impl Gen {
                         false => Some(BTreeSet::new()),
                     };
                     out.push_str(&fmt!("{indent}end if\n"));
+                    if then.is_none() && otherwise.is_none() {
+                        return None;
+                    }
                     scope.join(then);
                     scope.join(otherwise);
                     continue;
@@ -374,6 +389,9 @@ impl Gen {
                     out.push_str(&fmt!("{indent}else\n"));
                     let otherwise = self.block(&scope.nested(false), out);
                     out.push_str(&fmt!("{indent}end if\n"));
+                    if then.is_none() && otherwise.is_none() {
+                        return None;
+                    }
                     scope.join(then);
                     scope.join(otherwise);
                     continue;
@@ -400,6 +418,9 @@ impl Gen {
                         arms.push(self.block(&scope.nested(false), out));
                     }
                     out.push_str(&fmt!("{indent}end match\n"));
+                    if arms.iter().all(Option::is_none) {
+                        return None;
+                    }
                     for arm in arms {
                         scope.join(arm);
                     }
@@ -436,6 +457,10 @@ impl Gen {
 
 /// A script for a seed: the prelude, the function, and two calls of it, one
 /// operand in `1 / chaos` naming whatever it likes.
+///
+/// Where the body goes on to its end, the function logs each of `b`, `s`,
+/// `p` and `e` that still holds a value before it returns, so that what the
+/// body left in them reaches the log the engines are held to.
 pub fn moves_script(seed: u64, chaos: f64) -> String {
     let mut g = Gen { rng: SeededRng::derive(seed, "ownership-fuzz"), fresh: 0, chaos_rate: chaos };
     let mut scope = Scope {
@@ -453,10 +478,17 @@ pub fn moves_script(seed: u64, chaos: f64) -> String {
     scope.declare("p", Kind::Struct, true, true);
     scope.declare("e", Kind::Enum, true, true);
     let mut body = String::new();
-    let end = match g.block(&scope, &mut body) {
+    let after = g.block(&scope, &mut body);
+    let mut end = String::new();
+    if let Some(empty) = &after {
+        for name in ["b", "s", "p", "e"].into_iter().filter(|n| !empty.contains(*n)) {
+            end.push_str(&fmt!("  debuglog {name}\n"));
+        }
+    }
+    end.push_str(match &after {
         Some(empty) if empty.contains("a") => "  ret none\n",
         _ => "  ret some a\n",
-    };
+    });
     fmt!("{PRELUDE}\
 fun go(ref l: [string], mut m: [string], s: string, c: bool): ?string
   var a: string = \"a\"
