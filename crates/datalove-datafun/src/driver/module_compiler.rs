@@ -635,7 +635,29 @@ fn module_function_registry<'db>(
 
     add_native_rider_units(db, parsed_graph, lowering.func_id_map(db), &mut registry);
 
+    if cfg!(debug_assertions) {
+        check_drops(&registry);
+    }
+
     Arc::new(registry)
+}
+
+/// Check that every module function destroys what it owns exactly once
+/// (`datalove_datafun_ir::drop_check`), panicking where one does not.
+fn check_drops(registry: &ModuleFunctionRegistry) {
+    use datalove_datafun_ir::{CodeRef, IrCodeUnit};
+    for ((module, _), unit) in registry.iter_module_code_units_with_ids() {
+        let callee = |func: &CodeRef| -> Option<&IrCodeUnit> {
+            match *func {
+                CodeRef::Local(id) => registry.get_module_function_as_unit(module, id),
+                CodeRef::Module { module, id } => registry.get_module_function_as_unit(module, id),
+                CodeRef::External { .. } => panic!("{} calls into a script unit", unit.name),
+            }
+        };
+        if let Err(e) = datalove_datafun_ir::drop_check::check_unit(unit, &callee) {
+            panic!("{e}");
+        }
+    }
 }
 
 /// One module's code units, keyed by the id the backends address them by.

@@ -1574,6 +1574,12 @@ pub struct DropSchedule {
 }
 ```
 
+Nothing compares the lowered IR with the schedule, but a debug build checks
+that what the IR does holds together: `drop_check` in the IR crate refuses a
+leak, a second drop, a store over a value and a way out that leaves anything
+owed, on every module function and script unit; see
+[The drop check](ir.md#user-content-the-drop-check).
+
 `before_set_target_early_return` is computed before RHS moves are analyzed, so
 it includes the RHS binding, which is still live when a set-index bounds check
 fails.

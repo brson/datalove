@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use bct::lookup::LookupMap;
 
 pub mod dense;
+pub mod drop_check;
 pub mod display;
 pub mod frame_layout;
 pub mod inline;
@@ -32,7 +33,7 @@ pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistr
 pub struct ValueId(pub u32);
 
 /// Mutable slot - for var bindings, can be reassigned.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct SlotId(pub u32);
 
 /// Function parameter - reference to caller's data.
@@ -40,7 +41,7 @@ pub struct SlotId(pub u32);
 pub struct ParamId(pub u32);
 
 /// Block identifier.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct BlockId(pub u32);
 
 /// Globally unique function identifier within a compilation context.
@@ -1340,10 +1341,11 @@ pub enum Instruction {
         operand: Operand,
     },
 
-    /// Checked binary operation (produces Copy result + overflow flag).
+    /// Checked binary operation: a result and an overflow flag.
     ///
-    /// **Ownership:** Borrows `lhs` and `rhs`, produces `dest` and `overflow`.
-    /// **Tracking:** None - results are Copy types.
+    /// **Ownership:** Borrows `lhs` and `rhs`, produces `overflow`, and
+    /// `dest` only where `overflow` is false: an `int` or dynamic result is
+    /// not written on overflow.
     BinOpChecked {
         dest: ValueId,
         overflow: ValueId,
@@ -1386,10 +1388,10 @@ pub enum Instruction {
         rhs: Operand,
     },
 
-    /// Checked unary operation (produces Copy result + overflow flag).
+    /// Checked unary operation: a result and an overflow flag.
     ///
-    /// **Ownership:** Borrows `operand`, produces `dest` and `overflow`.
-    /// **Tracking:** None - results are Copy types.
+    /// **Ownership:** Borrows `operand`, produces `overflow`, and `dest` only
+    /// where `overflow` is false.
     UnaryOpChecked {
         dest: ValueId,
         overflow: ValueId,

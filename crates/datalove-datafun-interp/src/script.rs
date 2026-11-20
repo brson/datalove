@@ -76,6 +76,9 @@ impl IrInterpreter {
         let mut frame = script_frame.frame();
 
         let ctx = ExecutionContext::new(at, &unit.nested_units);
+        if cfg!(debug_assertions) {
+            check_drops(unit, ctx, &env.registry);
+        }
 
         // Execute blocks with registry for function lookups and frames for slot access.
         let result = self.execute_blocks(
@@ -111,5 +114,22 @@ impl IrInterpreter {
         );
 
         result
+    }
+}
+
+/// Check that a script unit and its functions destroy what they own exactly
+/// once (`datalove_datafun_ir::drop_check`), panicking where one does not.
+fn check_drops(unit: &IrCodeUnit, ctx: ExecutionContext<'_>, registry: &FunctionRegistry) {
+    let callee = |func: &CodeRef| -> Option<&IrCodeUnit> {
+        match *func {
+            CodeRef::Local(id) => ctx.find_local_function(id),
+            CodeRef::External { unit, id } => registry.get_external_function_as_unit(unit, id),
+            CodeRef::Module { module, id } => registry.get_module_function_as_unit(module, id),
+        }
+    };
+    for unit in std::iter::once(unit).chain(&unit.nested_units) {
+        if let Err(e) = datalove_datafun_ir::drop_check::check_unit(unit, &callee) {
+            panic!("{e}");
+        }
     }
 }

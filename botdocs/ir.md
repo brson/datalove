@@ -478,7 +478,9 @@ ownership. "Borrows" means the operand survives; "consumes" means it does not.
 `BinOp` covers `Add Sub Mul Div Mod Eq Ne Lt Le Gt Ge And Or BitAnd BitOr
 BitXor Shl Shr LogicAnd LogicOr LogicXor`; `UnaryOp` covers `Neg Not BitNot
 LogicNot`. The checked forms produce the result and a separate overflow flag,
-and the branch on that flag is what the source's `+!` and `+?` become.
+and the branch on that flag is what the source's `+!` and `+?` become. The
+result holds a value only where the flag is false: an `int` or dynamic one
+is not written on overflow.
 
 `OpAssign` and `OpAssignChecked` are what `set p op= v` lowers to: the place,
 a slot, parameter or reference as for `RefStore`, is updated where it is. An
@@ -1036,7 +1038,8 @@ assume.
 5. A `Goto` or `Branch` passes exactly as many arguments as the target block
    declares parameters, of matching types.
 6. A linear value is consumed on every path, exactly once, either by an
-   instruction that consumes it or by a `Drop`.
+   instruction that consumes it or by a `Drop`. `drop_check` checks this,
+   and the rest of what is owned, in a debug build; see below.
 7. A tracked destination is written only by a `Tracked` variant, and a precise
    one only by a precise variant.
 8. An access instruction that assumes a check -- `MapValueRef` and the
@@ -1050,6 +1053,37 @@ assume.
     enclosing function's `descriptor_table`.
 13. A `Call`'s `bindings` has one entry per type parameter of the callee, and
     is empty when the callee has none.
+
+### The drop check
+
+`drop_check::check_unit` follows every path through a unit and keeps what
+holds a value at each point: the values defined and not yet consumed, the
+slots, the parameters, and the referent of a reference that a `drop.ref` or
+`drop.field` emptied. It refuses a read or a consume of what holds nothing, a
+store over what still holds a value, two ways into a block that disagree
+about a value or an untracked place, and a way out that leaves a value or a
+slot holding something, an `in` parameter not consumed, or a `mut` or `out`
+one not holding a value. A call takes each argument by its callee's mode,
+so the check is handed a way to find the callee.
+
+What it knows besides the instruction tables:
+
+- An unwrap's payload, a get's element, and a checked operation's result
+  hold a value only where their flag says; the branch on the flag settles it.
+- A value that holds nothing (`simplify::holding_nothing`: a `none`, an
+  empty list) need not be dropped, as `remove_empty_drops` takes those drops
+  away; nor need the scrutinee in a switch arm whose variant owns nothing.
+- A switch whose cases are every variant of its enum never takes its default.
+- A tracked place may hold a value on one way into a block and not another,
+  and is then only dropped through its byte or stored to after a drop.
+
+It does not follow aliasing: two references to one place are two places to
+it, and a slot read while a reference into it is emptied is not seen.
+
+A debug build runs it on every module function when the module registry is
+built (`module_function_registry`), and on every script unit and its
+functions before the interpreter runs it (`run_script_unit`), and panics on
+what it refuses. Its own tests plant one fault each in a hand-built unit.
 
 ## 17. Tests
 

@@ -31,8 +31,8 @@ fn make_func_unit(
         const_values: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         context: CodeUnitContext::Function(FunctionContext {
+            param_modes: vec![ParamMode::In; params.len()],
             params,
-            param_modes: vec![],
             param_types,
             return_type,
             tracked_params: vec![],
@@ -2112,6 +2112,8 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
                 instructions: vec![
                     // Create struct constant (no explicit drop - destroyed via unit_end_values).
                     Instruction::Const { dest: ValueId(0), value: struct_const },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2163,6 +2165,8 @@ fn test_ctfe_struct_with_string_and_debuglog() {
                     Instruction::Const { dest: ValueId(0), value: struct_const },
                     // DebugLog the struct.
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2209,6 +2213,8 @@ fn test_const_error() {
                     Instruction::Const { dest: ValueId(0), value: error_const },
                     // DebugLog to verify it can be printed.
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2250,6 +2256,8 @@ fn test_const_data() {
                     Instruction::Const { dest: ValueId(0), value: data_const },
                     // DebugLog to verify it can be printed.
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2295,6 +2303,8 @@ fn test_const_result_err() {
                     Instruction::Const { dest: ValueId(0), value: result_err_const },
                     // DebugLog to verify it can be printed.
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2335,6 +2345,8 @@ fn test_const_data_with_string() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2375,6 +2387,8 @@ fn test_const_error_with_i32() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2421,6 +2435,8 @@ fn test_const_error_with_tuple() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2467,6 +2483,8 @@ fn test_const_data_with_tuple() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2511,6 +2529,8 @@ fn test_const_result_err_with_i32() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: result_err_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2551,6 +2571,8 @@ fn test_const_data_with_bool() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },
@@ -2591,6 +2613,8 @@ fn test_const_error_with_unit() {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
                     Instruction::DebugLog { operand: Operand::Value(ValueId(0)) },
+                    // What lowering emits for a binding the unit leaves to the session.
+                    Instruction::UnitEndDrop { operand: Operand::Value(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: None },
             },

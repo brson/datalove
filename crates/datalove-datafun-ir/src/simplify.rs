@@ -242,7 +242,24 @@ pub fn remove_empty_drops(unit: &mut IrCodeUnit) -> bool {
     true
 }
 
-/// The values `unit` drops that hold nothing.
+/// The values `unit` drops that hold nothing; see [`holding_nothing`].
+pub fn empty_drops(unit: &IrCodeUnit) -> ValueSet {
+    let drops = unit.blocks.iter().flat_map(|b| &b.instructions)
+        .any(|instr| matches!(instr, Instruction::Drop { operand: Operand::Value(_) }));
+    if !drops {
+        return ValueSet::with_capacity(0);
+    }
+    let empty = holding_nothing(unit);
+    unit.blocks.iter()
+        .flat_map(|b| &b.instructions)
+        .filter_map(|instr| match instr {
+            Instruction::Drop { operand: Operand::Value(v) } if empty.contains(v) => Some(*v),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The values of `unit` that hold nothing, which nothing need drop.
 ///
 /// A value holds nothing if it was made as a `none` or an empty list, or moved
 /// or copied from one that was, and nothing has written it since. A value is
@@ -250,11 +267,9 @@ pub fn remove_empty_drops(unit: &mut IrCodeUnit) -> bool {
 /// never writes one, since only a place can be passed `mut` or `out` (O011,
 /// O012), and inlining puts the caller's place where the callee's parameter
 /// was.
-pub fn empty_drops(unit: &IrCodeUnit) -> ValueSet {
+pub fn holding_nothing(unit: &IrCodeUnit) -> ValueSet {
     let mut written = ValueSet::with_capacity(unit.value_count);
-    let mut drops = false;
     for instr in unit.blocks.iter().flat_map(|b| &b.instructions) {
-        drops |= matches!(instr, Instruction::Drop { operand: Operand::Value(_) });
         instr.for_each_place_use(|op, place_use| {
             if let Operand::Value(v) = op
                 && matches!(place_use, PlaceUse::Replaced | PlaceUse::Changed | PlaceUse::Lent)
@@ -262,9 +277,6 @@ pub fn empty_drops(unit: &IrCodeUnit) -> ValueSet {
                 written.insert(v);
             }
         });
-    }
-    if !drops {
-        return ValueSet::with_capacity(0);
     }
     let defs = definitions(unit);
     let holds_nothing = |mut v: ValueId| loop {
@@ -279,13 +291,7 @@ pub fn empty_drops(unit: &IrCodeUnit) -> ValueSet {
             _ => return false,
         }
     };
-    unit.blocks.iter()
-        .flat_map(|b| &b.instructions)
-        .filter_map(|instr| match instr {
-            Instruction::Drop { operand: Operand::Value(v) } if holds_nothing(*v) => Some(*v),
-            _ => None,
-        })
-        .collect()
+    (0..unit.value_count).map(ValueId).filter(|&v| holds_nothing(v)).collect()
 }
 
 /// How many times each value is read.
