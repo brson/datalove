@@ -262,21 +262,43 @@ impl<'db> HintGen<'db> {
     }
 
     /// A hint to convert: often a `rec` at the top, which is where meeting at
-    /// the head looks.
+    /// the head looks, and a third of those with a second `rec` straight
+    /// under it, whose one-step unfolding differs from its full one, which
+    /// a body chosen at random almost never gives.
     pub fn top(&mut self, depth: u32) -> TypeHint<'db> {
         let mut scope = Vec::new();
         if !self.rng.random_bool(0.4) {
             return self.hint(depth, &mut scope);
         }
-        let name = self.pick(REC_NAMES);
-        scope.push(name);
-        let mut body = self.hint(depth - 1, &mut scope);
-        // A body that is only a leaf is mostly a scalar, which never uses the
-        // name; give it a part to use the name in.
-        while matches!(body, TypeHint::Alias(_)) || scalar_hint_name(&body).is_some() {
-            body = self.hint(depth - 1, &mut scope);
+        let outer = self.pick(REC_NAMES);
+        scope.push(outer);
+        let inner = self.rng.random_bool(0.3).then(|| {
+            let others: Vec<&'static str> = REC_NAMES.iter().copied().filter(|n| *n != outer).collect();
+            others[self.rng.random_range(0..others.len())]
+        });
+        scope.extend(inner);
+        // Most bodies leave a name of two unused or unguarded, so one with two
+        // is tried a few times for one that converts.
+        let tries = if inner.is_some() { 20 } else { 1 };
+        let mut hint = None;
+        for _ in 0..tries {
+            let mut body = self.hint(depth - 1, &mut scope);
+            // A body that is only a leaf is mostly a scalar, which never uses
+            // the names; give it a part to use them in.
+            while matches!(body, TypeHint::Alias(_)) || scalar_hint_name(&body).is_some() {
+                body = self.hint(depth - 1, &mut scope);
+            }
+            if let Some(inner) = inner {
+                body = TypeHint::Rec(TypeHintRec { name: self.text(inner), body: Box::new(body), local_index: None });
+            }
+            let candidate = TypeHint::Rec(TypeHintRec { name: self.text(outer), body: Box::new(body), local_index: None });
+            let converts = datalove_datalit::tycheck::convert_type_hint(self.db, &candidate).is_ok();
+            hint = Some(candidate);
+            if converts {
+                break;
+            }
         }
-        TypeHint::Rec(TypeHintRec { name: self.text(name), body: Box::new(body), local_index: None })
+        hint.X()
     }
 
     fn fields(&mut self, depth: u32, scope: &mut Vec<&'static str>) -> Vec<TypeHintNamedField<'db>> {

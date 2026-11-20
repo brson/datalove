@@ -169,7 +169,12 @@ seven nodes in a small grammar with three `rec` names, that each recursive
 type meets and adapts both ways to its one-step and its full unfolding. The
 grammar has three names because that is what a type beside its one-step
 unfolding takes, and the test counts the types that start with more than one
-`rec` (108 at the default size), which are the ones that matter.
+`rec` (108 at the default size), which are the ones that matter. The
+generator puts a second `rec` straight under a third of the `rec`s it puts
+at the top, trying a body until the type converts, since one chosen at
+random almost never uses both names well: at the default seeds twenty-two
+types of the pool start with two, where there were none, and putting back
+the meeting that unfolded only one side makes twenty-two chains fail.
 
 ## What it found
 
@@ -1074,6 +1079,3 @@ In rough order of what to do next:
   alias taken twice, a rider and a name used above its import are the
   Rust's alone. Nor does it run a world, so a module's F089 is tested, not
   proved to keep its consts from reading what holds nothing.
-- **The random generator rarely makes a type that starts with two `rec`s**,
-  so the transitivity chains in `law_tests` would not have found the third
-  hole above; the exhaustive test does.

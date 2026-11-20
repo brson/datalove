@@ -60,6 +60,8 @@ fn relation_laws() {
     let db = &Db::default();
     let (pool, _) = type_pool(db, seeds.iter(), 20, 5);
     let pairs = pairs(db, &pool, seeds.start);
+    let nested = pool.iter().filter(|t| matches!(t, Type::Rec(r) if matches!(*r.body, Type::Rec(_)))).count();
+    println!("{} types, {nested} starting with two recs", pool.len());
 
     let (meet_chains, meet_failures) =
         transitivity_failures(db, &pairs, |a, b| tc::types_equivalent_at_head(db, a, b));
@@ -69,6 +71,7 @@ fn relation_laws() {
     report("@ is transitive", adapt_chains, &adapt_failures);
 
     assert!(meet_chains > 0 && adapt_chains > 0, "no chains to test");
+    assert!(nested > 0, "no type starts with two recs, where unfolding once and all the way differ");
     assert!(meet_failures.is_empty(), "meeting at the head is not transitive");
     assert!(adapt_failures.is_empty(), "@ is not transitive");
 }
