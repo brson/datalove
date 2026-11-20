@@ -37,7 +37,7 @@ todo
 
 **Part 3. Results and Discussion**
 
-- [A complete set of rules for recompiles and reruns for moves and mutations](#user-content-a-complete-set-of-rules-for-recompiles-and-reruns-for-moves-and-mutations)
+- [Rerun rules for mutated and moved bindings](#user-content-rerun-rules-for-mutated-and-moved-bindings)
 - [Functions and modules are bindings too](#user-content-functions-and-modules-are-bindings-too)
 - [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
 - [Comparing to the literature](#user-content-comparing-to-the-literature)
@@ -495,11 +495,11 @@ Looking only at the new code reruns unit 4 but not unit 1: `a == 101`, `c == 101
 
 
 
-## A complete set of rules for recompiles and reruns for moves and mutations
+## Rerun rules for mutated and moved bindings
 
 A session is a list of units, run in order.
-A unit provides bindings of its own,
-and performs _accesses_ on the bindings of earlier units:
+A unit _provides_ bindings of its own,
+and _accesses_ the bindings of earlier units:
 
 | access    | what it does to the binding |
 |-----------|-----------------------------|
@@ -509,43 +509,95 @@ and performs _accesses_ on the bindings of earlier units:
 | take      | moves the value out, leaving the binding empty |
 | revive    | overwrites a binding an earlier unit took |
 
-The accesses are what the compiler sees in the code.
-A write that might not happen,
+A write that might not happen
 because it's conditional,
 or that writes only part of the binding,
 counts as an update.
 
 A _step_ starts with one _modification_ of one unit,
-the _triggering unit_,
-and ends when the session holds what a fresh run of the current code would.
-A modification _retracts_ the unit's old code,
-_applies_ its new code,
-or both:
+the _triggering unit_.
+That unit's old revision and new revision are analyzed to decide
+which bindings to _restore_, by _scheduling_ other units to rerun.
+Each of those scheduled rerun units in turn become the triggering unit
+and receive the same analysis.
+This analysis proceeds to a fixed point and then all affected units are run in order.
 
-| modification | retract the old code | apply the new code |
-|--------------|----------------------|--------------------|
-| add          | -                    | yes                |
-| fix          | -                    | yes                |
-| break        | yes                  | -                  |
-| delete       | yes                  | -                  |
-| edit         | yes                  | yes                |
-| rerun        | yes                  | yes, the same code |
-| data change  | yes                  | yes, the same code over new data |
+The restore analysis is perform on both the old and new revision of the code.
+In some cases one of the revisions is ignored,
+because of compile failure, or because it does not exist,
+according to this table:
+
+| modification | old revision         | new revision         |
+|--------------|----------------------|----------------------|
+| add          | -                    | yes                  |
+| fix          | no                   | yes                  |
+| delete       | yes                  | -                    |
+| break        | yes                  | no                   |
+| edit         | yes                  | yes                  |
+| schedule rerun | yes                  | yes                  |
+| data change  | yes                  | yes                  |
 | reorder      | yes, in the old place | yes, in the new place |
-
-A change to the data a unit requires is a rerun of that unit,
-except that it now provides different values.
-Its code is the same,
-so it does to earlier bindings what it did before.
-If the new data doesn't have the type the unit requires it at,
-the unit no longer compiles,
-and the change is a break.
 
 A reorder is a delete and an add of the same unit,
 made in one step,
 so the session as it would stand between the two never runs.
+The restore analysis for the old revision needs to be conducted
+from the old location of the unit,
+and for the new revision in the new location.
 
-The modification table says which halves a modification has.
+For each binding in each triggering unit we restore if:
+
+- the old code updated, overwrote, took, or revived _and_
+  the new code does not overwrite or revive.
+- the new code reads, updates or takes _and_ a subsequent unit
+  overwrites, updates or takes.
+
+To restore a binding we schedule its provider
+and all before the triggering unit that
+updated, overwrote, took, or revived it.
+We also schedule subsequent units that ... todo.
+
+
+
+
+
+<!--
+
+A _step_ starts with one _modification_ of one unit,
+the _triggering unit_,
+and ends when the session holds what a fresh run of the current code would.
+Depending on the kind of modification we must
+_retract_ the effects of the old code,
+_apply_ the effects of the new code,
+or both.
+
+| modification | retract              | apply                |
+|--------------|----------------------|----------------------|
+| add          | -                    | yes                  |
+| fix          | -                    | yes                  |
+| delete       | yes                  | -                    |
+| break        | yes                  | -                    |
+| edit         | yes                  | yes                  |
+| rerun        | yes                  | yes                  |
+| data change  | yes                  | yes                  |
+| reorder      | yes, in the old place | yes, in the new place |
+
+A change to the data in a unit is a rerun of that unit,
+except that it now provides different values.
+Its code is the same,
+so it does to earlier bindings what it did before.
+A reorder is a delete and an add of the same unit,
+made in one step,
+so the session as it would stand between the two never runs.
+
+To retract or apply we must _restore_ the bindings
+mentioned in the triggering unit according to its old and new accesses,
+as well as the accesses to those bindings 
+
+
+
+
+
 The rules below say what each half calls for:
 more modifications,
 first back to the units before the triggering unit `T`,
@@ -601,6 +653,8 @@ is only known once it is compiled,
 so each unit is compiled as it is collected.
 Collect them until nothing new is added,
 then run the collected units in order.
+
+-->
 
 
 
