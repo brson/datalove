@@ -61,7 +61,7 @@ impl<'db> Parser<'db> {
             // a bool, with `c`, and `a .< b .< c` is refused by the types only
             // as long as bools are not ordered; neither means what it reads as.
             if is_comparison(op) && lhs_is_comparison {
-                use datalove_diagnostic::DiagnosticBuilderExt;
+                use datalove_datalit::parser_util::EmitTo;
                 let ts = self.peek_text_span();
                 let op_text = ts.source.as_str(self.db)[ts.span.C()].S();
                 self.had_error = true;
@@ -69,7 +69,7 @@ impl<'db> Parser<'db> {
                     .code(PCode::ChainedComparison.as_str())
                     .primary_label(ts, "comparisons do not chain")
                     .note("parenthesize the comparison whose result is being compared, or join two comparisons with `and`")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
 
             // Consume the operator.
@@ -300,7 +300,7 @@ impl<'db> Parser<'db> {
     /// An index is digits that fit a `u32`; a name is a name. Anything else
     /// is reported (P079) and stands in as a field no type has.
     pub(super) fn parse_field_selector(&mut self) -> ast::FieldSelector<'db> {
-        use datalove_diagnostic::DiagnosticBuilderExt;
+        use datalove_datalit::parser_util::EmitTo;
         let ts = self.error_span();
         if let Some(word) = self.peek_word() {
             if word.chars().all(|c| c.is_ascii_digit()) {
@@ -316,7 +316,7 @@ impl<'db> Parser<'db> {
         bct::diagnostic::DiagnosticBuilder::error(self.db, "expected a field name or a tuple index after `.`")
             .code(PCode::BadFieldSelector.as_str())
             .primary_label(ts, "not a field name, nor a tuple index that fits a `u32`")
-            .emit_parse();
+            .emit_to(&self.sink);
         // A word that is neither is taken, so it is not reported again.
         if self.peek_word().is_some() {
             self.next();
@@ -496,7 +496,7 @@ impl<'db> Parser<'db> {
         let payload = self.parse_expr_primary();
         let payload = self.parse_postfix_try_operators(payload);
         if self.peek_binop().is_some() {
-            use datalove_diagnostic::DiagnosticBuilderExt;
+            use datalove_datalit::parser_util::EmitTo;
             let ts = self.peek_text_span();
             let op = ts.source.as_str(self.db)[ts.span.C()].S();
             self.had_error = true;
@@ -505,7 +505,7 @@ impl<'db> Parser<'db> {
                 .primary_label(ts, "the payload ends before this")
                 .note(&fmt!("a payload is one expression. Parenthesize `a {op} b` to put the \
 operation in the payload, or the whole constructor to apply it to what is built"))
-                .emit_parse();
+                .emit_to(&self.sink);
         }
         payload
     }
@@ -695,7 +695,10 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")))
                                         }
                                         _ => {
-                                            return self.emit_expr_error(ts,
+                                            // Where the `(` should be: what is
+                                            // there instead, or the gap.
+                                            let at = self.peek_text_span();
+                                            return self.emit_expr_error(at,
                                                 "expected '(' after intrinsic name",
                                                 PCode::IcallWithoutParen,
                                                 "expected '('"

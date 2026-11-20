@@ -4,24 +4,35 @@
       {
         "kind": "ParseError",
         "message": "unterminated fun body"
+      },
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "y",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "b",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "y",
+            "type_hint": "Int"
+          }
+        ],
+        "return_type": "Int"
       }
     ]
   },
   "diagnostics": [
-    {
-      "code": "P074",
-      "labels": [
-        {
-          "message": "`fun` is only read at the top level",
-          "span": [
-            359,
-            362
-          ],
-          "text": "fun"
-        }
-      ],
-      "message": "`fun` inside a block"
-    },
     {
       "code": "P034",
       "labels": [

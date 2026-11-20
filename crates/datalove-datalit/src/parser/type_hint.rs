@@ -50,6 +50,10 @@ pub trait TypeHintStream<'db>: TokenStream<'db> {
     /// there and have to be brought back for the outer stream's table to be
     /// the one the indices count into.
     fn absorb_aliases(&mut self, spans: Vec<TextSpan>, next: u32);
+
+    /// Where the stream's diagnostics go, for the parsers a type hint makes
+    /// for its branches to file theirs in the same place.
+    fn sink(&self) -> crate::parser_util::Sink;
 }
 
 /// Read one type hint, consuming exactly the tokens that are part of it.
@@ -69,7 +73,12 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
     // and a datalit parser reads it however the outer stream is spelled.
     let db = stream.db();
     let text = stream.source_text();
-    let branch = |iter, base| Parser::from_branch_numbering_aliases(db, iter, text, base);
+    let sink = stream.sink();
+    let branch = |iter, base| {
+        let mut parser = Parser::from_branch_numbering_aliases(db, iter, text, base);
+        parser.sink = sink.C();
+        parser
+    };
 
     // Parse base type.
     match stream.peek_word() {
@@ -329,6 +338,10 @@ impl<'db> TypeHintStream<'db> for Parser<'db> {
     fn absorb_aliases(&mut self, spans: Vec<TextSpan>, next: u32) {
         self.alias_spans.extend(spans);
         self.alias_counter = next;
+    }
+
+    fn sink(&self) -> crate::parser_util::Sink {
+        self.sink.C()
     }
 }
 

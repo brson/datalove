@@ -41,6 +41,36 @@ pub fn escape_complaint(error: &bct::escapes::EscapeError) -> (String, String) {
     )
 }
 
+/// Where a parser's diagnostics go: filed as they are made, or kept.
+///
+/// A chunk keeps them, and hands them back to the parse that asked for it to
+/// file at the place in the collection they were made, which keeps them in
+/// the order a parse of the whole collection would have filed them in. Shared
+/// with the chunk's sub-parsers, for the same reason.
+pub type Sink = Option<std::rc::Rc<std::cell::RefCell<Vec<bct::diagnostic::StoredDiagnostic>>>>;
+
+/// Filing a diagnostic where a parser's diagnostics go.
+pub trait EmitTo {
+    fn emit_to(self, sink: &Sink);
+}
+
+impl EmitTo for bct::diagnostic::DiagnosticBuilder<'_> {
+    fn emit_to(self, sink: &Sink) {
+        match sink {
+            Some(kept) => kept.borrow_mut().push(self.build_stored()),
+            None => datalove_diagnostic::DiagnosticBuilderExt::emit_parse(self),
+        }
+    }
+}
+
+/// File a diagnostic built earlier, as [`EmitTo`] files one being built.
+pub fn emit_stored(db: &dyn salsa::Database, sink: &Sink, diagnostic: bct::diagnostic::StoredDiagnostic) {
+    match sink {
+        Some(kept) => kept.borrow_mut().push(diagnostic),
+        None => datalove_diagnostic::ParseDiagnostic::emit_stored(db, diagnostic),
+    }
+}
+
 /// The names a list has given so far, for refusing one given twice.
 ///
 /// Struct fields, table columns and enum variants are each named once. Both
@@ -54,15 +84,15 @@ impl<'db> SeenNames<'db> {
     pub fn take(
         &mut self,
         db: &'db dyn salsa::Database,
+        sink: &Sink,
         name: bct::text::InternedText<'db>,
         ts: TextSpan,
         what: &str,
     ) -> bool {
-        use datalove_diagnostic::DiagnosticBuilderExt;
         match self.take_reported(db, name, ts, what) {
             None => true,
             Some(twice) => {
-                twice.emit_parse();
+                twice.emit_to(sink);
                 false
             }
         }
@@ -228,37 +258,92 @@ pub fn tensor_needs_header(shape: &[u32]) -> bool {
     shape.len() > 1 && (shape[0] == 1 || shape.contains(&0))
 }
 
-/// Report the brackets the bracer could not match: a close with no open, and
-/// an open never closed.
+/// The errors a parse finds before it reads a statement: the brackets the
+/// bracer could not match, a close with no open and an open never closed, and
+/// names written outside ASCII.
 ///
-/// Both parsers call this, the brackets being syntax they share. The bracer
-/// has already recovered, so parsing goes on over its tree either way.
-pub fn emit_bracer_errors<'db>(
+/// Both parsers file these, the brackets and names being syntax they share.
+/// The bracer has already recovered, so parsing goes on over its tree either
+/// way.
+pub fn prepass_errors<'db>(
     db: &'db dyn salsa::Database,
     bracer: bct::bracer::Bracer<'db>,
     source: bct::input::Source,
-) {
+) -> Vec<bct::diagnostic::StoredDiagnostic> {
     use bct::diagnostic::DiagnosticBuilder;
-    use datalove_diagnostic::DiagnosticBuilderExt;
     let tokens = bracer.lexed(db).tokens(db);
-
+    let mut out = vec![];
     for (token_range, sigil) in bracer.errors(db) {
         // A stray close is reported as its own one-token range. An unclosed
         // open runs to wherever it ended, which is one token too where the
         // open is the last token of the source, so the token says which.
         let Some(token) = tokens.get(token_range.start) else { continue };
         let ts = TextSpan::new(source, token.span());
-        if token.is_close_sigil() {
+        let builder = if token.is_close_sigil() {
             DiagnosticBuilder::error(db, &rmx::std::format!("unmatched '{}'", sigil.as_str()))
                 .code(DCode::UnmatchedClose.as_str())
                 .primary_label(ts, &rmx::std::format!("this '{}' has no matching '{}'",
                     sigil.as_str(), sigil.open_sigil().as_str()))
-                .emit_parse();
         } else {
             DiagnosticBuilder::error(db, &rmx::std::format!("unclosed '{}'", sigil.as_str()))
                 .code(DCode::UnclosedOpen.as_str())
                 .primary_label(ts, &rmx::std::format!("this '{}' is never closed", sigil.as_str()))
-                .emit_parse();
+        };
+        out.push(builder.build_stored());
+    }
+    for span in bct::parser_util::non_ascii_names(tokens, source.as_str(db)) {
+        out.push(bct::parser_util::non_ascii_name_error(db, source, span)
+            .code(DCode::NonAsciiName.as_str())
+            .build_stored());
+    }
+    out
+}
+
+/// Where each statement of a source begins, as byte offsets in order.
+///
+/// A statement is a logical line: it begins at a token with a line break
+/// before it, outside brackets, which join the lines inside them, as the
+/// bracer matched them. A datalit literal is one statement however many lines
+/// it spans; its parse files with no statement starts at all.
+pub fn statement_starts<'db>(db: &'db dyn salsa::Database, bracer: bct::bracer::Bracer<'db>) -> Vec<usize> {
+    // A line's start is its first token, a stray close passed over included.
+    bct::split::Lines::new(bracer.iter(db)).map(|line| line.raw(line.position()).span().start).collect()
+}
+
+/// File the first error of each statement, and every diagnostic that is not
+/// an error.
+///
+/// A parse reports at most one error for each statement: the first, in the
+/// order of the source, the one nearest the fault, with what it led to
+/// dropped. A statement's errors are those whose primary label begins in it,
+/// `starts` being where each statement begins; with none, the source is one.
+pub fn file_first_error_per_statement(
+    db: &dyn salsa::Database,
+    starts: &[usize],
+    diagnostics: Vec<bct::diagnostic::StoredDiagnostic>,
+) {
+    use bct::diagnostic::{LabelStyle, Severity};
+    let at = |d: &bct::diagnostic::StoredDiagnostic| {
+        d.labels.iter().find(|l| l.style == LabelStyle::Primary).or(d.labels.first()).map_or(0, |l| l.span.start)
+    };
+    // What comes before the first statement, a close passed over or a
+    // comment, is part of it.
+    let statement = |pos: usize| starts.partition_point(|&s| s <= pos).saturating_sub(1);
+    let mut first: Vec<Option<(usize, usize)>> = vec![None; starts.len().max(1)];
+    for (k, d) in diagnostics.iter().enumerate() {
+        if d.severity != Severity::Error {
+            continue;
+        }
+        let pos = at(d);
+        let slot = &mut first[statement(pos)];
+        if slot.is_none_or(|(best, _)| pos < best) {
+            *slot = Some((pos, k));
+        }
+    }
+    for (k, d) in diagnostics.into_iter().enumerate() {
+        let keep = d.severity != Severity::Error || first[statement(at(&d))].is_some_and(|(_, best)| best == k);
+        if keep {
+            datalove_diagnostic::ParseDiagnostic::emit_stored(db, d);
         }
     }
 }

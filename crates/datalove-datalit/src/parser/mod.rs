@@ -10,17 +10,18 @@ mod chunk;
 #[cfg(test)]
 mod tests;
 
-use datalove_diagnostic_codes::DCode;
+use rmx::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 use bct::{
     input::Source,
     bracer::Bracer,
+    diagnostic::StoredDiagnostic,
     lexer,
     bracer,
-    parser_util,
 };
 
 use crate::ast;
-use datalove_diagnostic::DiagnosticBuilderExt;
 use state::Parser;
 
 pub use type_hint::{parse_type_hint, TypeHintStream};
@@ -34,22 +35,26 @@ pub fn parse<'db>(
 ) -> ast::ParseResult<'db> {
     let lexed = lexer::lex(db, source);
     let bracer = bracer::bracer(db, lexed);
-    let text = source.as_str(db);
-    crate::parser_util::emit_bracer_errors(db, bracer, source);
-    for span in parser_util::non_ascii_names(lexed.tokens(db), text) {
-        parser_util::non_ascii_name_error(db, source, span)
-            .code(DCode::NonAsciiName.as_str())
-            .emit_parse();
-    }
-    parse_bracer(db, bracer, source)
+    // A literal reports its first error and drops what that one led to; see
+    // `file_first_error_per_statement`. So nothing is filed until the whole
+    // literal is read.
+    let kept: Rc<RefCell<Vec<StoredDiagnostic>>> = Rc::default();
+    kept.borrow_mut().extend(crate::parser_util::prepass_errors(db, bracer, source));
+    let result = parse_bracer(db, bracer, source, Some(kept.C()));
+    // A literal is one expression, so one statement, whatever lines it
+    // spans: tokens left on a line of their own after it are its error too.
+    crate::parser_util::file_first_error_per_statement(db, &[], kept.take());
+    result
 }
 
 fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
     source_text: bct::input::Source,
+    sink: crate::parser_util::Sink,
 ) -> ast::ParseResult<'db> {
     let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
+    parser.sink = sink;
     parser.plan = bct::chunk::collection_plan(db, bracer.lexed(db));
     let expr = parser.parse_expr_full();
     // A document is one expression, so anything after it was written by

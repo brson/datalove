@@ -43,20 +43,6 @@
         }
       ],
       "message": "nothing before this `,`"
-    },
-    {
-      "code": "D033",
-      "labels": [
-        {
-          "message": "a `,` goes between two columns",
-          "span": [
-            12,
-            13
-          ],
-          "text": ","
-        }
-      ],
-      "message": "nothing before this `,`"
     }
   ]
 }

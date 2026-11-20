@@ -14,7 +14,7 @@ use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use bct::diagnostic::DiagnosticBuilder;
-use datalove_diagnostic::DiagnosticBuilderExt;
+use datalove_datalit::parser_util::{EmitTo, Sink};
 
 use super::Db;
 
@@ -26,13 +26,19 @@ pub(super) struct TokenSource<'db> {
     buffer: [Option<TreeToken<'db>>; 2],
     /// The end of the last token consumed, for span tracking.
     last_end: Option<usize>,
+    /// Where the cursor's tokens begin; see `TokenStream::origin`.
+    origin: usize,
 }
 
 impl<'db> TokenSource<'db> {
     pub(super) fn new(mut cursor: Cursor<'db>) -> Self {
+        let origin = match cursor.position() {
+            0 => 0,
+            at => cursor.raw(at - 1).span().end,
+        };
         let first = cursor.next();
         let second = cursor.next();
-        TokenSource { cursor, buffer: [first, second], last_end: None }
+        TokenSource { cursor, buffer: [first, second], last_end: None, origin }
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
@@ -189,6 +195,15 @@ pub(super) struct Parser<'db> {
     /// The script-level expressions filed so far, set aside while inside a
     /// function.
     script_exprs: Vec<ast::ExprFunKind<'db>>,
+    /// Where the parse's diagnostics go, shared by every parser it makes, to
+    /// be filed once the whole source is read; see `parse_source`.
+    pub(super) sink: Sink,
+    /// The keywords of the blocks being read around this parser's line,
+    /// outermost first, which an `end` line is read against.
+    pub(super) open_blocks: Vec<&'static str>,
+    /// Whether the source ends inside a bracket, string or block comment
+    /// never closed, which took whatever `end` lines came after it.
+    pub(super) ends_open: bool,
 }
 
 /// A sub-parser dropped holding its parent's tables would take everything
@@ -236,6 +251,7 @@ impl<'db> Parser<'db> {
         source_text: bct::input::Source,
         module_id: Option<ModuleId<'db>>,
         counters: ScriptCounters,
+        sink: Sink,
     ) -> Self {
         Parser {
             db,
@@ -254,6 +270,9 @@ impl<'db> Parser<'db> {
             call_counter: counters.call,
             script_call_counter: counters.call,
             script_exprs: vec![],
+            sink,
+            open_blocks: vec![],
+            ends_open: false,
         }
     }
 
@@ -268,6 +287,7 @@ impl<'db> Parser<'db> {
             self.source_text,
             self.module_id,
             ScriptCounters::default(),
+            self.sink.C(),
         );
         sub.filed = rmx::std::mem::take(&mut self.filed);
         sub.owes_filed = true;
@@ -277,6 +297,8 @@ impl<'db> Parser<'db> {
         sub.stmt_counters = self.stmt_counters;
         sub.call_counter = self.call_counter;
         sub.script_call_counter = self.script_call_counter;
+        sub.open_blocks = self.open_blocks.C();
+        sub.ends_open = self.ends_open;
         sub
     }
 
@@ -299,6 +321,7 @@ impl<'db> Parser<'db> {
         source_text: bct::input::Source,
         context: Option<(TextSpan, &'static str)>,
         module_id: Option<ModuleId<'db>>,
+        sink: Sink,
     ) -> Self {
         Parser {
             db,
@@ -317,6 +340,9 @@ impl<'db> Parser<'db> {
             call_counter: 0,
             script_call_counter: 0,
             script_exprs: vec![],
+            sink,
+            open_blocks: vec![],
+            ends_open: false,
         }
     }
 
@@ -345,6 +371,9 @@ impl<'db> Parser<'db> {
             call_counter: self.call_counter,
             script_call_counter: self.script_call_counter,
             script_exprs: vec![],
+            sink: self.sink.C(),
+            open_blocks: self.open_blocks.C(),
+            ends_open: self.ends_open,
         }
     }
 
@@ -453,7 +482,7 @@ impl<'db> Parser<'db> {
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
-        builder.emit_parse();
+        builder.emit_to(&self.sink);
         ast::Statement::ParseError(ast::StmtParseError { source: ts.source, span: ts.span, message: message_text })
     }
 
@@ -473,7 +502,7 @@ impl<'db> Parser<'db> {
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
-        builder.emit_parse();
+        builder.emit_to(&self.sink);
         // Filed with its span, as every expression is.
         let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span.C(), message: message_text });
         self.create_expr(kind, ts)
@@ -496,7 +525,7 @@ impl<'db> Parser<'db> {
 
     /// Get the byte position at end of previous token (after consuming).
     pub(super) fn last_byte_end(&self) -> usize {
-        self.source.last_end.unwrap_or(0)
+        self.source.last_end.unwrap_or(self.source.origin)
     }
 
     /// Get span for error reporting.
@@ -541,7 +570,7 @@ impl<'db> Parser<'db> {
             DiagnosticBuilder::error(self.db, &message)
                 .code(PCode::ReservedName.as_str())
                 .primary_label(ts, &label)
-                .emit_parse();
+                .emit_to(&self.sink);
         }
     }
 
@@ -553,7 +582,7 @@ impl<'db> Parser<'db> {
         DiagnosticBuilder::error(self.db, &fmt!("this `{text}` is written apart from what it applies to"))
             .code(PCode::SpacedPostfix.as_str())
             .primary_label(ts, "a postfix operator is written against the expression before it")
-            .emit_parse();
+            .emit_to(&self.sink);
     }
 
     /// Where an expression this parser created begins.
@@ -761,17 +790,6 @@ impl<'db> Parser<'db> {
         index
     }
 
-    /// Check if a line starts with "end <keyword>".
-    pub(super) fn line_is_end_keyword(&self, line: &Cursor<'db>, keyword: &str) -> bool {
-        let mut line = *line;
-        match (line.next(), line.next()) {
-            (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) => {
-                t1.word_str(self.text()) == Some("end") && t2.word_str(self.text()) == Some(keyword)
-            }
-            _ => false,
-        }
-    }
-
     /// Emit error if tokens remain unconsumed after a successful parse.
     pub(super) fn error_if_not_exhausted(&mut self) {
         if self.peek().is_some() && !self.had_error {
@@ -787,7 +805,7 @@ impl<'db> Parser<'db> {
             if let Some((ctx_span, ctx_msg)) = &self.branch_context {
                 builder = builder.secondary_label(ctx_span.C(), ctx_msg);
             }
-            builder.emit_parse();
+            builder.emit_to(&self.sink);
         }
     }
 }
@@ -810,6 +828,10 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
         self.stmt_counters.alias = next;
     }
 
+    fn sink(&self) -> Sink {
+        self.sink.C()
+    }
+
     /// Report a type hint error against this parser rather than datalit's.
     ///
     /// A type hint inside a datafun statement is read straight out of this
@@ -830,7 +852,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
         if let Some((ctx_span, ctx_msg)) = &self.branch_context {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
-        builder.emit_parse();
+        builder.emit_to(&self.sink);
         datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError {
             source: ts.source,
             span: ts.span,
@@ -854,6 +876,10 @@ impl<'db> TokenStream<'db> for Parser<'db> {
 
     fn prev_end(&self) -> Option<usize> {
         self.source.last_end
+    }
+
+    fn origin(&self) -> usize {
+        self.source.origin
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {

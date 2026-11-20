@@ -387,6 +387,8 @@ codes! {
         LopsidedOperator = 91,
         /// A type parameter with no name.
         TypeParamWithoutName = 92,
+        /// An `end` line whose keyword is not its block's.
+        WrongEnd = 93,
     }
     retired = [42, 43, 50, 51, 52, 53, 71, 75];
 }

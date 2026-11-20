@@ -31,20 +31,6 @@
         }
       ],
       "message": "unexpected token in type hint"
-    },
-    {
-      "code": "D020",
-      "labels": [
-        {
-          "message": "unexpected token",
-          "span": [
-            11,
-            12
-          ],
-          "text": "#"
-        }
-      ],
-      "message": "unexpected token in expression"
     }
   ]
 }

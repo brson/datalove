@@ -10,7 +10,7 @@ use bct::{
     text::InternedText,
 };
 use bct::diagnostic::DiagnosticBuilder;
-use datalove_diagnostic::DiagnosticBuilderExt;
+use datalove_datalit::parser_util::EmitTo;
 
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
@@ -18,10 +18,82 @@ use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
 use datalove_datalit::parser_util::NameKind;
 
+/// The keywords of the blocks a line opens, which an `end` line names.
+const BLOCK_KEYWORDS: &[&str] = &["fun", "if", "loop", "for", "match"];
+
+/// What a line is to the reading of blocks.
+enum LineKind<'db> {
+    /// An `end` line, and the word after its `end`.
+    End(Option<&'db str>),
+    /// A line opening a block that is not a declaration.
+    Opener(&'static str),
+    /// A declaration, which is only read at the top level.
+    Declaration { opens_fun: bool },
+    /// Anything else, and its first word.
+    Other(Option<&'db str>),
+}
+
+/// What the next line does to the block being read.
+enum BlockLine {
+    /// Its `end` line.
+    Close,
+    /// An `end` line for it written wrong.
+    WrongEnd,
+    /// Not part of it: the input ran out, an enclosing block's `end` came, or
+    /// a declaration outside it did. The block is missing its `end`.
+    Unterminated,
+    /// A line of its body.
+    Take,
+}
+
+/// How a block's body ended.
+enum BodyEnd {
+    /// At its `end` line, left for the caller.
+    Close,
+    /// At its `end` line written wrong, consumed and reported.
+    Closed,
+    /// At one of the stops the caller gave.
+    Stop,
+    /// Without its `end`.
+    Unterminated,
+    /// Without its `end`, which a bracket, string or comment never closed
+    /// took to the end of the source: what the block was meant to hold is not
+    /// there to read, and the unclosed thing's error is the one reported.
+    Swallowed,
+}
+
+/// Whether a line leaves a bracket, a string or a block comment open,
+/// running to the end of the source, `text`.
+pub(super) fn leaves_open(line: &Cursor<'_>, text: &str) -> bool {
+    let mut tokens = *line;
+    rmx::std::iter::from_fn(|| tokens.next()).any(|t| match t {
+        TreeToken::Branch { close: None, .. } => true,
+        TreeToken::Token(t) => t.kind == bct::lexer::TokenKind::Error && t.span().end == text.len(),
+        TreeToken::Branch { .. } => false,
+    })
+}
+
+/// Close the innermost block an `end` line names, and those inside it; one
+/// naming no open block closes the innermost.
+fn close(open: &mut Vec<&'static str>, word: Option<&str>) {
+    match open.iter().rposition(|k| Some(*k) == word) {
+        Some(at) => open.truncate(at),
+        None => {
+            open.pop();
+        }
+    }
+}
+
+/// The words a statement begins with, every one `parse_statement` reads.
+pub(super) const STATEMENT_WORDS: &[&str] = &[
+    "let", "var", "const", "set", "fun", "ret", "require", "import", "if", "loop", "for", "break",
+    "continue", "debuglog", "type", "native", "intrinsic", "match", "call", "inline",
+];
+
 impl<'db> Parser<'db> {
     pub(super) fn parse_statement(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         let stmt = match self.peek_word() {
             Some("let") => self.parse_let(),
@@ -51,13 +123,21 @@ impl<'db> Parser<'db> {
                     "not the first statement of a function",
                 )
             }
-            _ => {
+            word => {
                 let ts = self.peek_text_span();
-                self.emit_stmt_error(ts,
+                let error = self.emit_stmt_error(ts,
                     "unexpected statement",
                     PCode::UnknownStatement,
                     "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'for', 'break', 'continue', 'debuglog', 'type', or 'native'"
-                )
+                );
+                // A block header written wrong still has its body and `end`
+                // after it, which are taken with it rather than read alone.
+                if !matches!(word, Some("end" | "else" | "case"))
+                    && let Some(keyword) = self.orphan_block_ahead(remaining_lines.clone())
+                {
+                    self.skip_block(remaining_lines, keyword);
+                }
+                error
             }
         };
 
@@ -81,7 +161,7 @@ impl<'db> Parser<'db> {
     pub(super) fn parse_line_statement(
         &mut self,
         line: Cursor<'db>,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         if let Some(token @ TreeToken::Token(first)) = &line.first() {
             if let Some(word @ ("require" | "import" | "fun" | "native" | "intrinsic" | "type")) = first.word_str(self.text()) {
@@ -91,7 +171,7 @@ impl<'db> Parser<'db> {
                     .code(PCode::DeclarationInBlock.as_str())
                     .primary_label(ts, &fmt!("`{word}` is only read at the top level"))
                     .help(&fmt!("move this `{word}` to the top level of the file"))
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
         }
         let mut sub = self.new_sub(line);
@@ -111,7 +191,10 @@ impl<'db> Parser<'db> {
         let Some(word) = self.peek_word() else {
             return;
         };
-        if matches!(word, "require" | "import" | "fun" | "native" | "intrinsic" | "type" | "const") {
+        // A line that begins no statement is that line's error (P001) alone.
+        if !STATEMENT_WORDS.contains(&word)
+            || matches!(word, "require" | "import" | "fun" | "native" | "intrinsic" | "type" | "const")
+        {
             return;
         }
         self.had_error = true;
@@ -121,7 +204,7 @@ impl<'db> Parser<'db> {
             .primary_label(ts, "a module's top level is not run")
             .help("a module holds `fun`, `const`, `type`, `require` and `import`; \
 statements that run belong in a function or a script")
-            .emit_parse();
+            .emit_to(&self.sink);
     }
 
     /// Refuse anything in a rider interface but a `native fun` or a `type`
@@ -135,7 +218,8 @@ statements that run belong in a function or a script")
         let Some(word) = self.peek_word() else {
             return;
         };
-        if matches!(word, "native" | "intrinsic" | "type") {
+        // A line that begins no statement is that line's error (P001) alone.
+        if !STATEMENT_WORDS.contains(&word) || matches!(word, "native" | "intrinsic" | "type") {
             return;
         }
         self.had_error = true;
@@ -144,7 +228,7 @@ statements that run belong in a function or a script")
             .code(PCode::NotInRiderInterface.as_str())
             .primary_label(ts, "an interface declares natives and types")
             .help("a rider interface holds `native fun` declarations and `type` aliases only")
-            .emit_parse();
+            .emit_to(&self.sink);
     }
 
     /// Consume an `end <keyword>` line, complaining about anything after it.
@@ -154,7 +238,7 @@ statements that run belong in a function or a script")
     /// came to mean `end fun`.
     fn eat_end_line(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
         keyword: &str,
     ) {
         let (_, line) = remaining_lines.next().X();
@@ -165,7 +249,289 @@ statements that run belong in a function or a script")
         DiagnosticBuilder::error(self.db, &fmt!("unexpected token after `end {keyword}`"))
             .code(PCode::EndLineExtraTokens.as_str())
             .primary_label(self.extract_text_span(&extra), "`end` takes the keyword and nothing else")
-            .emit_parse();
+            .emit_to(&self.sink);
+    }
+
+    /// What a line is to the reading of blocks, by its first words.
+    fn line_kind(&self, line: &Cursor<'db>) -> LineKind<'db> {
+        let mut words = *line;
+        let first = match words.next() {
+            Some(TreeToken::Token(t)) => t.word_str(self.text()),
+            _ => None,
+        };
+        let second = match words.next() {
+            Some(TreeToken::Token(t)) => t.word_str(self.text()),
+            _ => None,
+        };
+        match first {
+            Some("end") => LineKind::End(second),
+            Some(word @ ("if" | "loop" | "for" | "match")) => LineKind::Opener(BLOCK_KEYWORDS.iter().find(|k| **k == word).X()),
+            Some("fun") => LineKind::Declaration { opens_fun: true },
+            Some("require" | "import" | "native" | "intrinsic" | "type") => LineKind::Declaration { opens_fun: false },
+            Some(word) => LineKind::Other(Some(word)),
+            None => LineKind::Other(None),
+        }
+    }
+
+    /// Whether the innermost block open around this parser is closed by an
+    /// `end` line in `lines`.
+    ///
+    /// A declaration inside a block (P074) is told this way from the block
+    /// missing its `end` above it (P034): datafun has no nested functions, so
+    /// a `fun` line inside a block is one or the other, and which is decided by
+    /// whether the block's own `end` comes at all, each `fun` on the way taking
+    /// its own. What the line about to be read opens, if it opens a `fun`, is
+    /// counted too.
+    fn block_closes_ahead(&self, lines: impl Iterator<Item = (usize, Cursor<'db>)>, opens_fun: bool) -> bool {
+        let base = self.open_blocks.len();
+        let mut open = self.open_blocks.C();
+        if opens_fun {
+            open.push("fun");
+        }
+        for (_, line) in lines {
+            match self.line_kind(&line) {
+                LineKind::Declaration { opens_fun } => {
+                    if opens_fun {
+                        open.push("fun");
+                    }
+                }
+                LineKind::Opener(keyword) => open.push(keyword),
+                LineKind::End(word) => {
+                    close(&mut open, word);
+                    if open.len() < base {
+                        return true;
+                    }
+                }
+                LineKind::Other(_) => {}
+            }
+        }
+        false
+    }
+
+    /// The keyword of the block a line that begins no statement was meant to
+    /// open, if there is one.
+    ///
+    /// A block header written wrong, `fnu f()` for `fun f()`, still has its
+    /// body and its `end` after it, which read as statements of their own
+    /// would each be an error. So the line is taken for the header of the
+    /// block that makes the `end` lines in `lines` match: up to the next
+    /// declaration outside every block, they do not as they are, and with a
+    /// block of that kind opened here they do, each closing the innermost
+    /// block open.
+    fn orphan_block_ahead(&self, lines: impl Iterator<Item = (usize, Cursor<'db>)> + Clone) -> Option<&'static str> {
+        let balanced = |extra: Option<&'static str>| {
+            let mut open = self.open_blocks.C();
+            open.extend(extra);
+            for (_, line) in lines.clone() {
+                match self.line_kind(&line) {
+                    LineKind::Declaration { opens_fun } => {
+                        if open.is_empty() {
+                            break;
+                        }
+                        if opens_fun {
+                            open.push("fun");
+                        }
+                    }
+                    LineKind::Opener(keyword) => open.push(keyword),
+                    LineKind::End(word) => {
+                        if open.last().is_none_or(|top| Some(*top) != word) {
+                            return false;
+                        }
+                        open.pop();
+                    }
+                    LineKind::Other(_) => {}
+                }
+            }
+            open.is_empty()
+        };
+        if balanced(None) {
+            return None;
+        }
+        BLOCK_KEYWORDS.iter().copied().find(|keyword| balanced(Some(keyword)))
+    }
+
+    /// What the next line does to the block being read, whose keyword is
+    /// `keyword` and which is the innermost of `open_blocks`.
+    fn block_line(
+        &self,
+        remaining_lines: &Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
+        keyword: &str,
+    ) -> BlockLine {
+        let mut rest = remaining_lines.clone();
+        let Some((_, line)) = rest.next() else {
+            return BlockLine::Unterminated;
+        };
+        match self.line_kind(&line) {
+            LineKind::End(Some(word)) if word == keyword => BlockLine::Close,
+            LineKind::End(word) => {
+                let enclosing = &self.open_blocks[..self.open_blocks.len().saturating_sub(1)];
+                if word.is_some_and(|w| enclosing.contains(&w)) {
+                    BlockLine::Unterminated
+                } else {
+                    BlockLine::WrongEnd
+                }
+            }
+            LineKind::Declaration { opens_fun } => {
+                if self.block_closes_ahead(rest, opens_fun) { BlockLine::Take } else { BlockLine::Unterminated }
+            }
+            // An `else` or `case` line belongs to the innermost `if` or
+            // `match` around this block, which has lost its `end` if there is
+            // one: this block reads none.
+            LineKind::Other(Some(word @ ("else" | "case"))) => {
+                let owner = if word == "else" { "if" } else { "match" };
+                let enclosing = &self.open_blocks[..self.open_blocks.len().saturating_sub(1)];
+                if enclosing.contains(&owner) { BlockLine::Unterminated } else { BlockLine::Take }
+            }
+            LineKind::Opener(_) | LineKind::Other(_) => BlockLine::Take,
+        }
+    }
+
+    /// Consume an `end` line that ends the block being read with the wrong
+    /// keyword, or none (P093).
+    ///
+    /// It is the block's end written wrong: no block open around this one has
+    /// that keyword, so reading it as the end of one of those would leave this
+    /// block unterminated and the rest of the source in it.
+    fn eat_wrong_end(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
+        keyword: &str,
+    ) {
+        let (_, line) = remaining_lines.next().X();
+        let first = line.first().X();
+        let mut ts = self.extract_text_span(&first);
+        if let Some(second) = line.peek_nth(1) {
+            ts = ts.with_end(self.extract_text_span(&second).span.end);
+        }
+        self.had_error = true;
+        DiagnosticBuilder::error(self.db, &fmt!("this `end` line does not end the `{keyword}` it closes"))
+            .code(PCode::WrongEnd.as_str())
+            .primary_label(ts, &fmt!("expected `end {keyword}`"))
+            .emit_to(&self.sink);
+    }
+
+    /// Read the lines of a block's body into `body`, up to the line that ends
+    /// it or one of `stops`, which the caller reads.
+    ///
+    /// The block's keyword is the innermost of `open_blocks`. A correct `end`
+    /// line is left for the caller to consume; a wrong one is consumed and
+    /// reported here.
+    ///
+    /// A block without its `end` is not reported again (P034) where an error
+    /// already accounts for the `end`: a line in its body, or in a block
+    /// inside it, that begins no statement (P001) or ends a block wrong
+    /// (P093) is taken for an `end` written wrong, which a block inside it may
+    /// have taken this one's `end` to make up for; and a source that ends
+    /// inside a bracket, string or comment never closed has taken the `end`
+    /// into it.
+    fn parse_block_body(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
+        keyword: &str,
+        stops: &[&str],
+        body: &mut Vec<ast::Statement<'db>>,
+    ) -> BodyEnd {
+        let filed_before = self.filed_count();
+        loop {
+            if let Some((_, line)) = remaining_lines.peek()
+                && let LineKind::Other(Some(word)) = self.line_kind(line)
+                && stops.contains(&word)
+            {
+                return BodyEnd::Stop;
+            }
+            match self.block_line(remaining_lines, keyword) {
+                BlockLine::Close => return BodyEnd::Close,
+                BlockLine::WrongEnd => {
+                    self.eat_wrong_end(remaining_lines, keyword);
+                    return BodyEnd::Closed;
+                }
+                BlockLine::Unterminated => return self.missing_end(remaining_lines, filed_before),
+                BlockLine::Take => {
+                    let (_, line) = remaining_lines.next().X();
+                    let stmt = self.parse_line_statement(line, remaining_lines);
+                    body.push(stmt);
+                }
+            }
+        }
+    }
+
+    /// How a block that has run out without its `end` ended: swallowed, by a
+    /// source ending inside a bracket, string or comment never closed;
+    /// closed, where an error filed since `filed_before`, when its body began,
+    /// accounts for the `end` already, a line that begins no statement (P001),
+    /// ends a block wrong (P093) or is in no case of a match (P048), each an
+    /// `end` or a header written wrong; or unterminated, to be reported.
+    fn missing_end(
+        &self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
+        filed_before: usize,
+    ) -> BodyEnd {
+        if self.ends_open && remaining_lines.peek().is_none() {
+            BodyEnd::Swallowed
+        } else if self.filed_since(filed_before, &[PCode::UnknownStatement, PCode::WrongEnd, PCode::LineOutsideCase]) {
+            BodyEnd::Closed
+        } else {
+            BodyEnd::Unterminated
+        }
+    }
+
+    /// How many diagnostics the parse has filed so far.
+    fn filed_count(&self) -> usize {
+        self.sink.as_ref().X().borrow().len()
+    }
+
+    /// Whether a diagnostic with one of `codes` was filed after the first `from`.
+    fn filed_since(&self, from: usize, codes: &[PCode]) -> bool {
+        let filed = self.sink.as_ref().X().borrow();
+        filed[from..].iter().any(|d| codes.iter().any(|c| d.code.as_deref() == Some(c.as_str())))
+    }
+
+    /// Read a block's body and its end, after a header that is the block's
+    /// error, so that the body is not read as statements of their own.
+    fn skip_block(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
+        keyword: &'static str,
+    ) {
+        // The lines a block of this kind divides its body with, `else` and
+        // `case`, are passed over as the block would take them.
+        let dividers: &[&str] = match keyword {
+            "if" => &["else"],
+            "match" => &["case"],
+            _ => &[],
+        };
+        // A function's `inline` line is its own, as `parse_fun` reads it.
+        if keyword == "fun"
+            && let Some((_, line)) = remaining_lines.peek()
+            && let LineKind::Other(Some("inline")) = self.line_kind(line)
+            && line.peek_nth(1).is_none()
+        {
+            remaining_lines.next();
+        }
+        self.open_blocks.push(keyword);
+        let mut body = vec![];
+        let end = loop {
+            match self.parse_block_body(remaining_lines, keyword, dividers, &mut body) {
+                BodyEnd::Stop => {
+                    remaining_lines.next();
+                }
+                end => break end,
+            }
+        };
+        self.open_blocks.pop();
+        match end {
+            BodyEnd::Close => self.eat_end_line(remaining_lines, keyword),
+            BodyEnd::Closed | BodyEnd::Unterminated | BodyEnd::Swallowed => {}
+            BodyEnd::Stop => unreachable!("a stop is passed over"),
+        }
+    }
+
+    /// Stand for a block whose `end` was swallowed, reporting nothing more.
+    fn swallowed_block(&mut self) -> ast::Statement<'db> {
+        self.had_error = true;
+        let end = self.last_byte_end();
+        let message = InternedText::new(self.db, "the block's `end` is inside a bracket, string or comment never closed".S());
+        ast::Statement::ParseError(ast::StmtParseError { source: self.source_text(), span: end..end, message })
     }
 
     /// Report a block that ran out of input before its `end` line.
@@ -245,7 +611,7 @@ statements that run belong in a function or a script")
                 DiagnosticBuilder::error(self.db, "a parenthesized name is not a pattern")
                     .code(PCode::ParenthesizedName.as_str())
                     .primary_label(paren_ts, "write `(a,)` for a one-element tuple, or drop the parentheses")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
             return Some(ast::Binding::Tuple(names));
         }
@@ -261,7 +627,7 @@ statements that run belong in a function or a script")
                         return ast::StructBinding { field: error, binding: error };
                     }
                 };
-                let fresh_field = seen_fields.take(p.db, field, field_ts.C(), "field");
+                let fresh_field = seen_fields.take(p.db, &p.sink, field, field_ts.C(), "field");
                 if !fresh_field {
                     p.had_error = true;
                 }
@@ -320,7 +686,7 @@ statements that run belong in a function or a script")
         ts: TextSpan,
         seen: &mut datalit::parser_util::SeenNames<'db>,
     ) {
-        if !seen.take(self.db, name, ts, "binding") {
+        if !seen.take(self.db, &self.sink, name, ts, "binding") {
             self.had_error = true;
         }
     }
@@ -332,7 +698,7 @@ statements that run belong in a function or a script")
         DiagnosticBuilder::error(self.db, "expected a name in this pattern")
             .code(PCode::NestedPattern.as_str())
             .primary_label(ts, "expected a name")
-            .emit_parse();
+            .emit_to(&self.sink);
         // Skip the rest of this element, so one mistake is one report.
         while self.peek().is_some() && !self.peek_sigil(Sigil::Comma) {
             self.next();
@@ -556,22 +922,27 @@ statements that run belong in a function or a script")
 
     fn parse_fun(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         // Record function span starting at 'fun' keyword.
         let fun_span = self.peek_text_span();
         let local_index = self.record_fun_span(fun_span);
         self.eat_word("fun");
 
+        // A header that does not parse still opens its block, so that its
+        // body and its `end fun` are not read as statements of their own; the
+        // header's error is the function's one error, and what stands for it.
+        let mut broken = None;
         let name = match self.eat_declared_name(NameKind::Function) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
-                return self.emit_stmt_error(ts,
+                broken = Some(self.emit_stmt_error(ts,
                     "expected function name after 'fun'",
                     PCode::FunWithoutName,
                     "expected function name",
-                );
+                ));
+                InternedText::new(self.db, "<error>".S())
             }
         };
 
@@ -587,24 +958,29 @@ statements that run belong in a function or a script")
             _ => (Vec::new(), Vec::new()),
         };
 
-        // Parse parameters in parentheses.
-        let params = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+        // Parse parameters in parentheses. What is there instead is the
+        // error, so it is looked at before it is taken.
+        let params = match self.peek() {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
+                let Some(TreeToken::Branch { open, inner, .. }) = self.next() else { unreachable!("peeked a branch") };
                 let open_span = TextSpan::new(self.source_text(), open.span());
                 self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
-                let ts = self.error_span();
-                return self.emit_stmt_error(ts,
-                    "expected parameter list",
-                    PCode::FunWithoutParams,
-                    "expected '(' to start parameter list"
-                );
+                if broken.is_none() {
+                    let ts = self.error_span();
+                    broken = Some(self.emit_stmt_error(ts,
+                        "expected parameter list",
+                        PCode::FunWithoutParams,
+                        "expected '(' to start parameter list"
+                    ));
+                }
+                vec![]
             }
         };
 
         // Check for return type: `: type`
-        let return_type = if self.peek_sigil(Sigil::Colon) {
+        let return_type = if broken.is_none() && self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             Some(self.parse_type_hint())
         } else {
@@ -612,7 +988,7 @@ statements that run belong in a function or a script")
         };
 
         // Bounds, if the signature ends with `where { T is float, }`.
-        let type_bounds = self.parse_where_clause(&type_params, type_bounds);
+        let type_bounds = if broken.is_none() { self.parse_where_clause(&type_params, type_bounds) } else { type_bounds };
 
         // Enter function context for expression identity tracking.
         let enclosing = self.enter_function(name);
@@ -628,25 +1004,26 @@ statements that run belong in a function or a script")
             remaining_lines.next();
         }
 
+        // What is left on the header line is its error, reported before the
+        // body's errors can stand in for it.
+        self.error_if_not_exhausted();
+
         // Parse body until we hit "end fun".
         let mut body = vec![];
-        let mut found_end_fun = false;
-        while let Some((_, line)) = remaining_lines.peek() {
-            if self.line_is_end_keyword(line, "fun") {
-                self.eat_end_line(remaining_lines, "fun");
-                found_end_fun = true;
-                break;
-            }
-
-            let (_, line) = remaining_lines.next().X();
-            // Parse statement recursively to handle if/ret/etc in function body.
-            let stmt = self.parse_line_statement(line, remaining_lines);
-            body.push(stmt);
-        }
+        self.open_blocks.push("fun");
+        let end = self.parse_block_body(remaining_lines, "fun", &[], &mut body);
+        self.open_blocks.pop();
 
         let arena = self.exit_function(local_index, enclosing);
-        if !found_end_fun {
-            return self.unterminated_block("fun");
+        match end {
+            BodyEnd::Close => self.eat_end_line(remaining_lines, "fun"),
+            BodyEnd::Closed => {}
+            BodyEnd::Unterminated => return broken.unwrap_or_else(|| self.unterminated_block("fun")),
+            BodyEnd::Swallowed => return broken.unwrap_or_else(|| self.swallowed_block()),
+            BodyEnd::Stop => unreachable!("no stops were given"),
+        }
+        if let Some(error) = broken {
+            return error;
         }
 
         ast::Statement::Fun(ast::StmtFun {
@@ -668,7 +1045,7 @@ statements that run belong in a function or a script")
         inner: Cursor<'db>,
     ) -> (Vec<InternedText<'db>>, Vec<Option<ast::TypeBound>>) {
         let mut sub = Parser::from_branch_with_context(
-            self.db, inner, self.source_text(), None, self.module_id());
+            self.db, inner, self.source_text(), None, self.module_id(), self.sink.C());
         let names = sub.parse_comma_separated(|p| {
             let ts = p.peek_text_span();
             let name = p.eat_declared_name(NameKind::Type);
@@ -677,7 +1054,7 @@ statements that run belong in a function or a script")
                 DiagnosticBuilder::error(p.db, "expected a type parameter's name")
                     .code(PCode::TypeParamWithoutName.as_str())
                     .primary_label(ts, "a type parameter is a name")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
             name
         });
@@ -708,12 +1085,12 @@ statements that run belong in a function or a script")
             DiagnosticBuilder::error(self.db, "expected `{` after `where`")
                 .code(PCode::WhereWithoutBrace.as_str())
                 .primary_label(self.peek_text_span(), "the bounds go in braces")
-                .emit_parse();
+                .emit_to(&self.sink);
             return bounds;
         };
 
         let mut sub = Parser::from_branch_with_context(
-            self.db, inner, self.source_text(), None, self.module_id());
+            self.db, inner, self.source_text(), None, self.module_id(), self.sink.C());
         let clauses = sub.parse_comma_separated(|p| p.parse_one_bound());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
@@ -726,7 +1103,7 @@ statements that run belong in a function or a script")
                         "`{}` is bounded twice", name.text(self.db)))
                         .code(PCode::TypeParamBoundedTwice.as_str())
                         .primary_label(ts, "a type parameter takes one bound")
-                        .emit_parse();
+                        .emit_to(&self.sink);
                 }
                 Some(i) => bounds[i] = Some(bound),
                 None => {
@@ -736,7 +1113,7 @@ statements that run belong in a function or a script")
                         name.text(self.db)))
                         .code(PCode::BoundOnUndeclaredParam.as_str())
                         .primary_label(ts, "bounded here but never declared")
-                        .emit_parse();
+                        .emit_to(&self.sink);
                 }
             }
         }
@@ -754,7 +1131,7 @@ statements that run belong in a function or a script")
             DiagnosticBuilder::error(self.db, "expected `is` after the type parameter")
                 .code(PCode::BoundWithoutIs.as_str())
                 .primary_label(self.peek_text_span(), "a bound reads `T is float`")
-                .emit_parse();
+                .emit_to(&self.sink);
             return None;
         }
         let ts = self.peek_text_span();
@@ -767,7 +1144,7 @@ statements that run belong in a function or a script")
                     "unknown bound `{}`", bound_name.text(self.db)))
                     .code(PCode::UnknownBound.as_str())
                     .primary_label(ts, "not a bound this language has")
-                    .emit_parse();
+                    .emit_to(&self.sink);
                 None
             }
         }
@@ -778,7 +1155,7 @@ statements that run belong in a function or a script")
         iter: Cursor<'db>,
         context: Option<(TextSpan, &'static str)>,
     ) -> Vec<ast::FunParam<'db>> {
-        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
+        let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id(), self.sink.C());
         // A parameter list holds types and nothing else, so the alias
         // numbering is the only thing it has to carry on with and hand back.
         sub.lend_alias_numbering(self);
@@ -826,7 +1203,7 @@ statements that run belong in a function or a script")
             DiagnosticBuilder::error(self.db, "const parameter cannot be 'ref', 'out' or 'mut'")
                 .code(PCode::ConstParamWithMode.as_str())
                 .primary_label(ts, "invalid combination")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
 
         let name = match self.eat_declared_name(NameKind::Parameter) {
@@ -837,7 +1214,7 @@ statements that run belong in a function or a script")
                 DiagnosticBuilder::error(self.db, "expected parameter name")
                     .code(PCode::ParamWithoutName.as_str())
                     .primary_label(ts, "expected parameter name")
-                    .emit_parse();
+                    .emit_to(&self.sink);
                 InternedText::new(self.db, "<error>".S())
             }
         };
@@ -849,7 +1226,7 @@ statements that run belong in a function or a script")
             DiagnosticBuilder::error(self.db, "expected ':' after parameter name")
                 .code(PCode::ParamWithoutColon.as_str())
                 .primary_label(ts, "expected ':'")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
 
         let type_hint = self.parse_type_hint();
@@ -1078,16 +1455,20 @@ statements that run belong in a function or a script")
 
     fn parse_if(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         self.eat_word("if");
-        match self.parse_if_arm(remaining_lines, false) {
-            Some(stmt) => {
-                self.eat_end_line(remaining_lines, "if");
-                ast::Statement::If(stmt)
-            }
-            None => self.unterminated_block("if"),
+        self.open_blocks.push("if");
+        let (stmt, end) = self.parse_if_arm(remaining_lines, false);
+        self.open_blocks.pop();
+        match end {
+            BodyEnd::Close => self.eat_end_line(remaining_lines, "if"),
+            BodyEnd::Closed => {}
+            BodyEnd::Unterminated => return self.unterminated_block("if"),
+            BodyEnd::Swallowed => return self.swallowed_block(),
+            BodyEnd::Stop => unreachable!("an arm reads its `else`"),
         }
+        ast::Statement::If(stmt)
     }
 
     /// Parse an `if` after its keyword, stopping before the `end if` line.
@@ -1095,16 +1476,16 @@ statements that run belong in a function or a script")
     /// An `else if` line is parsed as a nested arm that becomes the whole
     /// else body, so a chain shares the single `end if` of its first `if`.
     /// `chained` says this arm is one of those, after an `else`.
-    /// Returns `None` if the input ran out before `end if`.
+    /// Returns the arm and how the chain ended, at its `end if` or without it.
     ///
     /// A destructuring `if` takes no part in a chain, on either side of an
     /// `else if` (P073): which branch's bindings are in scope where, and what
     /// an `else |e|` at the end of the chain would bind, are not obvious.
     fn parse_if_arm(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
         chained: bool,
-    ) -> Option<ast::StmtIf<'db>> {
+    ) -> (ast::StmtIf<'db>, BodyEnd) {
         let condition = self.parse_expr_full();
         let binding_ts = self.peek_text_span();
         let then_binding = self.parse_pipe_binding();
@@ -1114,28 +1495,14 @@ statements that run belong in a function or a script")
                 .code(PCode::DestructuringElseIf.as_str())
                 .primary_label(binding_ts.with_end(self.last_byte_end()), "destructuring binding in an `else if`")
                 .help("nest this `if` inside an `else` body instead")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
 
+        self.error_if_not_exhausted();
         let mut then_body = vec![];
-        let mut found_else = false;
-
-        while let Some((_, line)) = remaining_lines.peek() {
-            if self.line_is_end_keyword(line, "if") {
-                break;
-            }
-
-            if let Some(TreeToken::Token(t1)) = line.first() {
-                if let Some("else") = t1.word_str(self.text()) {
-                    found_else = true;
-                    break;
-                }
-            }
-
-            let (_, line) = remaining_lines.next().X();
-            let stmt = self.parse_line_statement(line, remaining_lines);
-            then_body.push(stmt);
-        }
+        let then_end = self.parse_block_body(remaining_lines, "if", &["else"], &mut then_body);
+        let found_else = matches!(then_end, BodyEnd::Stop);
+        let mut end = then_end;
 
         let (else_binding, else_body) = if found_else {
             let (_, else_line) = remaining_lines.next().X();
@@ -1150,7 +1517,7 @@ statements that run belong in a function or a script")
                     DiagnosticBuilder::error(else_sub.db, "an else binding cannot be followed by `if`")
                         .code(PCode::ElseBindingThenIf.as_str())
                         .primary_label(ts, "nest this `if` inside the else body instead")
-                        .emit_parse();
+                        .emit_to(&self.sink);
                 } else if then_binding.is_some() {
                     else_sub.had_error = true;
                     let ts = else_sub.peek_text_span();
@@ -1158,26 +1525,31 @@ statements that run belong in a function or a script")
                         .code(PCode::DestructuringElseIf.as_str())
                         .primary_label(ts, "`else if` after a destructuring `if`")
                         .help("nest this `if` inside an `else` body instead")
-                        .emit_parse();
+                        .emit_to(&self.sink);
                 }
                 else_sub.eat_word("if");
-                let nested = else_sub.parse_if_arm(remaining_lines, true);
+                let (nested, nested_end) = else_sub.parse_if_arm(remaining_lines, true);
                 else_sub.error_if_not_exhausted();
                 self.merge_identity_from(&mut else_sub);
-                (else_binding, Some(vec![ast::Statement::If(nested?)]))
+                end = nested_end;
+                (else_binding, Some(vec![ast::Statement::If(nested)]))
             } else {
                 else_sub.error_if_not_exhausted();
+                let broken = else_sub.had_error;
                 self.merge_identity_from(&mut else_sub);
 
                 let mut body = vec![];
-                while let Some((_, line)) = remaining_lines.peek() {
-                    if self.line_is_end_keyword(line, "if") {
-                        break;
+                if broken {
+                    // An `else` line that did not parse, an `else if` written
+                    // wrong, leaves the chain's later `else` lines its own.
+                    end = self.parse_block_body(remaining_lines, "if", &["else"], &mut body);
+                    while matches!(end, BodyEnd::Stop) {
+                        remaining_lines.next();
+                        end = self.parse_block_body(remaining_lines, "if", &["else"], &mut body);
                     }
-
-                    let (_, line) = remaining_lines.next().X();
-                    let stmt = self.parse_line_statement(line, remaining_lines);
-                    body.push(stmt);
+                } else {
+                    // A second `else` is a line of the body, and its error.
+                    end = self.parse_block_body(remaining_lines, "if", &[], &mut body);
                 }
                 (else_binding, Some(body))
             }
@@ -1185,15 +1557,14 @@ statements that run belong in a function or a script")
             (None, None)
         };
 
-        remaining_lines.peek()?;
-
-        Some(ast::StmtIf {
+        let stmt = ast::StmtIf {
             condition,
             then_binding,
             then_body,
             else_binding,
             else_body,
-        })
+        };
+        (stmt, end)
     }
 
     /// Parse an optional `|name|` branch binding.
@@ -1210,7 +1581,7 @@ statements that run belong in a function or a script")
                 DiagnosticBuilder::error(self.db, "expected binding name after '|'")
                     .code(PCode::PipeBindingWithoutName.as_str())
                     .primary_label(ts, "expected binding name")
-                    .emit_parse();
+                    .emit_to(&self.sink);
                 InternedText::new(self.db, "<error>".S())
             }
         };
@@ -1222,14 +1593,14 @@ statements that run belong in a function or a script")
             DiagnosticBuilder::error(self.db, "expected '|' after binding name")
                 .code(PCode::PipeBindingUnclosed.as_str())
                 .primary_label(ts, "expected '|'")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
         Some(binding)
     }
 
     fn parse_loop(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         self.eat_word("loop");
 
@@ -1241,23 +1612,19 @@ statements that run belong in a function or a script")
             None
         };
 
+        self.error_if_not_exhausted();
+
         // Parse body until we hit "end loop".
         let mut body = vec![];
-        let mut found_end_loop = false;
-        while let Some((_, line)) = remaining_lines.peek() {
-            if self.line_is_end_keyword(line, "loop") {
-                self.eat_end_line(remaining_lines, "loop");
-                found_end_loop = true;
-                break;
-            }
-
-            let (_, line) = remaining_lines.next().X();
-            let stmt = self.parse_line_statement(line, remaining_lines);
-            body.push(stmt);
-        }
-
-        if !found_end_loop {
-            return self.unterminated_block("loop");
+        self.open_blocks.push("loop");
+        let end = self.parse_block_body(remaining_lines, "loop", &[], &mut body);
+        self.open_blocks.pop();
+        match end {
+            BodyEnd::Close => self.eat_end_line(remaining_lines, "loop"),
+            BodyEnd::Closed => {}
+            BodyEnd::Unterminated => return self.unterminated_block("loop"),
+            BodyEnd::Swallowed => return self.swallowed_block(),
+            BodyEnd::Stop => unreachable!("no stops were given"),
         }
 
         ast::Statement::Loop(ast::StmtLoop { condition, body })
@@ -1270,27 +1637,22 @@ statements that run belong in a function or a script")
     /// body and its `end for` are not read as statements of their own.
     fn parse_for(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         self.eat_word("for");
         let header = self.parse_for_header();
+        self.error_if_not_exhausted();
 
         let mut body = vec![];
-        let mut found_end = false;
-        while let Some((_, line)) = remaining_lines.peek() {
-            if self.line_is_end_keyword(line, "for") {
-                self.eat_end_line(remaining_lines, "for");
-                found_end = true;
-                break;
-            }
-
-            let (_, line) = remaining_lines.next().X();
-            let stmt = self.parse_line_statement(line, remaining_lines);
-            body.push(stmt);
-        }
-
-        if !found_end {
-            return self.unterminated_block("for");
+        self.open_blocks.push("for");
+        let end = self.parse_block_body(remaining_lines, "for", &[], &mut body);
+        self.open_blocks.pop();
+        match end {
+            BodyEnd::Close => self.eat_end_line(remaining_lines, "for"),
+            BodyEnd::Closed => {}
+            BodyEnd::Unterminated => return self.unterminated_block("for"),
+            BodyEnd::Swallowed => return self.swallowed_block(),
+            BodyEnd::Stop => unreachable!("no stops were given"),
         }
 
         match header {
@@ -1495,9 +1857,11 @@ statements that run belong in a function or a script")
             _ => (Vec::new(), Vec::new()),
         };
 
-        // Parse parameters in parentheses.
-        let params = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+        // Parse parameters in parentheses. What is there instead is the
+        // error, so it is looked at before it is taken.
+        let params = match self.peek() {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
+                let Some(TreeToken::Branch { open, inner, .. }) = self.next() else { unreachable!("peeked a branch") };
                 let open_span = TextSpan::new(self.source_text(), open.span());
                 self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
@@ -1527,7 +1891,7 @@ statements that run belong in a function or a script")
                 .code(PCode::UnknownIntrinsic.as_str())
                 .primary_label(native_span, "the compiler knows no native by this name")
                 .help("an intrinsic native is one of `list_push`, `list_pop`, `mem_swap` and `mem_replace`")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
 
         ast::Statement::NativeFun(ast::StmtNativeFun {
@@ -1543,24 +1907,44 @@ statements that run belong in a function or a script")
 
     fn parse_match(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
     ) -> ast::Statement<'db> {
         self.eat_word("match");
 
         // Parse input expression.
         let input = self.parse_expr_full();
+        self.error_if_not_exhausted();
 
         // Parse case arms until "end match".
         let mut cases = vec![];
         let mut default_body = None;
-        let mut found_end_match = false;
+        self.open_blocks.push("match");
+        let filed_before = self.filed_count();
+        let mut end;
 
-        while let Some((_, line)) = remaining_lines.peek() {
-            if self.line_is_end_keyword(line, "match") {
-                self.eat_end_line(remaining_lines, "match");
-                found_end_match = true;
-                break;
+        loop {
+            // Its own `case` lines are this match's to read.
+            let own_case = remaining_lines
+                .peek()
+                .is_some_and(|(_, line)| matches!(self.line_kind(line), LineKind::Other(Some("case"))));
+            let action = if own_case { BlockLine::Take } else { self.block_line(remaining_lines, "match") };
+            match action {
+                BlockLine::Close => {
+                    end = BodyEnd::Close;
+                    break;
+                }
+                BlockLine::WrongEnd => {
+                    self.eat_wrong_end(remaining_lines, "match");
+                    end = BodyEnd::Closed;
+                    break;
+                }
+                BlockLine::Unterminated => {
+                    end = BodyEnd::Unterminated;
+                    break;
+                }
+                BlockLine::Take => {}
             }
+            let (_, line) = remaining_lines.peek().X();
 
             // Check for "case" line.
             if let Some(TreeToken::Token(t1)) = line.first() {
@@ -1580,7 +1964,7 @@ statements that run belong in a function or a script")
                                     DiagnosticBuilder::error(self.db, "expected name after 'case atom'")
                                         .code(PCode::CaseAtomWithoutName.as_str())
                                         .primary_label(ts, "expected atom name")
-                                        .emit_parse();
+                                        .emit_to(&self.sink);
                                     InternedText::new(self.db, "<error>".S())
                                 }
                             };
@@ -1588,11 +1972,12 @@ statements that run belong in a function or a script")
                             self.merge_identity_from(&mut case_sub);
 
                             // Parse body until next case/default/end match.
-                            let body = self.parse_match_arm_body(remaining_lines);
+                            let (body, arm_end) = self.parse_match_arm_body(remaining_lines);
                             cases.push(ast::MatchCase {
                                 kind: ast::MatchCaseKind::Atom { name },
                                 body,
                             });
+                            end = arm_end;
                         }
                         Some("term") => {
                             case_sub.next(); // consume "term"
@@ -1604,7 +1989,7 @@ statements that run belong in a function or a script")
                                     DiagnosticBuilder::error(self.db, "expected name after 'case term'")
                                         .code(PCode::CaseTermWithoutName.as_str())
                                         .primary_label(ts, "expected term name")
-                                        .emit_parse();
+                                        .emit_to(&self.sink);
                                     InternedText::new(self.db, "<error>".S())
                                 }
                             };
@@ -1616,7 +2001,7 @@ statements that run belong in a function or a script")
                                     DiagnosticBuilder::error(self.db, "expected binding name after term name")
                                         .code(PCode::CaseTermWithoutBinding.as_str())
                                         .primary_label(ts, "expected binding name")
-                                        .emit_parse();
+                                        .emit_to(&self.sink);
                                     InternedText::new(self.db, "<error>".S())
                                 }
                             };
@@ -1624,11 +2009,12 @@ statements that run belong in a function or a script")
                             self.merge_identity_from(&mut case_sub);
 
                             // Parse body until next case/default/end match.
-                            let body = self.parse_match_arm_body(remaining_lines);
+                            let (body, arm_end) = self.parse_match_arm_body(remaining_lines);
                             cases.push(ast::MatchCase {
                                 kind: ast::MatchCaseKind::Term { name, binding },
                                 body,
                             });
+                            end = arm_end;
                         }
                         Some("default") => {
                             let default_span = case_sub.peek_text_span();
@@ -1638,13 +2024,14 @@ statements that run belong in a function or a script")
 
                             // Parsed either way, so that a second default's body
                             // is checked like any other rather than skipped.
-                            let body = self.parse_match_arm_body(remaining_lines);
+                            let (body, arm_end) = self.parse_match_arm_body(remaining_lines);
+                            end = arm_end;
                             if default_body.is_some() {
                                 self.had_error = true;
                                 DiagnosticBuilder::error(self.db, "duplicate `case default` in match")
                                     .code(PCode::DuplicateDefaultCase.as_str())
                                     .primary_label(default_span, "a match takes only one default arm")
-                                    .emit_parse();
+                                    .emit_to(&self.sink);
                             } else {
                                 default_body = Some(body);
                             }
@@ -1655,29 +2042,47 @@ statements that run belong in a function or a script")
                             DiagnosticBuilder::error(self.db, "expected 'atom', 'term', or 'default' after 'case'")
                                 .code(PCode::BadCaseKind.as_str())
                                 .primary_label(ts, "expected 'atom', 'term', or 'default'")
-                                .emit_parse();
+                                .emit_to(&self.sink);
                             self.merge_identity_from(&mut case_sub);
                             // Skip to next case/end match.
-                            let body = self.parse_match_arm_body(remaining_lines);
-                            let _ = body;
+                            let (_, arm_end) = self.parse_match_arm_body(remaining_lines);
+                            end = arm_end;
                         }
+                    }
+                    if matches!(end, BodyEnd::Closed | BodyEnd::Unterminated | BodyEnd::Swallowed) {
+                        break;
                     }
                     continue;
                 }
             }
 
             // A line inside a match that is not a `case` belongs to no arm.
+            // It is taken for a `case` line written wrong, the one error, and
+            // the lines after it for its arm, read as any other.
             let (_, line) = remaining_lines.next().X();
             self.had_error = true;
             let ts = self.extract_text_span(&line.first().X());
             DiagnosticBuilder::error(self.db, "this line is in no case of the match")
                 .code(PCode::LineOutsideCase.as_str())
                 .primary_label(ts, "every statement here belongs to a `case`")
-                .emit_parse();
+                .emit_to(&self.sink);
+            let (_, arm_end) = self.parse_match_arm_body(remaining_lines);
+            end = arm_end;
+            if matches!(end, BodyEnd::Closed | BodyEnd::Unterminated | BodyEnd::Swallowed) {
+                break;
+            }
         }
 
-        if !found_end_match {
-            return self.unterminated_block("match");
+        self.open_blocks.pop();
+        if matches!(end, BodyEnd::Unterminated) {
+            end = self.missing_end(remaining_lines, filed_before);
+        }
+        match end {
+            BodyEnd::Close => self.eat_end_line(remaining_lines, "match"),
+            BodyEnd::Closed => {}
+            BodyEnd::Unterminated => return self.unterminated_block("match"),
+            BodyEnd::Swallowed => return self.swallowed_block(),
+            BodyEnd::Stop => unreachable!("an arm stops at a `case`, which the loop reads"),
         }
 
         ast::Statement::Match(ast::StmtMatch {
@@ -1690,25 +2095,11 @@ statements that run belong in a function or a script")
     /// Parse match arm body lines until the next case/default/end match.
     fn parse_match_arm_body(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
-    ) -> Vec<ast::Statement<'db>> {
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)> + Clone>,
+    ) -> (Vec<ast::Statement<'db>>, BodyEnd) {
         let mut body = vec![];
-        while let Some((_, line)) = remaining_lines.peek() {
-            if self.line_is_end_keyword(line, "match") {
-                break;
-            }
-            // Check for next "case".
-            if let Some(TreeToken::Token(t1)) = line.first() {
-                if let Some("case") = t1.word_str(self.text()) {
-                    break;
-                }
-            }
-
-            let (_, line) = remaining_lines.next().X();
-            let stmt = self.parse_line_statement(line, remaining_lines);
-            body.push(stmt);
-        }
-        body
+        let end = self.parse_block_body(remaining_lines, "match", &["case"], &mut body);
+        (body, end)
     }
 
     /// Read a type hint, which datalit knows the shape of and this does not.

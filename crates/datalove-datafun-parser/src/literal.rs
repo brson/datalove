@@ -16,7 +16,7 @@ use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{self, TextSpan, TokenStream, TokenStreamExt};
 use bct::diagnostic::DiagnosticBuilder;
-use datalove_diagnostic::DiagnosticBuilderExt;
+use datalove_datalit::parser_util::EmitTo;
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
@@ -197,7 +197,7 @@ impl<'db> Parser<'db> {
         DiagnosticBuilder::error(self.db, message)
             .code(code.as_str())
             .primary_label(ts.C(), label)
-            .emit_parse();
+            .emit_to(&self.sink);
         ast::ExprFunKind::ParseError(ast::ExprFunParseError {
             source: ts.source,
             span: ts.span,
@@ -289,7 +289,7 @@ impl<'db> Parser<'db> {
             self.had_error = true;
             split::stray_delimiter_error(self.db, self.source_text(), &written, what)
                 .code(DCode::EmptyBeforeComma.as_str())
-                .emit_parse();
+                .emit_to(&self.sink);
         }
     }
 
@@ -319,7 +319,7 @@ impl<'db> Parser<'db> {
             self.had_error = true;
             split::trailing_delimiter_error(self.db, self.source_text(), &written, "parts")
                 .code(DCode::EmptyBeforeComma.as_str())
-                .emit_parse();
+                .emit_to(&self.sink);
         }
         let groups = split::nonempty_groups(groups);
 
@@ -342,7 +342,7 @@ impl<'db> Parser<'db> {
                                 group_idx, expected, sub_shape))
                             .code(DCode::TensorShapeMismatch.as_str())
                             .primary_label(ts, "shape mismatch")
-                            .emit_parse();
+                            .emit_to(&self.sink);
                     }
                 }
             }
@@ -388,7 +388,7 @@ impl<'db> Parser<'db> {
                         row_idx + 1, elements.len(), num_columns))
                     .code(DCode::TableRowWidth.as_str())
                     .primary_label(ts, "column count mismatch")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
             data_rows.push(ast::ExprTableRow { elements });
         }
@@ -415,13 +415,13 @@ impl<'db> Parser<'db> {
                 DiagnosticBuilder::error(self.db, "expected column name in table header")
                     .code(DCode::TableHeaderNotName.as_str())
                     .primary_label(ts, "expected name")
-                    .emit_parse();
+                    .emit_to(&self.sink);
                 names.push(InternedText::new(self.db, "<error>".S()));
                 continue;
             };
             let name_text = InternedText::new(self.db, name.S());
             let ts = self.extract_text_span(&first);
-            if !seen.take(self.db, name_text, ts, "column") {
+            if !seen.take(self.db, &self.sink, name_text, ts, "column") {
                 self.had_error = true;
             }
             names.push(name_text);
@@ -433,7 +433,7 @@ impl<'db> Parser<'db> {
                     &format!("unexpected token after column name `{}`", name))
                     .code(DCode::TableHeaderExtraToken.as_str())
                     .primary_label(ts, "a column is named by one word")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
         }
 
@@ -488,7 +488,7 @@ impl<'db> Parser<'db> {
         let name_ts = self.peek_text_span();
         let name = match self.eat_name() {
             Some(n) => {
-                if !seen.take(self.db, n, name_ts, "field") {
+                if !seen.take(self.db, &self.sink, n, name_ts, "field") {
                     self.had_error = true;
                 }
                 n
@@ -534,11 +534,16 @@ impl<'db> Parser<'db> {
 
         if !self.eat_sigil(Sigil::Arrow) {
             let ts = self.peek_text_span();
-            let error_value = self.emit_expr_error(ts,
-                "expected '->' between map key and value",
-                DCode::MapEntryWithoutArrow,
-                "expected '->'"
-            );
+            // An operator written against one side ended the key, as it ends
+            // any expression, and that is the error (P091).
+            let error_value = match self.lopsided_operator() {
+                Some((code, message, label)) => self.emit_expr_error(ts, &message, code, &label),
+                None => self.emit_expr_error(ts,
+                    "expected '->' between map key and value",
+                    DCode::MapEntryWithoutArrow,
+                    "expected '->'"
+                ),
+            };
             return ast::ExprMapEntry { key, value: error_value };
         }
 

@@ -7,14 +7,15 @@ mod statement;
 mod expr;
 mod literal;
 
-use datalove_diagnostic_codes::DCode;
 use rmx::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use bct::{
     input::Source,
     module_graph::ModuleId,
     bracer::{Bracer, Cursor},
-    parser_util,
+    diagnostic::StoredDiagnostic,
     split,
     lexer,
     bracer,
@@ -22,7 +23,7 @@ use bct::{
 
 use datalove_datafun_ast::ast;
 use bct::text::InternedText;
-use datalove_diagnostic::DiagnosticBuilderExt;
+use datalove_datalit::parser_util::{self as datalit_util, Sink};
 use state::{Parser, ScriptCounters};
 
 use salsa::Database as Db;
@@ -82,9 +83,24 @@ fn parse_source<'db>(
     top_level: TopLevel,
 ) -> ast::ParseResult<'db> {
     let bracer = bracer::bracer(db, lexer::lex(db, source));
-    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source);
-    emit_non_ascii_name_errors(db, bracer, source);
-    parse_bracer(db, bracer, source, module_id, top_level)
+    filing_first_errors(db, bracer, source, |sink| parse_bracer(db, bracer, source, module_id, top_level, sink))
+}
+
+/// Run a parse with its diagnostics kept, then file them: the first error of
+/// each statement, with what it led to dropped; see
+/// `file_first_error_per_statement`.
+fn filing_first_errors<'db, T>(
+    db: &'db dyn Db,
+    bracer: Bracer<'db>,
+    source: Source,
+    parse: impl FnOnce(Sink) -> T,
+) -> T {
+    let kept: Rc<RefCell<Vec<StoredDiagnostic>>> = Rc::default();
+    kept.borrow_mut().extend(datalit_util::prepass_errors(db, bracer, source));
+    let result = parse(Some(kept.C()));
+    let starts = datalit_util::statement_starts(db, bracer);
+    datalit_util::file_first_error_per_statement(db, &starts, kept.take());
+    result
 }
 
 /// Parse a Source as a single expression.
@@ -95,19 +111,17 @@ pub fn parse_expr<'db>(
 ) -> ast::ParseExprResult<'db> {
     datalove_ct::unit_analysis::record(datalove_ct::unit_analysis::Pass::Parse, source);
     let bracer = bracer::bracer(db, lexer::lex(db, source));
-    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source);
-    emit_non_ascii_name_errors(db, bracer, source);
-    // Expressions don't have module context.
-    parse_bracer_expr(db, bracer, source)
+    filing_first_errors(db, bracer, source, |sink| parse_bracer_expr(db, bracer, source, sink))
 }
 
 fn parse_bracer_expr<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
     source_text: bct::input::Source,
+    sink: Sink,
 ) -> ast::ParseExprResult<'db> {
     // Expressions don't have module context.
-    let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None);
+    let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None, sink);
     let root = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     let qualified_calls = each_once(parser.take_qualified_calls());
@@ -128,31 +142,18 @@ fn each_once<'db>(calls: Vec<(InternedText<'db>, InternedText<'db>)>) -> ast::Qu
     std::sync::Arc::new(once)
 }
 
-/// Emit parse diagnostics for names written outside ASCII.
-fn emit_non_ascii_name_errors<'db>(
-    db: &'db dyn Db,
-    bracer: Bracer<'db>,
-    source_text: Source,
-) {
-    let text = source_text.as_str(db);
-    for span in parser_util::non_ascii_names(bracer.lexed(db).tokens(db), text) {
-        parser_util::non_ascii_name_error(db, source_text, span)
-            .code(DCode::NonAsciiName.as_str())
-            .emit_parse();
-    }
-}
-
 fn parse_bracer<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
     source_text: Source,
     module_id: Option<ModuleId<'db>>,
     top_level: TopLevel,
+    sink: Sink,
 ) -> ast::ParseResult<'db> {
     // Split into lines. A line break inside balanced braces is not one here,
     // since the bracer has already put it inside a branch.
     let lines = split::Lines::new(bracer.iter(db));
-    let (body, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id, top_level);
+    let (body, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id, top_level, sink);
     let parsed = ast::ParsedStatements {
         top: ast::TopLevel::new(db, body),
         qualified_calls: each_once(qualified_calls),
@@ -191,10 +192,11 @@ struct ParsedSpans<'db> {
 /// Returns statements and accumulated spans.
 fn parse_statements<'db>(
     db: &'db dyn Db,
-    lines: impl Iterator<Item = Cursor<'db>>,
+    lines: impl Iterator<Item = Cursor<'db>> + Clone,
     source_text: bct::input::Source,
     module_id: Option<ModuleId<'db>>,
     top_level: TopLevel,
+    sink: Sink,
 ) -> (ast::Body<'db>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {
     let mut statements = vec![];
     let mut exprs = vec![];
@@ -209,11 +211,13 @@ fn parse_statements<'db>(
     let mut all_import_spans = vec![];
     let mut all_require_spans = vec![];
     let mut all_alias_spans = vec![];
+    let ends_open = lines.clone().last().is_some_and(|line| statement::leaves_open(&line, source_text.as_str(db)));
     let mut line_iter = lines.enumerate().peekable();
     let mut counters = ScriptCounters::default();
 
     while let Some((_line_num, line)) = line_iter.next() {
-        let mut parser = Parser::new(db, line, source_text, module_id, counters);
+        let mut parser = Parser::new(db, line, source_text, module_id, counters, sink.C());
+        parser.ends_open = ends_open;
         match top_level {
             TopLevel::Script => {}
             TopLevel::Module => parser.refuse_at_module_top_level(),

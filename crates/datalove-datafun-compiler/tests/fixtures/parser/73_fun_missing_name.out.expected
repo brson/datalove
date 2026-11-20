@@ -4,10 +4,6 @@
       {
         "kind": "ParseError",
         "message": "expected function name after 'fun'"
-      },
-      {
-        "kind": "ParseError",
-        "message": "unexpected statement"
       }
     ]
   },
@@ -25,20 +21,6 @@
         }
       ],
       "message": "expected function name after 'fun'"
-    },
-    {
-      "code": "P001",
-      "labels": [
-        {
-          "message": "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'for', 'break', 'continue', 'debuglog', 'type', or 'native'",
-          "span": [
-            7,
-            10
-          ],
-          "text": "end"
-        }
-      ],
-      "message": "unexpected statement"
     }
   ]
 }

@@ -15,8 +15,7 @@ use bct::{
 use crate::ast;
 use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use bct::chunk::PlannedCollection;
-use bct::diagnostic::{DiagnosticBuilder, StoredDiagnostic};
-use datalove_diagnostic::DiagnosticBuilderExt;
+use bct::diagnostic::DiagnosticBuilder;
 
 /// Where a parser reads its tokens: a cursor over a bracket or a part of
 /// one, with the two tokens at it held for lookahead.
@@ -26,13 +25,19 @@ struct TokenSource<'db> {
     buffer: [Option<TreeToken<'db>>; 2],
     /// The end of the last token consumed, for span tracking.
     last_end: Option<usize>,
+    /// Where the cursor's tokens begin; see `TokenStream::origin`.
+    origin: usize,
 }
 
 impl<'db> TokenSource<'db> {
     fn new(mut cursor: Cursor<'db>) -> Self {
+        let origin = match cursor.position() {
+            0 => 0,
+            at => cursor.raw(at - 1).span().end,
+        };
         let first = cursor.next();
         let second = cursor.next();
-        TokenSource { cursor, buffer: [first, second], last_end: None }
+        TokenSource { cursor, buffer: [first, second], last_end: None, origin }
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
@@ -53,35 +58,7 @@ impl<'db> TokenSource<'db> {
 /// salsa hashes and probes its map for every occurrence it is asked to intern.
 type Interned<'db> = Rc<RefCell<LookupMap<&'db str, InternedText<'db>>>>;
 
-/// Where a parser's diagnostics go: filed as they are made, or kept.
-///
-/// A chunk keeps them, and hands them back to the parse that asked for it to
-/// file at the place in the collection they were made, which keeps them in
-/// the order a parse of the whole collection would have filed them in. Shared
-/// with the chunk's sub-parsers, for the same reason.
-pub(super) type Sink = Option<Rc<RefCell<Vec<StoredDiagnostic>>>>;
-
-/// Filing a diagnostic where a parser's diagnostics go.
-pub(super) trait EmitTo {
-    fn emit_to(self, sink: &Sink);
-}
-
-impl EmitTo for DiagnosticBuilder<'_> {
-    fn emit_to(self, sink: &Sink) {
-        match sink {
-            Some(kept) => kept.borrow_mut().push(self.build_stored()),
-            None => self.emit_parse(),
-        }
-    }
-}
-
-/// File a diagnostic built earlier, as [`EmitTo`] files one being built.
-pub(super) fn emit_stored(db: &dyn crate::Db, sink: &Sink, diagnostic: StoredDiagnostic) {
-    match sink {
-        Some(kept) => kept.borrow_mut().push(diagnostic),
-        None => datalove_diagnostic::ParseDiagnostic::emit_stored(db, diagnostic),
-    }
-}
+pub(super) use crate::parser_util::{EmitTo, Sink, emit_stored};
 
 /// Parser state for datalit parsing.
 pub(super) struct Parser<'db> {
@@ -332,6 +309,10 @@ impl<'db> TokenStream<'db> for Parser<'db> {
 
     fn prev_end(&self) -> Option<usize> {
         self.source.last_end
+    }
+
+    fn origin(&self) -> usize {
+        self.source.origin
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {

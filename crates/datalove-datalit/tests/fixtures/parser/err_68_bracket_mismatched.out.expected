@@ -35,20 +35,6 @@
         }
       ],
       "message": "unclosed '('"
-    },
-    {
-      "code": "D054",
-      "labels": [
-        {
-          "message": "this ']' has no matching '['",
-          "span": [
-            5,
-            6
-          ],
-          "text": "]"
-        }
-      ],
-      "message": "unmatched ']'"
     }
   ]
 }

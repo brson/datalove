@@ -36,6 +36,11 @@ pub trait TokenStream<'db> {
     /// the token at the cursor was written against the one before it.
     fn prev_end(&self) -> Option<usize>;
 
+    /// Where the stream's tokens begin: the end of the token before them, a
+    /// bracket's open where they are its inside. An error at a stream that
+    /// has taken no token points here, rather than at the start of the source.
+    fn origin(&self) -> usize;
+
     /// The source, for error reporting when there is no current token.
     fn source_text(&self) -> crate::input::Source;
 
@@ -186,7 +191,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
         match self.peek() {
             Some(token) => self.extract_text_span(token),
             None => {
-                let end = self.prev_end().unwrap_or(0);
+                let end = self.prev_end().unwrap_or(self.origin());
                 TextSpan::new(self.source_text(), end..end)
             }
         }
@@ -780,6 +785,10 @@ mod tests {
 
         fn prev_end(&self) -> Option<usize> {
             self.tokens.get(self.pos.checked_sub(1)?).map(|token| token.span().end)
+        }
+
+        fn origin(&self) -> usize {
+            0
         }
 
         fn source_text(&self) -> Source {

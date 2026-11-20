@@ -7,7 +7,6 @@ Analysis(
                 status: "ParseError",
                 errors: [
                     "error[D055]: unclosed \'<\'",
-                    "error[P021]: unexpected token after expression",
                 ],
             ),
             ownership: OwnershipResult(
