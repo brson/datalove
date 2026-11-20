@@ -559,6 +559,22 @@ impl<I: ?Sized> Recognizer<I> {
 
     /// Whether the whole of `input`, `n` long, is the start rule.
     pub fn accepts(&self, input: &I, n: usize) -> bool {
+        let sets = self.sets(input, n);
+        sets[n].items.iter().any(|item| {
+            let (lhs, rhs) = &self.prods[item.prod as usize];
+            *lhs == self.start && item.origin == 0 && item.dot as usize == rhs.len()
+        })
+    }
+
+    /// How much of `input`, `n` long, begins some string of the start rule:
+    /// the furthest position the recognizer reaches. Where it stops is the
+    /// first place any parser of the grammar could see an error, `n` if none.
+    pub fn viable_prefix(&self, input: &I, n: usize) -> usize {
+        let sets = self.sets(input, n);
+        (0..=n).rev().find(|&i| !sets[i].items.is_empty()).X()
+    }
+
+    fn sets(&self, input: &I, n: usize) -> Vec<ItemSet> {
         let mut sets: Vec<ItemSet> = (0..=n).map(|_| ItemSet::default()).collect();
         for &p in &self.by_lhs[self.start as usize] {
             sets[0].add(Item { prod: p, dot: 0, origin: 0 }, &self.prods);
@@ -602,10 +618,7 @@ impl<I: ?Sized> Recognizer<I> {
                 }
             }
         }
-        sets[n].items.iter().any(|item| {
-            let (lhs, rhs) = &self.prods[item.prod as usize];
-            *lhs == self.start && item.origin == 0 && item.dot as usize == rhs.len()
-        })
+        sets
     }
 }
 
@@ -820,6 +833,8 @@ mod tests {
         assert!(!accepts(&r, "[1,]"));
         assert!(!accepts(&r, "[1 2]"));
         assert!(!accepts(&r, "[[]"));
+        let cs: Vec<char> = "[1, 2 3]".chars().collect();
+        assert_eq!(r.viable_prefix(&cs, cs.len()), 6);
     }
 
     #[test]

@@ -1458,6 +1458,7 @@ dependencies = [
  "datalove-sys-packages",
  "datalove-vio",
  "rustmax",
+ "salsa",
 ]
 
 [[package]]

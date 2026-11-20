@@ -13,7 +13,9 @@ The fixtures behind the documentation, and the tests that keep it true.
 fixtures: they run the grammars in `botdocs/datalit-ebnf.md` and
 `botdocs/datafun-ebnf.md` against their parsers, with the recognizer and
 generator in `src/ebnf.rs`, the checking in `src/grammar_check.rs`, and the
-datalit grammar made executable in `src/datalit_grammar.rs`.
+datalit and datafun grammars made executable in `src/datalit_grammar.rs` and
+`src/datafun_grammar.rs`. `tests/recovery_tests.rs` measures how the parsers
+recover from errors, and holds their diagnostics to a well-formed shape.
 
 ```bash
 cargo test -p datalove-doc-fixtures

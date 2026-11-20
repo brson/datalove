@@ -18,6 +18,7 @@ says which rule types each form.
 - [Notation](#user-content-notation)
 - [Grammar](#user-content-grammar)
 - [Rules outside the grammar](#user-content-rules-outside-the-grammar)
+- [Recovery](#user-content-recovery)
 - [Checking the grammar](#user-content-checking-the-grammar)
 - [Productions and their typing rules](#user-content-productions-and-their-typing-rules)
 - [Differences from datalit](#user-content-differences-from-datalit)
@@ -70,7 +71,8 @@ stmt          = let_stmt | var_stmt | const_stmt | set_stmt | call_stmt
                 (* chosen by the first word; anything else: P001;
                    tokens left on the line: P021 *)
 block         = { ( stmt | decl_stmt ), EOLS } ;   (* decl_stmt in a block: P074 *)
-end_line(k)   = "end", k ;         (* a line of its own; extra tokens: P033; missing: P034 *)
+end_line(k)   = "end", k ;         (* a line of its own; extra tokens: P033; missing: P034;
+                                      another keyword, or none: P093 *)
 
 (* ===== Bindings  (statement.rs: parse_let, parse_var, parse_const, parse_binding) ===== *)
 let_stmt      = "let", binding, [ ":", type ], "=", expr ;   (* P007; no "=": P083 *)
@@ -172,7 +174,8 @@ primary       = hinted
                 (* any other bracket, or nothing: P081; another token: P080 *)
 payload       = unary ;                         (* a binary operator after it: P065 *)
 arg_list      = arg, { ",", arg }, [ "," ] ;
-arg           = [ "ref" | "mut" | "out" ], expr ;
+arg           = ( "ref" | "mut" | "out" ), expr
+              | expr - ( "ref" | "mut" | "out" ) ;   (* a bare mode word: P081 *)
 paren         = "(", [ expr, { ",", expr }, [ "," ] ], ")" ;
                 (* one element, no comma: grouping; else a tuple; () is unit *)
 
@@ -310,11 +313,70 @@ derive, and everything it accepts, the grammar does. A test checks this (see
 - Every declared name is checked against the reserved words (P064),
   including the name a struct pattern's `{f}` shorthand binds.
 
-**Recovery.** P021 is the code for any other token left over after a
+**Leftover tokens.** P021 is the code for any other token left over after a
 complete statement, or after the last element of a bracket: `debuglog 1 2`
 is P021 at the `2`. It is suppressed after any earlier error in the same
 sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 `extra`.
+
+## Recovery
+
+What the parser reports of a source with errors in it. The rules are held by
+`recovery_contract` in `crates/datalove-doc-fixtures/tests/recovery_tests.rs`,
+over every source the grammar test reads, each changed a character at a time.
+
+**One error for each statement.** A statement is a logical line: from a line
+break outside brackets to the next, brackets joining the lines inside them,
+as the bracer matched them. A stray close passed over keeps the line break
+before it. Of a statement's errors the first, in the order of the source, is
+reported, and what it led to is dropped (`file_first_error_per_statement` in
+`datalove-datalit`'s `parser_util`). The errors found before parsing,
+unmatched brackets (D054, D055) and names outside ASCII (D043), count for the
+statement they are in.
+
+**Where.** The first error is on the token where the grammar first cannot go
+on, or on a construct that ends there; one for a missing token is in the gap
+before what is there instead. An unmatched bracket (D054, D055) and a block
+with no `end` (P034) are reported where they open.
+
+**Blocks.** Blocks are read line by line, each line by its first words:
+
+- A block header with an error in it still opens its block: `fun (x: int)`
+  is P010, and its body and `end fun` are read with it, not as statements of
+  their own. Tokens left on a header line are reported before its body is
+  read.
+- A line that begins no statement (P001) opens a block if the `end` lines
+  after it, up to the next declaration outside every block, match only with
+  one opened there, as `fnu f()` for `fun f()` does.
+- An `end` line closes the innermost block. One naming a block around it
+  means the innermost has lost its `end` (P034). One naming no open block, or
+  nothing, closes the innermost with P093.
+- An `else` or a `case` line belongs to the innermost `if` or `match`; in a
+  block inside it, that block has lost its `end`. After an `else` line that
+  did not parse, an `else if` written wrong, the chain's later `else` lines
+  are still its own.
+- A declaration inside a block is P074 if the block's own `end` comes later,
+  each `fun` on the way taking its own. If it never comes the block has lost
+  it (P034), every block open is closed there, and the declaration is read at
+  the top level: datafun has no nested functions, so a `fun` in a block is one
+  mistake or the other.
+- A block that runs out without its `end` is not reported where an error
+  already accounts for it: a line in it, or in a block inside it, that begins
+  no statement (P001), ends a block wrong (P093) or is in no case of a match
+  (P048), any of them the `end` or a header written wrong; or a source that
+  ends inside a bracket, string or block comment never closed, which took the
+  `end` into it.
+- A line in a match outside any case is P048, taken for a `case` line written
+  wrong, and the lines after it are its arm.
+
+**The top level of a module or interface** refuses a statement that is not
+its kind with P077 or P084, and a line that begins no statement with P001
+alone.
+
+**One change, one statement.** One character changed in a source that parses
+makes errors in one statement only, unless it moved a statement boundary:
+made or unmade a line break, matched a bracket that spans lines differently,
+or exposed a `;` in a comment.
 
 ## Checking the grammar
 
@@ -385,7 +447,9 @@ without its name or `=` (D058), a map entry without `->` (D017), D030, D031,
 D033, D034, D038 to D041, tensor-shape D023, every type-hint fault, and every
 type diagnostic. A P-code is for datafun's own syntax. An unexpected token is
 one too, since what may come where differs between the two expression
-grammars: D020, D059 and D018 in datalit are P080 and P081 in datafun.
+grammars: D020, D059 and D018 in datalit are P080 and P081 in datafun, and
+tokens left after a datalit literal (D021) are left after a datafun
+statement or bracket (P021).
 
 ## Diagnostics
 
@@ -467,6 +531,7 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P090 | A postfix operator written apart from what it applies to |
 | P091 | A binary operator written against one side only |
 | P092 | A type parameter with no name |
+| P093 | An `end` line whose keyword is not its block's |
 
 A code missing from the table is unassigned. The codes are `PCode` in
 `crates/datalove-diagnostic-codes`, which a test holds to this table.

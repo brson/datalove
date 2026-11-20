@@ -18,7 +18,7 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use crate::ebnf::{Expr, Grammar, Rule, Term};
-use crate::grammar_check::{catch_panic, workspace_dir};
+use crate::grammar_check::{Diag, catch_panic, diags, workspace_dir};
 
 pub const DOC: &str = "botdocs/datalit-ebnf.md";
 
@@ -37,20 +37,21 @@ pub fn term(e: &Expr) -> Term<[char]> {
     crate::ebnf::char_term(e, special)
 }
 
-/// The codes the datalit parser refuses `text` with, or its panic.
-pub fn parse_codes(text: &str) -> Result<Vec<String>, String> {
+/// What the datalit parser reports of `text`, or its panic.
+pub fn parse_diags(text: &str) -> Result<Vec<Diag>, String> {
     catch_panic(|| {
         let db = datalove_datalit::Database::default();
         let source = bct::input::Source::new(&db, text.S());
-        let _ = datalove_datalit::parser::parse_integration_test(&db, source);
-        let diags = datalove_datalit::parser::parse_integration_test::accumulated::<
+        let found = datalove_datalit::parser::parse_integration_test::accumulated::<
             datalove_diagnostic::ParseDiagnostic,
         >(&db, source);
-        diags
-            .iter()
-            .map(|d| d.to_diagnostic(&db).code.map(|c| c.as_str(&db).S()).unwrap_or_else(|| "no code".S()))
-            .collect()
+        diags(&db, &found)
     })
+}
+
+/// The codes the datalit parser refuses `text` with, or its panic.
+pub fn parse_codes(text: &str) -> Result<Vec<String>, String> {
+    parse_diags(text).map(|ds| ds.into_iter().map(|d| d.code).collect())
 }
 
 /// The assertion added around each word: no word character on both sides.

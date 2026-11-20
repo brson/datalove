@@ -11,7 +11,10 @@
 use rmx::prelude::*;
 use bct::random::SeededRng;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+
+use bct::diagnostic::{LabelStyle, Severity};
 
 pub fn workspace_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -35,6 +38,37 @@ pub fn outside_codes(doc: &str, name: &str) -> BTreeSet<String> {
 /// Whether a word is a diagnostic code, a capital letter and three digits.
 pub fn is_code(w: &str) -> bool {
     w.len() == 4 && w.starts_with(|c: char| c.is_ascii_uppercase()) && w[1..].chars().all(|c| c.is_ascii_digit())
+}
+
+/// One diagnostic a parser reported, as the checks read it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Diag {
+    /// The code, or `"no code"`.
+    pub code: String,
+    pub error: bool,
+    pub message: String,
+    /// The primary label's span, if there is one.
+    pub primary: Option<Range<usize>>,
+    /// Every label's span, the primary one included.
+    pub spans: Vec<Range<usize>>,
+}
+
+/// The parse diagnostics a database accumulated, as [`Diag`]s.
+pub fn diags(db: &dyn salsa::Database, found: &[&datalove_diagnostic::ParseDiagnostic]) -> Vec<Diag> {
+    found
+        .iter()
+        .map(|d| {
+            let d = d.to_diagnostic(db);
+            let primary = d.labels.iter().find(|l| l.style == LabelStyle::Primary).map(|l| l.span.C());
+            Diag {
+                code: d.code.map(|c| c.as_str(db).S()).unwrap_or_else(|| "no code".S()),
+                error: d.severity == Severity::Error,
+                message: d.message.as_str(db).S(),
+                primary,
+                spans: d.labels.iter().map(|l| l.span.C()).collect(),
+            }
+        })
+        .collect()
 }
 
 /// What `f` returns, or the message it panicked with.
@@ -100,31 +134,36 @@ impl Judge<'_> {
 
     /// The shortest input, by deleting characters, that disagrees as `d` does.
     fn shrink(&self, text: &str, d: &Disagreement) -> String {
-        let mut cs: Vec<char> = text.chars().collect();
-        let mut chunk = (cs.len() / 2).max(1);
-        loop {
-            let mut progress = false;
-            let mut i = 0;
-            while i < cs.len() {
-                let mut t = cs.C();
-                t.drain(i..(i + chunk).min(cs.len()));
-                let s: String = t.iter().collect();
-                if self.judge(&s).is_some_and(|e| e.same_kind(d)) {
-                    cs = t;
-                    progress = true;
-                } else {
-                    i += chunk;
-                }
-            }
-            if !progress {
-                if chunk == 1 {
-                    break;
-                }
-                chunk = (chunk / 2).max(1);
+        shrink(text, &|s| self.judge(s).is_some_and(|e| e.same_kind(d)))
+    }
+}
+
+/// The shortest text, by deleting characters from `text`, that `keep` holds of.
+pub fn shrink(text: &str, keep: &dyn Fn(&str) -> bool) -> String {
+    let mut cs: Vec<char> = text.chars().collect();
+    let mut chunk = (cs.len() / 2).max(1);
+    loop {
+        let mut progress = false;
+        let mut i = 0;
+        while i < cs.len() {
+            let mut t = cs.C();
+            t.drain(i..(i + chunk).min(cs.len()));
+            let s: String = t.iter().collect();
+            if keep(&s) {
+                cs = t;
+                progress = true;
+            } else {
+                i += chunk;
             }
         }
-        cs.into_iter().collect()
+        if !progress {
+            if chunk == 1 {
+                break;
+            }
+            chunk = (chunk / 2).max(1);
+        }
     }
+    cs.into_iter().collect()
 }
 
 /// How many disagreements are shrunk before the rest are reported as found.
@@ -198,18 +237,45 @@ const MUTATION_CHARS: &[char] = &[
 
 /// `text` with one character deleted, inserted, replaced or doubled.
 pub fn mutate(text: &str, rng: &mut SeededRng) -> String {
+    mutate_at(text, rng).text
+}
+
+/// One character of a text changed.
+pub struct Mutation {
+    pub text: String,
+    /// The byte offset of the change in `text`.
+    pub at: usize,
+    /// The characters it removed and added.
+    pub touched: Vec<char>,
+}
+
+impl Mutation {
+    /// Whether the change made or unmade a line break, a newline or a `;`,
+    /// which can break two statements at once.
+    pub fn touches_lines(&self) -> bool {
+        self.touched.iter().any(|c| matches!(c, '\n' | ';'))
+    }
+}
+
+/// `text` with one character deleted, inserted, replaced or doubled.
+pub fn mutate_at(text: &str, rng: &mut SeededRng) -> Mutation {
     let mut cs: Vec<char> = text.chars().collect();
     let i = rng.random_range(0..=cs.len());
     let c = MUTATION_CHARS[rng.random_range(0..MUTATION_CHARS.len())];
-    match rng.random_range(0..4) {
-        0 if i < cs.len() => {
-            cs.remove(i);
+    let touched = match rng.random_range(0..4) {
+        0 if i < cs.len() => vec![cs.remove(i)],
+        1 if i < cs.len() => vec![rmx::std::mem::replace(&mut cs[i], c), c],
+        2 if i < cs.len() => {
+            cs.insert(i, cs[i]);
+            vec![cs[i]]
         }
-        1 if i < cs.len() => cs[i] = c,
-        2 if i < cs.len() => cs.insert(i, cs[i]),
-        _ => cs.insert(i, c),
-    }
-    cs.into_iter().collect()
+        _ => {
+            cs.insert(i, c);
+            vec![c]
+        }
+    };
+    let at = cs[..i.min(cs.len())].iter().map(|c| c.len_utf8()).sum();
+    Mutation { text: cs.into_iter().collect(), at, touched }
 }
 
 /// One claim a document makes about an example.

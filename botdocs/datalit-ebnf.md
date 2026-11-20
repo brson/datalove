@@ -17,6 +17,7 @@ disagrees with the parser, see [The manual](#user-content-the-manual).
 - [Notation](#user-content-notation)
 - [Grammar](#user-content-grammar)
 - [Rules outside the grammar](#user-content-rules-outside-the-grammar)
+- [Recovery](#user-content-recovery)
 - [Checking the grammar](#user-content-checking-the-grammar)
 - [Diagnostics](#user-content-diagnostics)
 - [Divergences](#user-content-divergences)
@@ -213,6 +214,19 @@ it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
   column (D030); each cell is one `full_expr`, so `{| x, y; 1 2, 3 |}` is D021.
   A header cell is one name (D031, D034), and names are unique (D038). The
   header is optional: `{||}` is the empty table.
+
+## Recovery
+
+A literal is one expression, so one statement however many lines it spans,
+and the parser reports one error of it: the first, in the order of the
+source, with what it led to dropped. The errors found before parsing,
+unmatched brackets (D054, D055) and names outside ASCII (D043), are among
+them. The first error is on the token where the grammar first cannot go on,
+or on a construct that ends there, or in the gap before what is there instead
+of a missing token, but for an unmatched bracket, which is reported where it
+opens. `recovery_contract` in `crates/datalove-doc-fixtures/tests/recovery_tests.rs`
+holds the parser to this, as it holds datafun's to
+[its rules](datafun-ebnf.md#user-content-recovery).
 
 ## Checking the grammar
 

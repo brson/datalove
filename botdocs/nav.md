@@ -58,6 +58,7 @@
 - [A Plain-Data AST](plan-plain-ast.md)
 - [Parsing Large Collection Literals in Parallel](plan-parallel-collections.md)
 - [One Rule for Literals That Share a Type](plan-literal-typing.md)
+- [Parse Error Recovery](plan-parse-recovery.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
