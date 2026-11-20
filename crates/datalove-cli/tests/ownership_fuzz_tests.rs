@@ -8,7 +8,10 @@
 //! runtime's leak check on, on the bytecode, on the IR walker, which asserts
 //! that every drop finds something to drop, and under the JIT, whose frees
 //! the allocator checks; each run must end cleanly: no panic, no leak, no
-//! error.
+//! error. What a script logs, which is every value `take` is given and what
+//! the function returns, goes to stderr, and the IR walker and the JIT must
+//! log what the bytecode logged, so that an engine that moves or changes
+//! the wrong value is caught even when it ends cleanly.
 //!
 //! The shapes come from a panic in the ownership pass that a dead `break`
 //! after a `ret` in a loop under a `ref` `for` caused (backend fixture
@@ -102,8 +105,14 @@ fn check(text: &str) -> Outcome {
     for (engine, args, env) in AGAIN {
         match run(&path, args, env) {
             None => return Outcome::Failed(fmt!("on {engine}, did not end")),
-            Some((true, stderr)) if !stderr.contains("panicked at") && !stderr.contains("LEAK") => {}
-            Some((_, stderr)) => return Outcome::Failed(fmt!("on {engine}:\n{stderr}")),
+            Some((true, again)) if !again.contains("panicked at") && !again.contains("LEAK") => {
+                if again != stderr {
+                    return Outcome::Failed(fmt!(
+                        "on {engine}, a log unlike the bytecode's:\n{again}\nthe bytecode's:\n{stderr}"
+                    ));
+                }
+            }
+            Some((_, again)) => return Outcome::Failed(fmt!("on {engine}:\n{again}")),
         }
     }
     Outcome::Ran
