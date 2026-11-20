@@ -49,6 +49,7 @@ Analysis(
                         branch v4, block2, block1
                     block1:
                         v5 = none
+                        drop s0
                         return v5
                     block2:
                         v6 = listelementref s0[v3]
@@ -102,6 +103,7 @@ Analysis(
                         branch v9, block4, block3
                     block3:
                         v10 = none
+                        drop s0
                         return v10
                     block4:
                         v11 = mapvalueref s0[v8]

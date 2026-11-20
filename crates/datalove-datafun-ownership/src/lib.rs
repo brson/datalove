@@ -1978,8 +1978,10 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
                 // Nested functions handled separately.
             }
             Statement::DebugLog(stmt) => {
-                // Debuglog borrows its value, so analyze the expression but don't consume it.
-                ctx.analyze_expr_moves(ctx.expr(stmt.value), false);
+                // Debuglog borrows its value, so the expression is not
+                // consumed; but a `?` in it can leave the function, which
+                // drops what the function still owns, as any other does.
+                analyze_leaving_expr(ctx, ctx.expr(stmt.value), false, stmt_id);
             }
             Statement::TypeAlias(_) => {
                 // Type aliases are resolved at typecheck time; nothing to analyze.

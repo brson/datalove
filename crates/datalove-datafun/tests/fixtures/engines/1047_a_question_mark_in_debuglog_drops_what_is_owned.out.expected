@@ -1,0 +1,108 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn both(p0, p1):
+                    block0:
+                        v0 = move p0
+                        drop p1
+                        return v0
+                    
+                    fn maybe(p0):
+                    block0:
+                        v0 = copy p0
+                        branch v0, block1, block2
+                    block1:
+                        v1 = const "m"
+                        v2 = some v1
+                        return v2
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = none
+                        return v3
+                    
+                    fn go(p0, p1):
+                    block0:
+                        v0 = const "x"
+                        store.move s0, v0
+                        v1 = clone s0
+                        v2 = call m0.u1(p0)
+                        v3, v4 = unwrap_option v2
+                        branch v4, block2, block1
+                    block1:
+                        v5 = none
+                        drop v1
+                        drop p1
+                        drop s0
+                        return v5
+                    block2:
+                        v6 = call m0.u0(v1, v3)
+                        debuglog v6
+                        drop v6
+                        v7 = load.move s0
+                        v8 = some v7
+                        drop p1
+                        return v8
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const false
+                        v1 = const "s"
+                        v2 = call m0.u2(v0, v1)
+                        v3 = const true
+                        v4 = const "s"
+                        v5 = call m0.u2(v3, v4)
+                        v6 = pack tuple/2 {v2, v5}
+                        unit_end v6
+                """,
+            ),
+            output: "(none, some \"x\")",
+            debug_output: Some("\"x\"\n"),
+        ),
+    ],
+)

@@ -1,0 +1,37 @@
+----------
+module local/test/main
+----------
+
+// A `?` in a `debuglog` that fails returns from the function, which has to
+// drop what it still owns. The ownership analysis scheduled no drops for one,
+// so `s` and `x` leaked: a debuglog's value is only borrowed, and it was not
+// analyzed as an expression that can leave.
+fun both(a: string, b: string): string
+    ret a
+end fun
+
+fun maybe(c: bool): ?string
+    if c
+        ret some "m"
+    end if
+    ret none
+end fun
+
+fun go(c: bool, s: string): ?string
+    var x: string = "x"
+    debuglog both(x@, maybe(c)?)
+    ret some x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.go
+
+----------
+scriptunit-expr
+----------
+
+(go(false, "s"), go(true, "s"))
