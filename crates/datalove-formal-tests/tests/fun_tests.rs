@@ -2324,6 +2324,94 @@ fn moves_agree() {
     assert!(mismatches.is_empty(), "the Rust and the model decide moves differently on {} scripts", mismatches.len());
 }
 
+/// What `datalove script-drops` says of a script's functions, by name: each
+/// its statements, in the order the ownership analysis numbered them, and
+/// the lines saying what is dropped where. None if the CLI refuses the
+/// script.
+fn rust_drops(text: &str) -> Option<BTreeMap<String, (Vec<String>, Vec<String>)>> {
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().X().parent().X();
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let binary = workspace.join("target").join(profile).join("datalove");
+    assert!(binary.exists(), "{} not built; `just test-formal` builds it", binary.display());
+    let dir = rmx::tempfile::tempdir().X();
+    let path = dir.path().join("script.dfs");
+    std::fs::write(&path, text).X();
+    let out = std::process::Command::new(&binary).arg("script-drops").arg(&path).output().X();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("panicked at"), "the Rust panics on:\n{text}\n{stderr}");
+    if !out.status.success() {
+        return None;
+    }
+    let mut funs = BTreeMap::<String, (Vec<String>, Vec<String>)>::new();
+    let mut current = None;
+    for line in String::from_utf8(out.stdout).X().lines() {
+        if let Some(name) = line.strip_prefix("fun ") {
+            current = Some(name.S());
+            funs.insert(name.S(), (Vec::new(), Vec::new()));
+            continue;
+        }
+        let entry = funs.get_mut(current.as_ref().X()).X();
+        match line.trim().strip_prefix("stmts") {
+            Some(kinds) => entry.0 = kinds.split_whitespace().map(|k| k.S()).collect(),
+            None => entry.1.push(line.trim().S()),
+        }
+    }
+    Some(funs)
+}
+
+/// The model's drop schedule (`formal/Datalove/FunDrop.lean`) held to the
+/// Rust's ownership analysis, on the scripts `moves_agree` asks about that
+/// the Rust accepts. For now, that the two number each function's
+/// statements alike, which every point the schedule names is keyed by.
+#[test]
+fn drops_agree() {
+    if std::env::var("FORMAL_ORACLE_TEST").is_err() {
+        println!("Skipping the drops tests (set FORMAL_ORACLE_TEST=1 to run)");
+        return;
+    }
+    assert!(cfg!(debug_assertions), "only a debug build's CLI says how it numbered statements");
+    let seeds = bct::random::env_seeds("FORMAL_FUN", 0, 300);
+    let texts: Vec<(String, String)> = MOVES_CORPUS.iter().enumerate()
+        .map(|(i, body)| (fmt!("corpus {i}"), fmt!("{MOVES_PRELUDE}fun go(c: bool, s: string, ref r: string, mut u: string, l: [string]): ?string\n  var x: string = \"x\"\n{body}  ret some \"end\"\nend fun\nvar uu: string = \"u\"\ndebuglog go(true, \"s\", ref \"r\", mut uu, [\"a\"])\ndebuglog uu\n")))
+        .chain(seeds.iter().map(|seed| (fmt!("seed {seed}"), datalove_worldgen::moves_script(seed, 0.05))))
+        .collect();
+    let mut cases = Vec::new();
+    let mut refused = 0;
+    for (what, text) in texts {
+        let Some(rust) = rust_drops(&text) else {
+            refused += 1;
+            continue;
+        };
+        let (_, script, _) = rust_side(&text);
+        cases.push((what, text, script, rust));
+    }
+    let queries: Vec<Value> = cases.iter().map(|(_, _, script, _)| json!({ "drops": script })).collect();
+    let answers = ask_oracle(&queries);
+
+    let mut mismatches = Vec::new();
+    let mut functions = 0;
+    for ((what, text, _, rust), oracle) in cases.iter().zip(&answers) {
+        assert!(oracle.get("unsupported").is_none(), "the model does not take:\n{text}\n{oracle}");
+        for f in oracle["funs"].as_array().X() {
+            let name = f["name"].as_str().X();
+            let model: Vec<&str> = f["stmts"].as_array().X().iter().map(|k| k.as_str().X()).collect();
+            let (stmts, _) = rust.get(name).unwrap_or_else(|| panic!("the CLI has no `{name}`:\n{text}"));
+            functions += 1;
+            if model != stmts.iter().map(|k| k.as_str()).collect::<Vec<_>>() {
+                mismatches.push(fmt!("{what}, `{name}`:\n{text}    rust:  {stmts:?}\n    model: {model:?}"));
+            }
+        }
+    }
+    println!(
+        "{} scripts, {functions} functions, over seeds {}..{}: {} numbered differently; {refused} refused",
+        cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
+    );
+    for m in mismatches.iter().take(5) {
+        println!("{m}");
+    }
+    assert!(mismatches.is_empty(), "the Rust and the model number statements differently in {} functions", mismatches.len());
+}
+
 /// An expression of `consts_script`'s: a number, a const among `consts`, or
 /// a call to one of the functions `calls` names, added up.
 fn const_expr(rng: &mut SeededRng, consts: &[String], calls: &[String], depth: u32) -> String {

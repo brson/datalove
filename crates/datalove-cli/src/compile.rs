@@ -25,7 +25,7 @@ use crate::render;
 pub struct CompiledScript<'db> {
     /// Kept so that it drops after the executor a caller makes: its
     /// compile-time interpreter checks for leaks as it drops.
-    _compiler: ScriptCompiler<'db>,
+    compiler: ScriptCompiler<'db>,
     pub ir_unit: IrCodeUnit,
     pub compiled: CompiledModules<'db>,
     /// The natives the modules were compiled with, for an executor to take
@@ -74,7 +74,14 @@ pub fn compile_script<'db>(
     let ir_unit = unit.ir_unit
         .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
-    Ok(CompiledScript { _compiler: compiler, ir_unit, compiled, natives, descriptor })
+    Ok(CompiledScript { compiler, ir_unit, compiled, natives, descriptor })
+}
+
+impl<'db> CompiledScript<'db> {
+    /// The compiler the script was compiled with.
+    pub fn compiler(&self) -> &ScriptCompiler<'db> {
+        &self.compiler
+    }
 }
 
 /// Report what stopped the modules compiling, and fail, if anything did.

@@ -48,6 +48,7 @@ use datalove_datafun_compiler::tracked_script_lower::{
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData, ExternalBinding,
+    FunctionAnalysisData,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, ExportBinding, IrCodeUnit, IrType, ResolvedConsts, Terminator};
@@ -1615,6 +1616,40 @@ impl<'db> ScriptCompiler<'db> {
                 self.db, source, result, parsed, externals, external_consts),
         };
         diagnostics.iter().map(|diagnostic| diagnostic.stored().C()).collect()
+    }
+
+    /// Unit `index`'s functions' ownership analyses, by name: what each drops
+    /// where. None if the unit is an expression, or does not get through
+    /// ownership analysis.
+    ///
+    /// Read back from the analysis as [`Self::unit_ownership_diagnostics`]
+    /// reads its diagnostics, for `datalove script-drops`, which the formal
+    /// model's drop schedule is held to.
+    pub fn unit_function_analyses(&self, index: usize) -> Vec<(String, FunctionAnalysisData)> {
+        let unit = self.units[index].unit;
+        if !unit_parses(self.db, unit) {
+            return Vec::new();
+        }
+        let output = typecheck_script_unit(self.db, unit, self.env);
+        let result = output.result(self.db);
+        if !result.errors(self.db).is_empty() {
+            return Vec::new();
+        }
+        let source = unit.source(self.db);
+        let (externals, external_consts) = self.ownership_inputs(index, output);
+        let ParsedUnit::Fragment { top, .. } = self.parsed_unit_at(index) else {
+            return Vec::new();
+        };
+        let analysis = analyze_script_fragment_tracked(self.db, source, result, top, externals, external_consts);
+        if !analysis.errors(self.db).is_empty() {
+            return Vec::new();
+        }
+        analysis.function_analyses(self.db).C()
+    }
+
+    /// The number of units in the script, failed ones included.
+    pub fn unit_count(&self) -> usize {
+        self.units.len()
     }
 
     /// Get the database reference.

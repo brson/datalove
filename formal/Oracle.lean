@@ -19,6 +19,7 @@ line, and writes one answer per line to stdout, in order:
 {"consts": S}    →  {"codes": [code, ...], "consts": code or null, "init": code or null, "all": [code, ...]}
                     or {"unsupported": what}
 {"moves": S}     →  {"codes": [code, ...], "moves": code or null, "run": how} or {"unsupported": what}
+{"drops": S}     →  {"funs": [{"name": n, "stmts": [kind, ...]}, ...]} or {"unsupported": what}
 {"world": [{"path": P, "script": S}, ...]}
                  →  {"modules": [[code, ...], ...], "init": [code or null, ...], "consts": [code or null, ...]}
                     or {"unsupported": what}
@@ -44,7 +45,10 @@ to the Rust's F089 alike only where the analysis lets the script through,
 and `all`, everything the model refuses of it (`Fun.scriptCodes`).
 A `moves` is the script checked, what the move analysis refuses first, if
 anything (`Fun.moveScript`), and how the script run moving what reads take
-ended (`Fun.runScriptMoves`), as a `run`'s `end` says. A `world` is its modules checked in order (`Fun.checkWorld`), and for each
+ended (`Fun.runScriptMoves`), as a `run`'s `end` says. A `drops` is each
+function the script declares at its top level, with its body's statements
+in the order the Rust's ownership analysis numbers them
+(`Fun.scriptFunKinds`). A `world` is its modules checked in order (`Fun.checkWorld`), and for each
 what the analysis refuses and whether it is F089, as of a script but with
 what the module imports in scope (`Fun.constWorld`).
 
@@ -131,6 +135,11 @@ def answer (q : Json) : Except String Json := do
           ("run", match (Fun.runScriptMoves 10000 100 ss).result with
             | .ok _ => "ok"
             | .error s => s.name)]
+      | .error e => Json.mkObj [("unsupported", e)]
+  if let .ok script := q.getObjVal? "drops" then
+    return match Fun.scriptFromSerde script with
+      | .ok ss => Json.mkObj [("funs", Json.arr ((Fun.scriptFunKinds ss).toArray.map fun (n, ks) =>
+          Json.mkObj [("name", Json.str n), ("stmts", Json.arr (ks.toArray.map Json.str))]))]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok script := q.getObjVal? "run" then
     return match Fun.scriptFromSerde script with

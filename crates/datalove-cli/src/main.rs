@@ -7,6 +7,7 @@ use rmx::std::sync::Arc;
 use datalove::vio::{DynFs, Fs, HostFs};
 
 mod compile;
+mod drops;
 mod render;
 
 fn main() -> AnyResult<()> {
@@ -41,6 +42,8 @@ enum Command {
     Script(ScriptCommand),
     /// Dump the IR for a datafun script.
     ScriptIr(ScriptIrCommand),
+    /// Dump what the ownership analysis drops where in a script's functions.
+    ScriptDrops(ScriptIrCommand),
     /// AOT compile a datafun script to native code.
     AotCompile(AotCompileCommand),
     /// Typecheck the sys/std library and report errors.
@@ -194,6 +197,7 @@ impl Cli {
             Command::Repl(cmd) => cmd.run(fs),
             Command::Script(cmd) => cmd.run(&*fs),
             Command::ScriptIr(cmd) => cmd.run(&*fs),
+            Command::ScriptDrops(cmd) => cmd.run_drops(&*fs),
             Command::AotCompile(cmd) => cmd.run(&*fs),
             Command::TypecheckStd(cmd) => cmd.run(),
             Command::Docs(cmd) => cmd.run(),
@@ -499,6 +503,22 @@ impl ScriptIrCommand {
         let db = datalove::datafun::Database::default();
         let script = compile::compile_script(fs, &db, &self.file_path, self.no_sys)?;
         println!("{}", script.ir_unit);
+        Ok(())
+    }
+
+    /// Print each of the script's functions' drop schedules, a line to a
+    /// point that drops, bindings by name, keyed by the statement index the
+    /// analysis gave the point; and, in a debug build, the statements in the
+    /// order the indexes were given.
+    fn run_drops(&self, fs: &dyn Fs) -> AnyResult<()> {
+        let db = datalove::datafun::Database::default();
+        let script = compile::compile_script(fs, &db, &self.file_path, self.no_sys)?;
+        let compiler = script.compiler();
+        let mut analyses = compiler.unit_function_analyses(compiler.unit_count() - 1);
+        analyses.sort_by(|a, b| a.0.cmp(&b.0));
+        for (name, analysis) in &analyses {
+            print!("{}", drops::render(name, &analysis.schedule, &analysis.bindings));
+        }
         Ok(())
     }
 }
