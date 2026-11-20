@@ -75,6 +75,12 @@ structure MVar where
   /-- The collection a `for` walks, or the variable it is a part of, frozen
   for the loop's body (O015). -/
   walked : Bool := false
+  /-- Dropped where it is owned: not a copy, not borrowed, not a const.
+  Only the drop schedule (`FunDrop.lean`) sets it. -/
+  owns : Bool := false
+  /-- Which binding this is, as the Rust's `BindingId` tells two of one
+  name apart. Only the drop schedule sets it. -/
+  uid : Nat := 0
 
 /-- The variables in scope, innermost first, as the run keeps them. -/
 abbrev MSt := List MVar

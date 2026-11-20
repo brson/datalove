@@ -34,7 +34,7 @@ use rmx::serde_json::{Value, json};
 use bct::random::SeededRng;
 use datalove_formal_tests::{ask_oracle, oracle_path};
 use datalove_worldgen::WorldGenConfig;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use datalove_datafun_ast::ast::{ExprArena, ExprFun, Statement};
 use datalove_datafun_tycheck::Type as DfType;
 
@@ -2359,10 +2359,33 @@ fn rust_drops(text: &str) -> Option<BTreeMap<String, (Vec<String>, Vec<String>)>
     Some(funs)
 }
 
+/// The kinds of point in a drop schedule `drops_agree` compares: every
+/// one but those of a `?` or a `set` that can leave, which are still to be
+/// modelled.
+const DROP_KINDS: &[&str] = &[
+    "then_branch_exit", "else_branch_exit", "before_return", "loop_body_end", "before_break",
+    "before_continue", "match_arm_exit", "at_function_exit",
+];
+
+/// A line of a drop schedule as `datalove script-drops` writes it, its names
+/// sorted, since the analysis lists them in the order of a map; or none if
+/// it is of a kind `drops_agree` does not compare.
+fn drop_line(line: &str) -> Option<String> {
+    let (point, names) = line.split_once(':').X();
+    let kind = point.split_whitespace().next().X();
+    if !DROP_KINDS.contains(&kind) {
+        return None;
+    }
+    let mut names: Vec<&str> = names.split_whitespace().collect();
+    names.sort();
+    Some(fmt!("{point}: {}", names.join(" ")))
+}
+
 /// The model's drop schedule (`formal/Datalove/FunDrop.lean`) held to the
 /// Rust's ownership analysis, on the scripts `moves_agree` asks about that
-/// the Rust accepts. For now, that the two number each function's
-/// statements alike, which every point the schedule names is keyed by.
+/// the Rust accepts: the two number each function's statements alike, which
+/// every point the schedule names is keyed by, and schedule the same drops
+/// at the same points.
 #[test]
 fn drops_agree() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -2390,26 +2413,50 @@ fn drops_agree() {
 
     let mut mismatches = Vec::new();
     let mut functions = 0;
+    let mut points = 0;
     for ((what, text, _, rust), oracle) in cases.iter().zip(&answers) {
         assert!(oracle.get("unsupported").is_none(), "the model does not take:\n{text}\n{oracle}");
         for f in oracle["funs"].as_array().X() {
             let name = f["name"].as_str().X();
             let model: Vec<&str> = f["stmts"].as_array().X().iter().map(|k| k.as_str().X()).collect();
-            let (stmts, _) = rust.get(name).unwrap_or_else(|| panic!("the CLI has no `{name}`:\n{text}"));
+            let (stmts, lines) = rust.get(name).unwrap_or_else(|| panic!("the CLI has no `{name}`:\n{text}"));
             functions += 1;
             if model != stmts.iter().map(|k| k.as_str()).collect::<Vec<_>>() {
                 mismatches.push(fmt!("{what}, `{name}`:\n{text}    rust:  {stmts:?}\n    model: {model:?}"));
+                continue;
+            }
+            let Some(model_points) = f["points"].as_array() else {
+                panic!("the Rust accepts what the model's move analysis refuses, in `{name}`:\n{text}");
+            };
+            let rust_lines: BTreeSet<String> = lines.iter().filter_map(|l| drop_line(l)).collect();
+            let model_lines: BTreeSet<String> = model_points.iter()
+                .filter_map(|p| {
+                    let kind = p["kind"].as_str().X();
+                    let names: Vec<&str> = p["drops"].as_array().X().iter().map(|n| n.as_str().X()).collect();
+                    let point = match (kind, p["arm"].as_u64()) {
+                        ("at_function_exit", _) => kind.S(),
+                        (_, Some(arm)) => fmt!("{kind} {}.{arm}", p["stmt"]),
+                        (_, None) => fmt!("{kind} {}", p["stmt"]),
+                    };
+                    drop_line(&fmt!("{point}: {}", names.join(" ")))
+                })
+                .collect();
+            points += rust_lines.len();
+            if model_lines != rust_lines {
+                let only_rust: Vec<_> = rust_lines.difference(&model_lines).collect();
+                let only_model: Vec<_> = model_lines.difference(&rust_lines).collect();
+                mismatches.push(fmt!("{what}, `{name}`:\n{text}    rust only:  {only_rust:?}\n    model only: {only_model:?}"));
             }
         }
     }
     println!(
-        "{} scripts, {functions} functions, over seeds {}..{}: {} numbered differently; {refused} refused",
+        "{} scripts, {functions} functions, {points} points, over seeds {}..{}: {} differ; {refused} refused",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(5) {
         println!("{m}");
     }
-    assert!(mismatches.is_empty(), "the Rust and the model number statements differently in {} functions", mismatches.len());
+    assert!(mismatches.is_empty(), "the Rust and the model schedule drops differently in {} functions", mismatches.len());
 }
 
 /// An expression of `consts_script`'s: a number, a const among `consts`, or
