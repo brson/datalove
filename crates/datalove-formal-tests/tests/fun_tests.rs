@@ -2154,6 +2154,7 @@ fun maybe(c: bool): ?string\n  ret none\nend fun\n\
 fun pass(x: string): bool\n  ret true\nend fun\n\
 fun grow(mut xs: [string])\nend fun\n\
 fun change(mut x: string)\nend fun\n\
+fun both(a: string, b: string): string\n  ret a\nend fun\n\
 fun fill(out x: string)\n  set x = \"f\"\nend fun\n\
 fun bump(mut n: int)\nend fun\n\
 fun drain(xs: [string])\nend fun\n\
@@ -2208,6 +2209,17 @@ const MOVES_CORPUS: &[&str] = &[
     "  call fill(out \"lit\")\n",
     "  call change(mut (: string / x))\n",
     "  for w in ref l\n    call grow(mut [\"a\"])\n  end for\n",
+    // What a `?` drops, past what was moved before it.
+    "  let y = both(x, maybe(c)?)\n",
+    "  call take(both(x, maybe(c)?))\n",
+    "  debuglog both(x@, maybe(c)?)\n",
+    "  if pass(both(x, maybe(c)?))\n    debuglog s\n  end if\n",
+    "  var m: [string] = [\"a\"]\n  set m[0]? = x\n",
+    "  var m: [string] = [\"a\"]\n  set m[0]? = both(x, maybe(c)?)\n",
+    "  var y: string = \"y\"\n  set y = both(x, maybe(c)?)\n",
+    "  ret some both(x, maybe(c)?)\n",
+    "  for w in ref l\n    let y = both(w@, maybe(c)?)\n  end for\n",
+    "  call take(x)\n  var k: int = 0\n  loop\n    set k = k + 1\n    if k == 3\n      break\n    end if\n    let y = maybe(c)?\n    set x = \"again\"\n  end loop\n",
     // Branches.
     "  if c\n    call take(x)\n  end if\n",
     "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
@@ -2359,24 +2371,25 @@ fn rust_drops(text: &str) -> Option<BTreeMap<String, (Vec<String>, Vec<String>)>
     Some(funs)
 }
 
-/// The kinds of point in a drop schedule `drops_agree` compares: every
-/// one but those of a `?` or a `set` that can leave, which are still to be
-/// modelled.
+/// The kinds of point in a drop schedule `drops_agree` compares: all of
+/// them.
 const DROP_KINDS: &[&str] = &[
     "then_branch_exit", "else_branch_exit", "before_return", "loop_body_end", "before_break",
-    "before_continue", "match_arm_exit", "at_function_exit",
+    "before_continue", "match_arm_exit", "at_function_exit", "before_try_return",
+    "try_return_not_yet_moved", "before_set_target_early_return",
 ];
 
 /// A line of a drop schedule as `datalove script-drops` writes it, its names
-/// sorted, since the analysis lists them in the order of a map; or none if
-/// it is of a kind `drops_agree` does not compare.
+/// sorted, since the analysis lists them in the order of a map, and without
+/// the expression a binding not yet moved is moved at, which the model does
+/// not number; or none if it is of a kind `drops_agree` does not compare.
 fn drop_line(line: &str) -> Option<String> {
     let (point, names) = line.split_once(':').X();
     let kind = point.split_whitespace().next().X();
     if !DROP_KINDS.contains(&kind) {
         return None;
     }
-    let mut names: Vec<&str> = names.split_whitespace().collect();
+    let mut names: Vec<&str> = names.split_whitespace().map(|n| n.split('@').next().X()).collect();
     names.sort();
     Some(fmt!("{point}: {}", names.join(" ")))
 }

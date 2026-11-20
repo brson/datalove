@@ -1552,7 +1552,11 @@ written as a string anywhere in `crates/*/src`.
 
 ### Drop Schedule
 
-`DropSchedule` tells lowering where to emit `Drop` instructions:
+`DropSchedule` tells lowering where to emit `Drop` instructions.
+`datalove script-drops FILE` writes each of a script's functions' schedules,
+bindings by name, and in a debug build the statements in the order they were
+numbered; `drops_agree` in `datalove-formal-tests` holds the formal model's
+schedule (`formal/Datalove/FunDrop.lean`) to it.
 
 ```rust
 pub struct DropSchedule {

@@ -67,6 +67,24 @@ def caseKinds : List Case → List String
 
 end
 
+/-- Whether an expression can return early from the function, as the Rust's
+`early_return_in` finds it: a `?` or `!`, a checked or optional operator, an
+index with `?` or `!`, or a place with an index step, anywhere in it. -/
+partial def exprLeaves : Expr → Bool
+  | .tryOpt _ | .tryRes _ => true
+  | .binop op a c => exprLeaves a || exprLeaves c || op.exits
+  | .unop op a => exprLeaves a || op == .negC || op == .negO
+  | .call _ args => args.any (exprLeaves ·.2)
+  | .tuple es | .list es | .set es | .tensor _ es => es.any exprLeaves
+  | .struct fs => fs.any (exprLeaves ·.2)
+  | .map es => es.any fun (k, v) => exprLeaves k || exprLeaves v
+  | .table _ rows => rows.any (·.any exprLeaves)
+  | .some_ a | .ok a | .er a | .data a | .error a | .term _ a | .enum a | .hinted _ a | .adapt a
+  | .proj a _ => exprLeaves a
+  | .index b k m => m.isSome || exprLeaves b || exprLeaves k
+  | .place _ steps => steps.any fun | .index .. => true | _ => false
+  | _ => false
+
 /-- The drop schedule as it is built: the next statement's index, the next
 binding's, the bindings a loop turned out to give a value they were entered
 without (the Rust's `maybe_held`), each binding's name, and the points
@@ -132,6 +150,40 @@ def loopHeld (σc : MSt) (body : List Stmt) (r : MOut) (first : Nat) : DropM Uni
           if (k == "before_return" || k == "before_try_return" || k == "before_set_target_early_return")
             && st ≥ first && !ds.contains v.uid then (k, st, a, ds ++ [v.uid]) else (k, st, a, ds) }
 
+/-- An expression of statement `id` that the Rust's `analyze_leaving_expr`
+reads: where it can return early, what is owned once it has run is dropped
+there, and what it moved on the way, which a return before the move still
+owns, is scheduled apart. -/
+def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : DropM MSt := do
+  if !exprLeaves e then return ← StateT.lift m
+  let before ← ownedIn σ
+  let σ' ← StateT.lift m
+  let drops ← ownedIn σ'
+  record "try_return_not_yet_moved" id none (before.filter (!drops.contains ·))
+  record "before_try_return" id none drops (always := true)
+  pure σ'
+
+/-- `set x … = e` or `set x … ⊕= e`, as `mSet` follows it, scheduling what a
+return from the value or a key drops, what was owned once the value has
+run, and what one from a failed `?` or `!` on the way to the place drops,
+what is owned once the keys have run. -/
+def dSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : String) (steps : List Step)
+    (op : Option BinOp) (e : Expr) : DropM MSt := do
+  StateT.lift (unwalkedM σ x)
+  let before ← ownedIn σ
+  let σ ← StateT.lift (mE sigs Γ op.isSome σ e)
+  let keysLeave := steps.any fun | .index k _ => exprLeaves k | _ => false
+  if exprLeaves e || keysLeave || op.any BinOp.exits then
+    let drops ← ownedIn σ
+    record "try_return_not_yet_moved" id none (before.filter (!drops.contains ·))
+    record "before_try_return" id none drops (always := true)
+  let σ ← StateT.lift (mKeys sigs Γ σ steps)
+  let σ ← StateT.lift (mTarget σ x steps op)
+  if stepsExit steps then
+    record "before_set_target_early_return" id none (← ownedIn σ) (always := true)
+  let σ ← if stepsExit steps || op.any BinOp.exits then StateT.lift (exitM σ) else pure σ
+  pure (if steps.isEmpty then σ.give x else σ)
+
 mutual
 
 /-- A statement, as `mStmt` follows it, scheduling what each point it
@@ -144,24 +196,24 @@ def dStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
     let after := ((checkStmtF env n Γ s).run #[]).1
     match s with
     | .let_ p _ e =>
-      let σ ← StateT.lift (mE sigs Γ false σ e)
+      let σ ← leaving id σ e (mE sigs Γ false σ e)
       pure (← bindD after σ (patNames p) true, [], [])
     | .var_ p _ (some e) =>
-      let σ ← StateT.lift (mE sigs Γ false σ e)
+      let σ ← leaving id σ e (mE sigs Γ false σ e)
       pure (← bindD after σ (patNames p) true (writable := true), [], [])
     | .var_ p (some _) none => pure (← bindD after σ (patNames p) false (writable := true), [], [])
     | .var_ _ none none => pure (σ, [], [])
-    | .set_ x steps op e => pure (← StateT.lift (mSet sigs Γ σ x steps op e), [], [])
+    | .set_ x steps op e => pure (← dSet sigs Γ id σ x steps op e, [], [])
     | .fun_ _ => pure (σ, [], [])
     | .ret e =>
       let σ ← StateT.lift (exitM σ)
       let σ ← match e with
-        | some e => StateT.lift (mE sigs Γ false σ e)
+        | some e => leaving id σ e (mE sigs Γ false σ e)
         | none => pure σ
       record "before_return" id none (← ownedIn σ) (always := true)
       pure (σ, [], [])
     | .if_ c tB eB t e =>
-      let σc ← StateT.lift (mE sigs Γ false σ c)
+      let σc ← leaving id σ c (mE sigs Γ false σ c)
       let Γt := condCtx env n Γ c tB false
       let rt ← dBlock sigs env n Γt (← bindD Γt σc tB.toList true) base t
       record "then_branch_exit" id none (← ownedIn (scopeOwn σc rt.1))
@@ -176,7 +228,7 @@ def dStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
     | .loop c body =>
       let σc ← match c with
-        | some c => StateT.lift (mE sigs Γ false σ c)
+        | some c => leaving id σ c (mE sigs Γ false σ c)
         | none => pure σ
       let first := (← get).next
       let r ← dBlock sigs env n { Γ with inLoop := true } σc σc.length body
@@ -190,14 +242,14 @@ def dStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
     | .cont =>
       record "before_continue" id none (← ownedIn (List.take (σ.length - base) σ))
       pure (σ, [], [σ])
-    | .debuglog e => pure (← StateT.lift (mE sigs Γ true σ e), [], [])
-    | .call e => pure (← StateT.lift (mE sigs Γ false σ e), [], [])
+    | .debuglog e => pure (← leaving id σ e (mE sigs Γ true σ e), [], [])
+    | .call e => pure (← leaving id σ e (mE sigs Γ false σ e), [], [])
     | .const_ x _ e =>
-      let σ ← StateT.lift (mE sigs { Γ with constExpr := true } false σ e)
+      let σ ← leaving id σ e (mE sigs { Γ with constExpr := true } false σ e)
       pure (← bindD after σ [x] true (konst := true), [], [])
     | .type_ _ _ => pure (σ, [], [])
     | .match_ e cases dflt =>
-      let σc ← StateT.lift (mE sigs Γ false σ e)
+      let σc ← leaving id σ e (mE sigs Γ false σ e)
       let r ← dCases sigs env n Γ (matchVariants env n Γ e) σc base id 0 cases
       let d ← match dflt with
         | some db => do
@@ -208,7 +260,7 @@ def dStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       let σ' ← StateT.lift (joinMatch σc (r.1 ++ d.1))
       pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
     | .for_ names coll body =>
-      let σc ← StateT.lift (mE sigs Γ true σ coll)
+      let σc ← leaving id σ coll (mE sigs Γ true σ coll)
       let σw := match placeOf coll with
         | some (x, _) => σc.walk x
         | none => σc

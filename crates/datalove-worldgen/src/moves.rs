@@ -37,6 +37,9 @@ end fun
 fun fill(out x: string)
   set x = \"filled\"
 end fun
+fun both(x: string, y: string): string
+  ret x
+end fun
 fun maybe(c: bool): ?string
   if c
     ret some \"m\"
@@ -323,11 +326,23 @@ impl Gen {
                     fmt!("var {o}: string")
                 }
                 16 => fmt!("call fill(out {})", self.target(&mut scope)),
-                17 => {
-                    let g = self.fresh("g");
-                    scope.declare(&g, Kind::Str, false, true);
-                    fmt!("let {g} = maybe(c)?")
-                }
+                // A `?`, sometimes after a value given away to the same call,
+                // which a return from the `?` still owns, and sometimes in a
+                // `debuglog`, which only borrows what it logs.
+                17 => match self.rng.random_range(0..3) {
+                    0 => {
+                        let g = self.fresh("g");
+                        scope.declare(&g, Kind::Str, false, true);
+                        fmt!("let {g} = maybe(c)?")
+                    }
+                    1 => {
+                        let first = self.string(&mut scope, true);
+                        let g = self.fresh("g");
+                        scope.declare(&g, Kind::Str, false, true);
+                        fmt!("let {g} = both({first}, maybe(c)?)")
+                    }
+                    _ => fmt!("debuglog both({}, maybe(c)?)", self.string(&mut scope, true)),
+                },
                 18 => {
                     let value = self.enumeration(&mut scope, true);
                     let t = self.pick(&scope.vars_of(Kind::Enum)).X();
