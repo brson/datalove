@@ -2,27 +2,28 @@
 //!
 //! The grammar is ISO 14977 EBNF as the `botdocs/*-ebnf.md` documents write
 //! it: `,` concatenates, `|` separates alternatives, `[ x ]` is optional,
-//! `{ x }` repeats, `( x )` groups, `"x"` and `'x'` are terminals (with no
-//! escapes, but `"\n"` is a newline), `"a" .. "z"` is a range of characters,
-//! `? x ?` is a special sequence and `(* x *)` is a comment. Terminals are characters: the grammar describes
-//! text, not tokens, so whitespace and comments are rules like any other.
+//! `{ x }` repeats, `( x )` groups, `a - b` is `a` but not `b`, `"x"` and
+//! `'x'` are terminals (with no escapes, but `"\n"` is a newline),
+//! `"a" .. "z"` is a range of characters, `? x ?` is a special sequence and
+//! `(* x *)` is a comment. Two more notations are the datafun grammar's: `~x`
+//! is `x` glued to what comes before it, and a rule may take parameters,
+//! `end_line(k) = "end", k ;`, which are filled in where it is used.
 //!
-//! What a special sequence means is English, so the caller gives each one a
-//! [`CharTest`]. The caller may also rewrite the grammar before compiling it,
-//! adding [`Expr::Assert`]s, which match no character but test the position
-//! they stand at.
+//! What the terminals are, characters or tokens, is the caller's to say: the
+//! recognizer runs over any input, and asks the caller for a [`Term`] for
+//! each terminal, special sequence, `~` and exception. The caller may also
+//! rewrite the grammar before compiling it, adding [`Expr::Assert`]s, which
+//! match nothing but test the position they stand at.
 
 use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 use bct::random::SeededRng;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
-/// A test on the text at a position.
-///
-/// For a special sequence, it is whether the character at the position
-/// matches, and the position is always before the end. For an assertion, it
-/// is whether the position itself is acceptable, and it may be the end.
-pub type CharTest = fn(&[char], usize) -> bool;
+/// A terminal: pushes the length of each match of it at a position in an
+/// input, `0` for an assertion that holds there.
+pub type Term<I> = Rc<dyn Fn(&I, usize, &mut Vec<usize>)>;
 
 /// A grammar: its rules, in the order they are written.
 #[derive(Clone, Debug)]
@@ -42,6 +43,10 @@ pub enum Expr {
     Seq(Vec<Expr>),
     Opt(Box<Expr>),
     Rep(Box<Expr>),
+    /// `a - b`: what `a` matches that `b` does not.
+    Except(Box<Expr>, Box<Expr>),
+    /// `~x`, or a bare `~`.
+    Glue(Option<Box<Expr>>),
     Lit(String),
     Range(char, char),
     Special(String),
@@ -64,23 +69,48 @@ impl Grammar {
         let tokens = tokenize(text);
         let mut p = Reader { tokens, pos: 0 };
         let mut rules = vec![];
+        let mut templates = vec![];
         while p.pos < p.tokens.len() {
             let name = match p.next() {
                 Tok::Ident(name) => name,
                 t => panic!("expected a rule name, found {t:?}"),
             };
+            let mut params = vec![];
+            if p.peek() == Some(&Tok::Punct('(')) {
+                p.pos += 1;
+                loop {
+                    match p.next() {
+                        Tok::Ident(param) => params.push(param),
+                        t => panic!("expected a parameter of {name}, found {t:?}"),
+                    }
+                    match p.next() {
+                        Tok::Punct(',') => {}
+                        Tok::Punct(')') => break,
+                        t => panic!("expected , or ) in the parameters of {name}, found {t:?}"),
+                    }
+                }
+            }
             p.expect(Tok::Punct('='));
             let body = p.alt();
             p.expect(Tok::Punct(';'));
-            rules.push(Rule { name, body });
+            if params.is_empty() {
+                rules.push(Rule { name, body });
+            } else {
+                templates.push(Template { name, params, body });
+            }
         }
-        let g = Grammar { rules };
+        let mut g = Grammar { rules };
+        g.instantiate(&templates);
         g.check_refs();
         g
     }
 
     pub fn get(&self, name: &str) -> Option<&Rule> {
         self.rules.iter().find(|r| r.name == name)
+    }
+
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Rule> {
+        self.rules.iter_mut().find(|r| r.name == name)
     }
 
     /// The names of the rules reachable from `roots`, the roots included.
@@ -101,6 +131,39 @@ impl Grammar {
         seen
     }
 
+    /// Replaces each use of a rule with parameters by a rule of its own.
+    ///
+    /// A use is read as `Ref("name(args)")` with its arguments as written, so
+    /// `end_line("fun")` becomes the rule `end_line("fun")`.
+    fn instantiate(&mut self, templates: &[Template]) {
+        let mut made: BTreeSet<String> = BTreeSet::new();
+        let mut uses: Vec<String> = vec![];
+        for rule in &self.rules {
+            rule.body.visit(&mut |e| {
+                if let Expr::Ref(r) = e && r.contains('(') {
+                    uses.push(r.C());
+                }
+            });
+        }
+        for call in uses {
+            if !made.insert(call.C()) {
+                continue;
+            }
+            let (name, args) = call.split_once('(').X();
+            let template = templates.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("no rule {name}"));
+            let mut reader = Reader { tokens: tokenize(args.strip_suffix(')').X()), pos: 0 };
+            let args = reader.alt();
+            assert_eq!(reader.pos, reader.tokens.len(), "the arguments of {call}");
+            let args = match args {
+                Expr::Seq(xs) => xs,
+                x => vec![x],
+            };
+            assert_eq!(args.len(), template.params.len(), "{call} takes {} arguments", template.params.len());
+            let body = substitute(&template.body, &template.params, &args);
+            self.rules.push(Rule { name: call, body });
+        }
+    }
+
     fn check_refs(&self) {
         let names: BTreeSet<&str> = self.rules.iter().map(|r| r.name.as_str()).collect();
         assert_eq!(names.len(), self.rules.len(), "a rule is defined twice");
@@ -114,15 +177,57 @@ impl Grammar {
     }
 }
 
+struct Template {
+    name: String,
+    params: Vec<String>,
+    body: Expr,
+}
+
+fn substitute(e: &Expr, params: &[String], args: &[Expr]) -> Expr {
+    let sub = |x: &Expr| substitute(x, params, args);
+    match e {
+        Expr::Ref(r) => match params.iter().position(|p| p == r) {
+            Some(k) => args[k].C(),
+            None => e.C(),
+        },
+        Expr::Alt(xs) => Expr::Alt(xs.iter().map(sub).collect()),
+        Expr::Seq(xs) => Expr::Seq(xs.iter().map(sub).collect()),
+        Expr::Opt(x) => Expr::Opt(Box::new(sub(x))),
+        Expr::Rep(x) => Expr::Rep(Box::new(sub(x))),
+        Expr::Except(a, b) => Expr::Except(Box::new(sub(a)), Box::new(sub(b))),
+        Expr::Glue(x) => Expr::Glue(x.as_ref().map(|x| Box::new(sub(x)))),
+        Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Assert(_) => e.C(),
+    }
+}
+
 impl Expr {
     /// Calls `f` on this expression and every one inside it.
     pub fn visit(&self, f: &mut impl FnMut(&Expr)) {
         f(self);
         match self {
             Expr::Alt(xs) | Expr::Seq(xs) => xs.iter().for_each(|x| x.visit(f)),
-            Expr::Opt(x) | Expr::Rep(x) => x.visit(f),
-            Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Ref(_) | Expr::Assert(_) => {}
+            Expr::Opt(x) | Expr::Rep(x) | Expr::Glue(Some(x)) => x.visit(f),
+            Expr::Except(a, b) => {
+                a.visit(f);
+                b.visit(f);
+            }
+            Expr::Glue(None) | Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Ref(_) | Expr::Assert(_) => {}
         }
+    }
+
+    /// This expression with `f` applied to every one inside it, innermost
+    /// first, then to itself.
+    pub fn map(&self, f: &mut impl FnMut(Expr) -> Expr) -> Expr {
+        let inner = match self {
+            Expr::Alt(xs) => Expr::Alt(xs.iter().map(|x| x.map(f)).collect()),
+            Expr::Seq(xs) => Expr::Seq(xs.iter().map(|x| x.map(f)).collect()),
+            Expr::Opt(x) => Expr::Opt(Box::new(x.map(f))),
+            Expr::Rep(x) => Expr::Rep(Box::new(x.map(f))),
+            Expr::Except(a, b) => Expr::Except(Box::new(a.map(f)), Box::new(b.map(f))),
+            Expr::Glue(x) => Expr::Glue(x.as_ref().map(|x| Box::new(x.map(f)))),
+            Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Ref(_) | Expr::Assert(_) => self.C(),
+        };
+        f(inner)
     }
 }
 
@@ -171,7 +276,8 @@ fn tokenize(text: &str) -> Vec<Tok> {
             i = end + 1;
         } else if c == '?' {
             let end = i + 1 + cs[i + 1..].iter().position(|&d| d == '?').expect("unclosed special sequence");
-            out.push(Tok::Special(cs[i + 1..end].iter().collect::<String>().trim().S()));
+            let text: String = cs[i + 1..end].iter().collect();
+            out.push(Tok::Special(text.split_whitespace().collect::<Vec<_>>().join(" ")));
             i = end + 1;
         } else if c.is_ascii_alphabetic() || c == '_' {
             let start = i;
@@ -182,7 +288,7 @@ fn tokenize(text: &str) -> Vec<Tok> {
         } else if c == '.' && cs.get(i + 1) == Some(&'.') {
             out.push(Tok::DotDot);
             i += 2;
-        } else if "=,|;[]{}()".contains(c) {
+        } else if "=,|;[]{}()~-".contains(c) {
             out.push(Tok::Punct(c));
             i += 1;
         } else {
@@ -223,17 +329,62 @@ impl Reader {
     }
 
     fn seq(&mut self) -> Expr {
-        let mut xs = vec![self.term()];
+        let mut xs = vec![self.except()];
         while self.peek() == Some(&Tok::Punct(',')) {
             self.pos += 1;
-            xs.push(self.term());
+            xs.push(self.except());
         }
         if xs.len() == 1 { xs.pop().X() } else { Expr::Seq(xs) }
     }
 
+    fn except(&mut self) -> Expr {
+        let x = self.term();
+        if self.peek() == Some(&Tok::Punct('-')) {
+            self.pos += 1;
+            let y = self.term();
+            Expr::Except(Box::new(x), Box::new(y))
+        } else {
+            x
+        }
+    }
+
+    fn starts_term(&self) -> bool {
+        matches!(
+            self.peek(),
+            Some(Tok::Ident(_) | Tok::Lit(_) | Tok::Special(_) | Tok::Punct('[' | '{' | '(' | '~'))
+        )
+    }
+
     fn term(&mut self) -> Expr {
         match self.next() {
-            Tok::Ident(name) => Expr::Ref(name),
+            Tok::Ident(name) => {
+                if self.peek() == Some(&Tok::Punct('(')) {
+                    // A use of a rule with parameters, kept as written.
+                    let mut depth = 0;
+                    let mut args = String::new();
+                    loop {
+                        let t = self.next();
+                        match &t {
+                            Tok::Punct('(') => depth += 1,
+                            Tok::Punct(')') => depth -= 1,
+                            _ => {}
+                        }
+                        args.push_str(&match &t {
+                            Tok::Lit(s) => fmt!("{s:?}"),
+                            Tok::Ident(s) => s.C(),
+                            Tok::Special(s) => fmt!("? {s} ?"),
+                            Tok::Punct(c) => c.S(),
+                            Tok::DotDot => "..".S(),
+                        });
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    Expr::Ref(fmt!("{name}{args}"))
+                } else {
+                    Expr::Ref(name)
+                }
+            }
             Tok::Special(text) => Expr::Special(text),
             Tok::Lit(s) => {
                 if self.peek() == Some(&Tok::DotDot) {
@@ -248,6 +399,13 @@ impl Reader {
                     Expr::Range(one(&s), one(&hi))
                 } else {
                     Expr::Lit(s)
+                }
+            }
+            Tok::Punct('~') => {
+                if self.starts_term() {
+                    Expr::Glue(Some(Box::new(self.term())))
+                } else {
+                    Expr::Glue(None)
                 }
             }
             Tok::Punct('[') => {
@@ -274,19 +432,15 @@ impl Reader {
 // Recognizing
 // ============================================================================
 
-#[derive(Clone, Copy, Debug)]
-enum Sym {
+enum Sym<I: ?Sized> {
     Nt(u32),
-    Char(char),
-    Range(char, char),
-    Class(CharTest),
-    Assert(CharTest),
+    T(Term<I>),
 }
 
-/// An Earley recognizer for one start rule of a grammar.
-pub struct Recognizer {
+/// An Earley recognizer for one start rule of a grammar, over inputs of type `I`.
+pub struct Recognizer<I: ?Sized> {
     /// Each production's left-hand side and right-hand side.
-    prods: Vec<(u32, Vec<Sym>)>,
+    prods: Vec<(u32, Vec<Sym<I>>)>,
     by_lhs: Vec<Vec<u32>>,
     start: u32,
 }
@@ -309,7 +463,7 @@ struct ItemSet {
 }
 
 impl ItemSet {
-    fn add(&mut self, item: Item, prods: &[(u32, Vec<Sym>)]) {
+    fn add<I: ?Sized>(&mut self, item: Item, prods: &[(u32, Vec<Sym<I>>)]) {
         if self.seen.insert(item) {
             self.items.push(item);
             if let Some(Sym::Nt(n)) = prods[item.prod as usize].1.get(item.dot as usize) {
@@ -319,28 +473,37 @@ impl ItemSet {
     }
 }
 
-struct Compiler<'a> {
+struct Compiler<'a, I: ?Sized> {
     names: LookupMap<&'a str, u32>,
-    prods: Vec<(u32, Vec<Sym>)>,
+    prods: Vec<(u32, Vec<Sym<I>>)>,
     next_nt: u32,
-    special: &'a dyn Fn(&str) -> CharTest,
+    term: &'a dyn Fn(&Expr) -> Term<I>,
 }
 
-impl<'a> Compiler<'a> {
+impl<'a, I: ?Sized> Compiler<'a, I> {
     fn fresh(&mut self) -> u32 {
         let n = self.next_nt;
         self.next_nt += 1;
         n
     }
 
-    fn syms(&mut self, e: &Expr) -> Vec<Sym> {
+    fn syms(&mut self, e: &Expr) -> Vec<Sym<I>> {
         match e {
             Expr::Seq(xs) => xs.iter().flat_map(|x| self.syms(x)).collect(),
-            Expr::Lit(s) => s.chars().map(Sym::Char).collect(),
-            Expr::Range(lo, hi) => vec![Sym::Range(*lo, *hi)],
-            Expr::Special(text) => vec![Sym::Class((self.special)(text))],
-            Expr::Assert(name) => vec![Sym::Assert((self.special)(name))],
-            Expr::Ref(name) => vec![Sym::Nt(self.names[name.as_str()])],
+            Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Assert(_) => vec![Sym::T((self.term)(e))],
+            Expr::Glue(x) => {
+                let mut out = vec![Sym::T((self.term)(&Expr::Glue(None)))];
+                if let Some(x) = x {
+                    out.extend(self.syms(x));
+                }
+                out
+            }
+            Expr::Except(a, _) => {
+                let mut out = vec![Sym::T((self.term)(e))];
+                out.extend(self.syms(a));
+                out
+            }
+            Expr::Ref(name) => vec![Sym::Nt(*self.names.get(name.as_str()).unwrap_or_else(|| panic!("no rule {name}")))],
             Expr::Alt(xs) => {
                 let n = self.fresh();
                 for x in xs {
@@ -368,13 +531,14 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl Recognizer {
-    /// Compiles the grammar, giving each special sequence and assertion its
-    /// test with `special`, which panics on one it does not know.
-    pub fn new(g: &Grammar, start: &str, special: &dyn Fn(&str) -> CharTest) -> Recognizer {
+impl<I: ?Sized> Recognizer<I> {
+    /// Compiles the grammar, asking `term` for each terminal, special
+    /// sequence and assertion, for a bare `~`, and for each exception `a - b`,
+    /// which is an assertion that what follows is not `b`, before `a`.
+    pub fn new(g: &Grammar, start: &str, term: &dyn Fn(&Expr) -> Term<I>) -> Recognizer<I> {
         let names: LookupMap<&str, u32> =
             g.rules.iter().enumerate().map(|(i, r)| (r.name.as_str(), i as u32)).collect();
-        let mut c = Compiler { names, prods: vec![], next_nt: g.rules.len() as u32, special };
+        let mut c = Compiler { names, prods: vec![], next_nt: g.rules.len() as u32, term };
         for (i, rule) in g.rules.iter().enumerate() {
             let alts: Vec<&Expr> = match &rule.body {
                 Expr::Alt(xs) => xs.iter().collect(),
@@ -393,14 +557,13 @@ impl Recognizer {
         Recognizer { prods: c.prods, by_lhs, start }
     }
 
-    /// Whether the whole of `text` is the start rule.
-    pub fn accepts(&self, text: &str) -> bool {
-        let input: Vec<char> = text.chars().collect();
-        let n = input.len();
+    /// Whether the whole of `input`, `n` long, is the start rule.
+    pub fn accepts(&self, input: &I, n: usize) -> bool {
         let mut sets: Vec<ItemSet> = (0..=n).map(|_| ItemSet::default()).collect();
         for &p in &self.by_lhs[self.start as usize] {
             sets[0].add(Item { prod: p, dot: 0, origin: 0 }, &self.prods);
         }
+        let mut lens = vec![];
         for i in 0..=n {
             let mut k = 0;
             while k < sets[i].items.len() {
@@ -427,21 +590,12 @@ impl Recognizer {
                             sets[i].add(advanced, &self.prods);
                         }
                     }
-                    Some(Sym::Assert(test)) => {
-                        if test(&input, i) {
-                            sets[i].add(advanced, &self.prods);
-                        }
-                    }
-                    Some(sym) => {
-                        if i < n {
-                            let ok = match sym {
-                                Sym::Char(c) => input[i] == *c,
-                                Sym::Range(lo, hi) => (*lo..=*hi).contains(&input[i]),
-                                Sym::Class(test) => test(&input, i),
-                                Sym::Nt(_) | Sym::Assert(_) => unreachable!(),
-                            };
-                            if ok {
-                                sets[i + 1].add(advanced, &self.prods);
+                    Some(Sym::T(term)) => {
+                        lens.clear();
+                        term(input, i, &mut lens);
+                        for &len in &lens {
+                            if i + len <= n {
+                                sets[i + len].add(advanced, &self.prods);
                             }
                         }
                     }
@@ -459,41 +613,36 @@ impl Recognizer {
 // Generating
 // ============================================================================
 
-/// Generates random strings of a grammar.
+/// A piece of a generated string.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Piece {
+    /// A terminal's text, or a special sequence's sample.
+    Text(String),
+    /// Where an assertion was reached, by name, or a `~`, as `"~"`.
+    Mark(String),
+}
+
+/// Generates random strings of a grammar, as pieces.
 ///
 /// Below `max_depth` rule references, every alternative is equally likely
 /// and options and repetitions are taken half the time; past it, each choice
-/// is the one that finishes soonest.
-///
-/// A special sequence's character comes from `sample`. An assertion cannot be
-/// tested where it is reached, since what follows is not yet written, so once
-/// the string is done, `repair` is given each assertion's name and the text
-/// before and after it, and returns what to insert there to make it hold,
-/// often nothing. What is generated is still a candidate, to be checked with a
-/// [`Recognizer`].
+/// is the one that finishes soonest. A special sequence's text comes from
+/// `sample`. An exception's `a` is generated whatever `b` is, and an
+/// assertion or `~` is left as a mark, since what follows it is not yet
+/// written: what the pieces make is a candidate, to be put together by the
+/// caller and checked with a [`Recognizer`].
 pub struct Generator<'g> {
     grammar: &'g Grammar,
     /// The fewest rule references each rule needs to finish.
     cost: LookupMap<&'g str, u32>,
-    sample: &'g dyn Fn(&str, &mut SeededRng) -> char,
-    repair: &'g dyn Fn(&str, &str, &str) -> &'static str,
+    sample: &'g dyn Fn(&str, &mut SeededRng) -> String,
     max_depth: u32,
-}
-
-/// A string being generated, with the assertions reached in it.
-struct Draft<'e> {
-    text: String,
-    asserts: Vec<(usize, &'e str)>,
 }
 
 const INF: u32 = u32::MAX / 4;
 
 impl<'g> Generator<'g> {
-    pub fn new(
-        grammar: &'g Grammar,
-        sample: &'g dyn Fn(&str, &mut SeededRng) -> char,
-        repair: &'g dyn Fn(&str, &str, &str) -> &'static str,
-    ) -> Generator<'g> {
+    pub fn new(grammar: &'g Grammar, sample: &'g dyn Fn(&str, &mut SeededRng) -> String) -> Generator<'g> {
         let mut cost: LookupMap<&str, u32> = grammar.rules.iter().map(|r| (r.name.as_str(), INF)).collect();
         loop {
             let mut changed = false;
@@ -511,22 +660,17 @@ impl<'g> Generator<'g> {
         for (name, c) in cost.iter_unordered() {
             assert!(*c < INF, "rule {name} never finishes");
         }
-        Generator { grammar, cost, sample, repair, max_depth: 12 }
+        Generator { grammar, cost, sample, max_depth: 12 }
     }
 
-    pub fn generate(&self, start: &str, rng: &mut SeededRng) -> String {
+    pub fn generate(&self, start: &str, rng: &mut SeededRng) -> Vec<Piece> {
         let start = Expr::Ref(start.S());
-        let mut draft = Draft { text: String::new(), asserts: vec![] };
-        self.emit(&start, 0, rng, &mut draft);
-        let mut text = draft.text;
-        for &(at, name) in draft.asserts.iter().rev() {
-            let insert = (self.repair)(name, &text[..at], &text[at..]);
-            text.insert_str(at, insert);
-        }
-        text
+        let mut out = vec![];
+        self.emit(&start, 0, rng, &mut out);
+        out
     }
 
-    fn emit<'e>(&'e self, e: &'e Expr, depth: u32, rng: &mut SeededRng, out: &mut Draft<'e>) {
+    fn emit(&self, e: &Expr, depth: u32, rng: &mut SeededRng, out: &mut Vec<Piece>) {
         let deep = depth > self.max_depth;
         match e {
             Expr::Alt(xs) => {
@@ -545,17 +689,24 @@ impl<'g> Generator<'g> {
             }
             Expr::Rep(x) => {
                 if !deep {
-                    while rng.random_bool(0.5) && out.text.len() < 4096 {
+                    while rng.random_bool(0.5) && out.len() < 4096 {
                         self.emit(x, depth, rng, out);
                     }
                 }
             }
-            Expr::Lit(s) => out.text.push_str(s),
-            Expr::Range(lo, hi) => {
-                out.text.push(char::from_u32(rng.random_range(*lo as u32..=*hi as u32)).X());
+            Expr::Except(a, _) => self.emit(a, depth, rng, out),
+            Expr::Glue(x) => {
+                out.push(Piece::Mark("~".S()));
+                if let Some(x) = x {
+                    self.emit(x, depth, rng, out);
+                }
             }
-            Expr::Special(text) => out.text.push((self.sample)(text, rng)),
-            Expr::Assert(name) => out.asserts.push((out.text.len(), name)),
+            Expr::Lit(s) => out.push(Piece::Text(s.C())),
+            Expr::Range(lo, hi) => {
+                out.push(Piece::Text(char::from_u32(rng.random_range(*lo as u32..=*hi as u32)).X().S()));
+            }
+            Expr::Special(text) => out.push(Piece::Text((self.sample)(text, rng))),
+            Expr::Assert(name) => out.push(Piece::Mark(name.C())),
             Expr::Ref(name) => {
                 let rule = self.grammar.get(name).X();
                 self.emit(&rule.body, depth + 1, rng, out);
@@ -564,13 +715,71 @@ impl<'g> Generator<'g> {
     }
 }
 
+/// Puts the pieces of a grammar over characters together: the text as it
+/// is, and at each mark what `repair` returns for it, given the text before
+/// and after, to make the assertion hold, often nothing.
+pub fn join_chars(pieces: &[Piece], repair: &dyn Fn(&str, &str, &str) -> &'static str) -> String {
+    let mut text = String::new();
+    let mut marks = vec![];
+    for piece in pieces {
+        match piece {
+            Piece::Text(s) => text.push_str(s),
+            Piece::Mark(name) => marks.push((text.len(), name)),
+        }
+    }
+    for &(at, name) in marks.iter().rev() {
+        let insert = repair(name, &text[..at], &text[at..]);
+        text.insert_str(at, insert);
+    }
+    text
+}
+
 fn expr_cost(e: &Expr, cost: &LookupMap<&str, u32>) -> u32 {
     match e {
         Expr::Alt(xs) => xs.iter().map(|x| expr_cost(x, cost)).min().X(),
         Expr::Seq(xs) => xs.iter().map(|x| expr_cost(x, cost)).fold(0, |a, b| a.saturating_add(b).min(INF)),
         Expr::Opt(_) | Expr::Rep(_) => 0,
+        Expr::Except(a, _) => expr_cost(a, cost),
+        Expr::Glue(x) => x.as_ref().map_or(0, |x| expr_cost(x, cost)),
         Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Assert(_) => 0,
         Expr::Ref(name) => cost[name.as_str()],
+    }
+}
+
+/// The terminal for a literal, range or one-character special sequence over
+/// characters, with `special` giving each special sequence's test.
+pub fn char_term(e: &Expr, special: fn(&str) -> fn(&[char], usize) -> bool) -> Term<[char]> {
+    match e {
+        Expr::Lit(s) => {
+            let cs: Vec<char> = s.chars().collect();
+            Rc::new(move |input: &[char], i, out: &mut Vec<usize>| {
+                if input.len() >= i + cs.len() && input[i..i + cs.len()] == cs[..] {
+                    out.push(cs.len());
+                }
+            })
+        }
+        &Expr::Range(lo, hi) => Rc::new(move |input: &[char], i, out: &mut Vec<usize>| {
+            if i < input.len() && (lo..=hi).contains(&input[i]) {
+                out.push(1);
+            }
+        }),
+        Expr::Special(text) => {
+            let test = special(text);
+            Rc::new(move |input: &[char], i, out: &mut Vec<usize>| {
+                if i < input.len() && test(input, i) {
+                    out.push(1);
+                }
+            })
+        }
+        Expr::Assert(name) => {
+            let test = special(name);
+            Rc::new(move |input: &[char], i, out: &mut Vec<usize>| {
+                if test(input, i) {
+                    out.push(0);
+                }
+            })
+        }
+        e => panic!("no terminal over characters for {e:?}"),
     }
 }
 
@@ -582,8 +791,17 @@ mod tests {
         true
     }
 
-    fn special(_: &str) -> CharTest {
+    fn special(_: &str) -> fn(&[char], usize) -> bool {
         any
+    }
+
+    fn term(e: &Expr) -> Term<[char]> {
+        char_term(e, special)
+    }
+
+    fn accepts(r: &Recognizer<[char]>, s: &str) -> bool {
+        let cs: Vec<char> = s.chars().collect();
+        r.accepts(&cs, cs.len())
     }
 
     #[test]
@@ -596,12 +814,28 @@ mod tests {
             ws = { " " } ;
             "#,
         );
-        let r = Recognizer::new(&g, "list", &special);
-        assert!(r.accepts("[]"));
-        assert!(r.accepts("[ 1, [22 , []] ]"));
-        assert!(!r.accepts("[1,]"));
-        assert!(!r.accepts("[1 2]"));
-        assert!(!r.accepts("[[]"));
+        let r = Recognizer::new(&g, "list", &term);
+        assert!(accepts(&r, "[]"));
+        assert!(accepts(&r, "[ 1, [22 , []] ]"));
+        assert!(!accepts(&r, "[1,]"));
+        assert!(!accepts(&r, "[1 2]"));
+        assert!(!accepts(&r, "[[]"));
+    }
+
+    #[test]
+    fn fills_in_parameters_and_reads_exceptions() {
+        let g = Grammar::parse(
+            r#"
+            s = wrap("a"), wrap(b), ~, "c" - "d" ;
+            wrap(x) = "<", x, ">" ;
+            b = "b" ;
+            "#,
+        );
+        assert!(g.get(r#"wrap("a")"#).is_some() && g.get("wrap(b)").is_some());
+        let s = &g.get("s").X().body;
+        let Expr::Seq(xs) = s else { panic!("{s:?}") };
+        assert_eq!(xs[2], Expr::Glue(None));
+        assert_eq!(xs[3], Expr::Except(Box::new(Expr::Lit("c".S())), Box::new(Expr::Lit("d".S()))));
     }
 
     #[test]
@@ -612,14 +846,13 @@ mod tests {
             t = "x" | "(", e, ")" | ? any ? ;
             "#,
         );
-        let r = Recognizer::new(&g, "e", &special);
-        let sample = |_: &str, _: &mut SeededRng| 'y';
-        let repair = |_: &str, _: &str, _: &str| "";
-        let generator = Generator::new(&g, &sample, &repair);
+        let r = Recognizer::new(&g, "e", &term);
+        let sample = |_: &str, _: &mut SeededRng| "y".S();
+        let generator = Generator::new(&g, &sample);
         let mut rng = SeededRng::new(1);
         for _ in 0..200 {
-            let s = generator.generate("e", &mut rng);
-            assert!(r.accepts(&s), "{s}");
+            let s = join_chars(&generator.generate("e", &mut rng), &|_, _, _| "");
+            assert!(accepts(&r, &s), "{s}");
         }
     }
 }

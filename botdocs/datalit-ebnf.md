@@ -232,8 +232,9 @@ input that still disagrees.
 The grammar is run as written but for the rules this document states in
 English, which the test adds: words and comments are whole, a `type_name` is
 no type keyword (those it reads from the type rules), and inside a table
-literal, outside nested brackets, `ws` takes no newline. What each `? x ?` means is given in the test, and a
-new one fails it until it is given a meaning there too.
+literal, outside nested brackets, `ws` takes no newline. These, and what each `? x ?` means, are in
+`crates/datalove-doc-fixtures/src/datalit_grammar.rs`, and a new special
+sequence fails the test until it is given a meaning there too.
 
 So an edit here that the parser does not match fails the test. A new rule
 in English that the grammar does not express needs the test taught it, or

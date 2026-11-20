@@ -276,6 +276,18 @@ pub fn parse_integration_test<'db>(
     parse(db, source).parsed.C()
 }
 
+/// Parse a source as a module, outside any module graph, for tests.
+///
+/// A module's top level holds declarations only (P077), and what it reports
+/// is accumulated here, as a script's is on [`parse`].
+#[salsa::tracked(returns(ref))]
+pub fn parse_module_for_test<'db>(
+    db: &'db dyn Db,
+    source: Source,
+) -> ast::ParseResult<'db> {
+    parse_source(db, source, None, TopLevel::Module)
+}
+
 /// Public tracked wrapper for integration code to enable diagnostic accumulation.
 ///
 /// This function should be called before parse() to accumulate diagnostics,

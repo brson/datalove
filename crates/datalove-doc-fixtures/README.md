@@ -9,9 +9,11 @@ The fixtures behind the documentation, and the tests that keep it true.
   and data it requires, and step tables of its own. The module docs of
   `tests/replay_tests.rs` give the format.
 
-`tests/datalit_grammar_tests.rs` has no fixtures: it runs the grammar in
-`botdocs/datalit-ebnf.md` against the datalit parser, with the recognizer and
-generator in `src/ebnf.rs`.
+`tests/datalit_grammar_tests.rs` and `tests/datafun_grammar_tests.rs` have no
+fixtures: they run the grammars in `botdocs/datalit-ebnf.md` and
+`botdocs/datafun-ebnf.md` against their parsers, with the recognizer and
+generator in `src/ebnf.rs`, the checking in `src/grammar_check.rs`, and the
+datalit grammar made executable in `src/datalit_grammar.rs`.
 
 ```bash
 cargo test -p datalove-doc-fixtures

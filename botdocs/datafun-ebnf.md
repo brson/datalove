@@ -3,9 +3,8 @@
 The concrete syntax of datafun, the statement and expression language of
 scripts (`.dfs`) and modules (`.dfm`), as EBNF. This is a reference: it states
 what the parser in `crates/datalove-datafun-parser` accepts, over the lexer
-and bracket matcher in `crates/bcts`. Written October 2026 from that code,
-with the cases that are not plainly read off the source run through the
-parser.
+and bracket matcher in `crates/bcts`, and a test holds it to that (see
+[Checking the grammar](#user-content-checking-the-grammar)).
 
 It builds on [Datalit Grammar](datalit-ebnf.md), whose type syntax it shares
 outright and whose value syntax it re-implements with
@@ -19,6 +18,7 @@ says which rule types each form.
 - [Notation](#user-content-notation)
 - [Grammar](#user-content-grammar)
 - [Rules outside the grammar](#user-content-rules-outside-the-grammar)
+- [Checking the grammar](#user-content-checking-the-grammar)
 - [Productions and their typing rules](#user-content-productions-and-their-typing-rules)
 - [Differences from datalit](#user-content-differences-from-datalit)
 - [Diagnostics](#user-content-diagnostics)
@@ -28,7 +28,7 @@ says which rule types each form.
 
 The EBNF is as in the [datalit grammar](datalit-ebnf.md#user-content-notation),
 over tokens rather than characters: whitespace and comments between tokens are
-not written. Two more notations carry what tokens alone cannot:
+not written. More notation carries what tokens alone cannot:
 
 - `~x` means `x` is glued to the token before it: no space, newline or comment
   between them. Spacing decides fixity in datafun
@@ -41,6 +41,10 @@ not written. Two more notations carry what tokens alone cannot:
   more; blank lines are free.
 - `end_line(k)` is a rule with a parameter, written once for every block's
   closing line: `end_line("fun")` is `"end", "fun"` on a line of its own.
+- The rules under `(* Written in characters *)` describe the text of one
+  glued run of tokens, as the datalit grammar describes text, rather than
+  tokens. The rules that are `? as in the datalit grammar ?` are those rules
+  of [Datalit Grammar](datalit-ebnf.md), read the same way.
 
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
 parsing (D054, D055). `<` and `>` are always brackets, never operators.
@@ -75,11 +79,12 @@ var_stmt      = "var", binding, [ ":", type ], "=", expr
                 (* P008; pattern without value: P068; no type: P026 *)
 const_stmt    = "const", value_name, [ ":", type ], "=", expr ; (* P024, P025 *)
 binding       = value_name
-              | "(", [ value_name, { ",", value_name }, [ "," ] ], ")"   (* (a): P070 *)
+              | "(", [ value_name, ",", [ value_name, { ",", value_name }, [ "," ] ] ], ")"
+                                                 (* (a): P070 *)
               | "{", [ field_pat, { ",", field_pat }, [ "," ] ], "}"
               | "atom", NAME
               | "term", NAME, value_name ;       (* one level deep; nested: P069 *)
-field_pat     = NAME, [ "=", value_name ] ;      (* names unique: D038 *)
+field_pat     = NAME, "=", value_name | value_name ;   (* names unique: D038 *)
 
 (* ===== Assignment  (statement.rs: parse_set, parse_place_steps) ===== *)
 set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* P009; no op: P089 *)
@@ -99,7 +104,7 @@ native_fun    = [ "intrinsic" ], "native", "fun", value_name, [ type_params ], p
                                                        does not know: P085 *)
 type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;  (* no name: P092 *)
 param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;
-param         = [ "const" ], [ "ref" | "mut" | "out" ], param_name, ":", type ;
+param         = [ "const" | "ref" | "mut" | "out" ], param_name, ":", type ;
                 (* const with a mode: P082; no name: P011; no ":": P012 *)
 where_clause  = "where", "{", [ bound, { ",", bound }, [ "," ] ], "}" ;  (* P061, P062 *)
 bound         = NAME, "is", ( "ord" | "float" | "fixedint" ) ;
@@ -151,7 +156,7 @@ postfix       = ~"?" | ~"!" | ~"@"
               | ~".", field_sel
               | ~"[", expr, "]", [ ~"?" | ~"!" ]
               | ~"(", [ arg_list ], ")" ;       (* only after a single named field step: P072 *)
-field_sel     = NAME | digit, { digit } ;       (* digits fit a u32; else, or nothing: P079 *)
+field_sel     = NAME | field_index ;           (* nothing: P079 *)
 
 primary       = hinted
               | "true" | "false" | "none"
@@ -162,7 +167,7 @@ primary       = hinted
               | "icall", NAME, ~"(", [ arg_list ], ")"  (* P040, P041; spaced "(": P090 *)
               | dec_number | hex_number               (* no sign: "-" is prefix_op *)
               | string_lit                            (* D039 *)
-              | NAME, [ ~"(", [ arg_list ], ")" ]     (* a call only when glued *)
+              | value_name, [ ~"(", [ arg_list ], ")" ]   (* a call only when glued *)
               | paren | collection ;
                 (* any other bracket, or nothing: P081; another token: P080 *)
 payload       = unary ;                         (* a binary operator after it: P065 *)
@@ -201,21 +206,38 @@ type          = ? the datalit type grammar, datalit-ebnf.md, parsed by the same
                    function types and no type application. *)
 
 (* ===== Lexical  (bcts lexer.rs, parser_util.rs) ===== *)
-word          = wchar, { wchar } ;              (* [A-Za-z0-9_] or Unicode alphanumeric *)
-NAME          = ? a word not beginning with an ASCII digit ? ;  (* non-ASCII: D043 *)
+EOLS          = EOL, { EOL } ;
+EOL           = ? a newline outside brackets ? ;
+newline       = ? a newline in a table literal, outside brackets nested in it ? ;
+NAME          = ? an ASCII word not beginning with a digit ? ;
+                (* a word is a run of [A-Za-z0-9_] or Unicode alphanumerics;
+                   a non-ASCII one: D043 *)
 value_name    = NAME - ( "true" | "false" | "none" | "some" | "ok" | "er" | "data"
                        | "error" | "atom" | "term" | "enum" | "not" | "icall" ) ;
 param_name    = value_name - ( "mut" | "out" | "ref" | "const" ) ;
-type_name     = NAME - ( scalar type keyword | "atom" | "term" | "enum" | "rec" ) ;
+type_name     = NAME - ( scalar_type | "atom" | "term" | "enum" | "rec" ) ;
                 (* each exclusion is P064, and the name is still taken *)
+
+(* Written in characters, each one glued run of tokens. *)
 dec_number    = digit_run, [ ".", digit_run ], [ ( "e" | "E" ), [ "+" | "-" ], digit_run ] ;
-                (* glued throughout; gaps: D019; letters on the end: D060 *)
+                (* gaps: D019; letters on the end: D060 *)
 hex_number    = "0", ( "x" | "X" ), hex_run ;
-string_lit, digit_run, hex_run, comment, newline
-              = ? as in the datalit grammar ? ;
+field_index   = digit, { digit } ;              (* fits a u32, else P079 *)
+string_lit    = ? as in the datalit grammar ? ;
+digit_run     = ? as in the datalit grammar ? ;
+hex_run       = ? as in the datalit grammar ? ;
+digit         = ? as in the datalit grammar ? ;
+scalar_type   = ? as in the datalit grammar ? ;
 ```
 
 ## Rules outside the grammar
+
+The parser refuses some text the grammar derives, by the rules below and the
+datalit grammar's, and then only with these codes: D023, D030, D038, D039,
+D040, D041, D042, D045, D057, P031, P049, P062, P065, P066, P072, P073, P074,
+P078, P079, P085, P091. Everything else it refuses, the grammar does not
+derive, and everything it accepts, the grammar does. A test checks this (see
+[Checking the grammar](#user-content-checking-the-grammar)).
 
 **Lines and blocks.**
 
@@ -250,7 +272,8 @@ string_lit, digit_run, hex_run, comment, newline
   are held to the same rule, as is the `(` after `icall`'s name.
 - `NAME(` is a call only when glued.
 - A prefix operator has no spacing rule: `- x` is a negation.
-- A number is one glued run (D019, D060).
+- A number is one glued run, and a `.` or a word written against its end is
+  part of it: `1.x` is D019, not a field of `1`, and `1x` is D060.
 - After `: T /`, a `-` glued to a decimal word is the literal's sign, so
   `: i32 / -5` is the literal -5. Anywhere else, `-5` is the negation of `5`.
 - In a tensor row, elements are separated by this rule alone:
@@ -292,6 +315,33 @@ complete statement, or after the last element of a bracket: `debuglog 1 2`
 is P021 at the `2`. It is suppressed after any earlier error in the same
 sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 `extra`.
+
+## Checking the grammar
+
+`crates/datalove-doc-fixtures/tests/datafun_grammar_tests.rs` reads the grammar
+block above and runs it, as an Earley recognizer, beside the parser, as
+[Datalit Grammar](datalit-ebnf.md#user-content-checking-the-grammar) is run
+beside its own. Whatever the parser accepts the recognizer must too, and
+whatever the recognizer accepts the parser must accept or refuse only with a
+code from the list at the top of
+[Rules outside the grammar](#user-content-rules-outside-the-grammar), which
+the test reads from this document.
+
+The recognizer reads the tokens the real lexer makes, with an `EOL` added
+before a token that has a newline before it outside brackets, and a table's
+`newline` before one in a table literal. `type` matches a run of tokens with
+its brackets matched whose text the datalit grammar's `type` rule derives, and
+the rules written in characters and those `? as in the datalit grammar ?`
+each match one glued run of tokens by its text, a number only the whole of
+one. So the datalit grammar is run here too, as the reading of what datafun
+shares with it.
+
+Its inputs are every `.dfs`, `.dfm` and `.dli` file under `crates/` and
+`sys/`, the module and script sections of every worldfile there, strings
+generated from the grammar, and each of those with a character changed, each
+parsed as a script, module or rider interface. The examples in this
+document's prose are not checked, as datalit's are: most are a piece of a
+statement rather than a script.
 
 ## Productions and their typing rules
 
@@ -416,6 +466,7 @@ and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 | P089 | A `set` without its assignment operator |
 | P090 | A postfix operator written apart from what it applies to |
 | P091 | A binary operator written against one side only |
+| P092 | A type parameter with no name |
 
 A code missing from the table is unassigned. The codes are `PCode` in
 `crates/datalove-diagnostic-codes`, which a test holds to this table.
@@ -431,4 +482,3 @@ Places the parser and [the spec](botspec.md) disagree, left as they are.
   now states this too, so it is less a disagreement than a wart: the reserved
   words are there to keep parsing simple, and this can be disambiguated some
   other way when it matters.
-| P092 | A type parameter with no name |

@@ -1450,6 +1450,7 @@ name = "datalove-doc-fixtures"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-datafun-parser",
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-repl",
