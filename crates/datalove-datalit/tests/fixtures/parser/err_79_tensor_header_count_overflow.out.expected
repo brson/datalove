@@ -1,0 +1,25 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "a tensor of shape `4294967295 4294967295 4294967295` holds more than 2^64 elements, and 1 are written"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D041",
+      "labels": [
+        {
+          "message": "the shape",
+          "span": [
+            3,
+            37
+          ],
+          "text": "4294967295 4294967295 4294967295 |"
+        }
+      ],
+      "message": "a tensor of shape `4294967295 4294967295 4294967295` holds more than 2^64 elements, and 1 are written"
+    }
+  ]
+}

@@ -192,10 +192,15 @@ pub fn tensor_body_complaint(
         shape.iter().map(|e| e.S()).collect::<Vec<_>>().join(" ")
     };
     if body_rank == 1 {
-        let holds: u64 = extents.iter().map(|&e| e as u64).product();
-        if holds == element_count as u64 {
+        // Extents are each a u32, so four of them can overflow a u64.
+        let holds = extents.iter().try_fold(1u64, |n, &e| n.checked_mul(e as u64));
+        if holds == Some(element_count as u64) {
             return None;
         }
+        let holds = match holds {
+            Some(n) => n.S(),
+            None => "more than 2^64".S(),
+        };
         return Some((
             rmx::std::format!("a tensor of shape `{}` holds {holds} elements, and {element_count} are written", spelled(extents)),
             "the shape".S(),
