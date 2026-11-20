@@ -767,7 +767,8 @@ Four things are proved of it:
   signatures makes 164 of a thousand worlds differ, and marking every const
   as holding a value 219.
 - **What is moved is modelled, run, and held to the Rust, but not yet
-  proved** (`FunMove.lean`, of O001, O003, O007, O008, O014, O015 and O016, with
+  proved** (`FunMove.lean`, of O001, O003, O004, O007, O008, O011, O014,
+  O015 and O016, with
   O005, O006 and O009 as `FunInit.lean` has them). A read of a variable
   whose type is not copy, where the ownership analysis has the read take
   the value rather than borrow it, moves it: a `let`'s or `set`'s value, an
@@ -794,7 +795,15 @@ Four things are proved of it:
   loop's names shadow it, is marked walked (`MVar.walked`), and moving it,
   passing it or a part of it `mut` or `out`, or a `set` to it or a part of
   it is refused, the `set` before its value is looked at, as the Rust's
-  `analyze_set` does, and a move before O003. Where branches meet, whether a variable was moved has to
+  `analyze_set` does, and a move before O003. What is passed `mut` or `out`
+  has to be a `var` or a `mut` or `out` parameter (`MVar.writable`): a `ref`
+  parameter or what a `for` binds by reference is O004 (`MVar.byRef`, all a
+  `for` binds but an index), and a `let`, an `in` parameter, a const or what
+  a condition or `match` binds O011, checked after O015. The corpus found
+  that the Rust let a const declared outside a function through as a `mut`
+  argument in its body, which then changed the const on every engine (the
+  pass knew it only as a name); it is O011 now (backend fixture
+  `1046_a_const_outside_a_function_passed_mut_error`). Where branches meet, whether a variable was moved has to
   agree, where whether it was given a value need not: an `if`'s or
   `match`'s branches that complete (O008), what is moved after being what
   the first of them left, or the first branch where none completes, as the
@@ -809,8 +818,11 @@ Four things are proved of it:
   the generator makes rarely: loop exits, a condition that moves, branches
   that both return, keys, consts and borrowed bindings, and a walked
   collection changed through a field, shadowed, walked twice and changed
-  after its loop. Over ten thousand seeds, two hundred O015, none differ;
-  not marking what is walked makes the corpus's seven differ. It also runs each
+  after its loop, and each kind of binding passed `mut` or `out`. Over ten
+  thousand seeds, two hundred O015, three hundred O011 and forty O004, none
+  differ; not marking what is walked makes the corpus's seven differ, letting
+  everything be passed `mut` ten, and reporting O011 for what is bound by
+  reference three. It also runs each
   script with `runScriptMoves` and requires that where the analysis lets it
   through, and the Rust reports neither O010 nor O017, which see that no
   argument a call writes back through is moved before the call takes it,

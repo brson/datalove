@@ -2153,6 +2153,8 @@ fun look(ref x: string): int\n  ret 1\nend fun\n\
 fun maybe(c: bool): ?string\n  ret none\nend fun\n\
 fun pass(x: string): bool\n  ret true\nend fun\n\
 fun grow(mut xs: [string])\nend fun\n\
+fun change(mut x: string)\nend fun\n\
+fun fill(out x: string)\n  set x = \"f\"\nend fun\n\
 fun bump(mut n: int)\nend fun\n\
 fun drain(xs: [string])\nend fun\n\
 type Q = {xs: [string], n: int}\n\
@@ -2189,6 +2191,19 @@ const MOVES_CORPUS: &[&str] = &[
     "  var m: [string] = [\"a\"]\n  for w in ref m\n    debuglog w\n  end for\n  call grow(mut m)\n  call drain(m)\n",
     "  for w in ref l\n    for v in ref l\n      debuglog v\n    end for\n    call grow(mut l)\n  end for\n",
     "  for w in ref l\n    debuglog l\n    let n = look(ref w)\n  end for\n",
+    // What may be passed `mut` or `out`.
+    "  call change(mut u)\n  call change(mut x)\n  call fill(out x)\n",
+    "  call change(mut s)\n",
+    "  call fill(out s)\n",
+    "  call change(mut r)\n",
+    "  let y = \"a\"\n  call change(mut y)\n",
+    "  call change(mut ka)\n",
+    "  const kb: string = \"b\"\n  call change(mut kb)\n",
+    "  for w in ref l\n    call change(mut w)\n  end for\n",
+    "  for i, w in ref l\n    call change(mut w)\n  end for\n",
+    "  if maybe(c) |v|\n    call change(mut v)\n  end if\n",
+    "  let q: Q = {xs = [\"a\"], n = 1}\n  call bump(mut q.n)\n",
+    "  var q: Q = {xs = [\"a\"], n = 1}\n  call bump(mut q.n)\n",
     // Branches.
     "  if c\n    call take(x)\n  end if\n",
     "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
@@ -2222,7 +2237,7 @@ const MOVES_CORPUS: &[&str] = &[
 
 /// The ownership codes the formal model's move analysis decides
 /// (`formal/Datalove/FunMove.lean`), with what holds a value.
-const MOVE_CODES: [&str; 10] = ["O001", "O003", "O005", "O006", "O007", "O008", "O009", "O014", "O015", "O016"];
+const MOVE_CODES: [&str; 12] = ["O001", "O003", "O004", "O005", "O006", "O007", "O008", "O009", "O011", "O014", "O015", "O016"];
 
 /// The move analysis (`formal/Datalove/FunMove.lean`) held to the Rust's
 /// ownership pass, on `datalove_worldgen::moves_script`'s functions with

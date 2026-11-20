@@ -1,7 +1,7 @@
 import Datalove.FunInit
 
 /-!
-# What is moved (O001, O003, O007, O008, O014, O015, O016)
+# What is moved (O001, O003, O004, O007, O008, O011, O014, O015, O016)
 
 Reading a variable whose type is not copy, where the ownership analysis has
 the read take the value rather than borrow it (`Ctx.lends` false: a `let`'s
@@ -16,7 +16,11 @@ complete (O008), a loop's ways out (O014), or a loop body's way back to its
 start, which may not have moved what it was given (O007). Nor may a
 `for`'s body change what it walks, the variable its collection is a place
 in (O015): move it, pass it or a part of it `mut` or `out`, or `set` it or
-a part of it, since the walk points into it. This is that
+a part of it, since the walk points into it. What is passed `mut` or `out`
+has to be something the caller may change: a `var` or a `mut` or `out`
+parameter, not a `ref` parameter or what a `for` binds by reference (O004),
+nor a `let`, an `in` parameter, a const or what a condition or `match`
+binds (O011). This is that
 analysis, as `datalove-datafun-ownership` makes it with its `BindingState`,
 beside what holds a value (`FunInit.lean`), which it takes in: a variable
 declared with no value holds nothing until written (O005), and an `out`
@@ -62,6 +66,12 @@ structure MVar where
   back : Bool
   /-- A borrowed binding, which a move may not take (O003). -/
   lent : Bool
+  /-- May be passed `mut` or `out`: a `var`, or a `mut` or `out`
+  parameter. -/
+  writable : Bool
+  /-- Bound by reference: a `ref` parameter, or a `for`'s element, key or
+  value, which passed `mut` or `out` is O004 rather than O011. -/
+  byRef : Bool
   /-- The collection a `for` walks, or the variable it is a part of, frozen
   for the loop's body (O015). -/
   walked : Bool := false
@@ -84,8 +94,9 @@ def MSt.give (x : String) : MSt → MSt := MSt.update (fun v => { v with init :=
 def MSt.take (x : String) : MSt → MSt := MSt.update (fun v => { v with live := false }) x
 
 /-- Names bound in order, each innermost of those before it. -/
-def MSt.bind (σ : MSt) (xs : List String) (init lent : Bool) : MSt :=
-  xs.foldl (fun σ x => { name := x, init, live := true, back := false, lent } :: σ) σ
+def MSt.bind (σ : MSt) (xs : List String) (init lent : Bool) (writable : Bool := false)
+    (byRef : Bool := false) : MSt :=
+  xs.foldl (fun σ x => { name := x, init, live := true, back := false, lent, writable, byRef } :: σ) σ
 
 /-- `x` walked by a `for`. -/
 def MSt.walk (x : String) : MSt → MSt := MSt.update (fun v => { v with walked := true }) x
@@ -121,6 +132,14 @@ abbrev MoveM := Except Lit.Code
 /-- Refuse a change to what a `for` walks (O015). -/
 def unwalkedM (σ : MSt) (x : String) : MoveM Unit :=
   if σ.isWalked x then throw "O015" else pure ()
+
+/-- Refuse passing `mut` or `out` what may not be changed: what is bound by
+reference (O004), and a `let`, an `in` parameter, a const or a binding of
+a condition or `match` (O011). -/
+def writableM (σ : MSt) (x : String) : MoveM Unit :=
+  match σ.find x with
+  | some v => if v.writable then pure () else if v.byRef then throw "O004" else throw "O011"
+  | none => pure ()
 
 /-- What the ways in `L` agree on, `code` where they disagree, or `σ` with
 none. -/
@@ -243,7 +262,8 @@ def mArgs (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Option Mode �
   | σ, (_, e) :: args, m :: ms => do
     let σ ← match placeOf e with
       | some (x, _) =>
-        if m == .mut || m == .out then unwalkedM σ x >>= fun _ => mPlace sigs Γ σ e (m == .mut)
+        if m == .mut || m == .out then
+          unwalkedM σ x >>= fun _ => writableM σ x >>= fun _ => mPlace sigs Γ σ e (m == .mut)
         else mE sigs Γ (m != .in_) σ e
       | none => if m == .out then pure σ else mE sigs Γ (m != .in_) σ e
     mArgs sigs Γ σ args ms
@@ -331,6 +351,15 @@ def forCtx (env : InferEnv) (n : Nat) (Γ : Ctx) (names : List String) (coll : E
   | (some Δ, _) => { Γ with inLoop := true }.bindAll Δ
   | (none, _) => { Γ with inLoop := true }
 
+/-- Whether each of a `for`'s names is bound by reference, as `execStmt`
+binds them at fuel `n`: all but an index. -/
+def forRefs (env : InferEnv) (n : Nat) (Γ : Ctx) (names : List String) (coll : Expr) : List Bool :=
+  match (forBindings env n Γ names coll).run #[] with
+  | (some Δ, _) => Δ.map fun (_, t) => match t with
+    | .index => false
+    | _ => true
+  | (none, _) => names.map fun _ => true
+
 /-- What a statement, a block or a `match`'s cases leave: what holds a value
 where it completes, at each of its `break`s, and at each `continue`. -/
 abbrev MOut := MSt × List MSt × List MSt
@@ -380,8 +409,8 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
   | 0, _, σ, _ => pure (σ, [], [])
   | n + 1, Γ, σ, s => match s with
     | .let_ p _ e => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
-    | .var_ p _ (some e) => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
-    | .var_ p (some _) none => pure (σ.bind (patNames p) false false, [], [])
+    | .var_ p _ (some e) => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false true, [], [])
+    | .var_ p (some _) none => pure (σ.bind (patNames p) false false true, [], [])
     | .var_ _ none none => pure (σ, [], [])
     | .set_ x steps op e => do pure (← mSet sigs Γ σ x steps op e, [], [])
     | .fun_ _ => pure (σ, [], [])
@@ -424,7 +453,9 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       let σw := match placeOf coll with
         | some (x, _) => σc.walk x
         | none => σc
-      mBlock sigs env n (forCtx env n Γ names coll) (σw.bind names true true) body >>= fun r =>
+      let σb := (names.zip (forRefs env n Γ names coll)).foldl
+        (fun σ (x, r) => σ.bind [x] true true (byRef := r)) σw
+      mBlock sigs env n (forCtx env n Γ names coll) σb body >>= fun r =>
       loopEnd σc σc true body r >>= fun σ' =>
       pure (σ', [], [])
 
@@ -480,8 +511,11 @@ def mFun (sigs : List (String × Sig)) (env : InferEnv) (aliases : Aliases) (con
     | some sig => do
       let σ0 : MSt := params.reverse.map (fun (m, x, _) =>
           { name := x, init := m != .out, live := true, back := m == .out || m == .mut,
-            lent := m == .ref || m == .mut || m == .out }) ++
-        cmarks.map fun (x, s) => { name := x, init := s, live := true, back := false, lent := false }
+            lent := m == .ref || m == .mut || m == .out, writable := m == .mut || m == .out,
+            byRef := m == .ref }) ++
+        cmarks.map fun (x, s) =>
+          { name := x, init := s, live := true, back := false, lent := false, writable := false,
+            byRef := false }
       let (σ, _, _) ← mBlock sigs env fuel (funCtx sigs aliases consts tps params sig) σ0 body
       if completes body then discard (exitM σ)
 
