@@ -97,7 +97,7 @@ native_fun    = [ "intrinsic" ], "native", "fun", value_name, [ type_params ], p
                 [ ":", type ], [ where_clause ] ;   (* P028, P029, P030;
                                                        an intrinsic the compiler
                                                        does not know: P085 *)
-type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;
+type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;  (* no name: P092 *)
 param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;
 param         = [ "const" ], [ "ref" | "mut" | "out" ], param_name, ":", type ;
                 (* const with a mode: P082; no name: P011; no ":": P012 *)
@@ -431,3 +431,4 @@ Places the parser and [the spec](botspec.md) disagree, left as they are.
   now states this too, so it is less a disagreement than a wart: the reserved
   words are there to keep parsing simple, and this can be disambiguated some
   other way when it matters.
+| P092 | A type parameter with no name |

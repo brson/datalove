@@ -1,0 +1,4 @@
+// A type parameter is a name, so a comma with none before it is refused.
+fun f<, T>(x: T): T
+    ret x
+end fun

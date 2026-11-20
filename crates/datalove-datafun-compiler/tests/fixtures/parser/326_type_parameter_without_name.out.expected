@@ -1,0 +1,57 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "x",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "x",
+            "type_hint": {
+              "Alias": "T"
+            }
+          }
+        ],
+        "return_type": {
+          "Alias": "T"
+        },
+        "type_bounds": [
+          null
+        ],
+        "type_params": [
+          "T"
+        ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P092",
+      "labels": [
+        {
+          "message": "a type parameter is a name",
+          "span": [
+            80,
+            81
+          ],
+          "text": ","
+        }
+      ],
+      "message": "expected a type parameter's name"
+    }
+  ]
+}

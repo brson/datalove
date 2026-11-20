@@ -385,6 +385,8 @@ codes! {
         SpacedPostfix = 90,
         /// A binary operator written against one side only.
         LopsidedOperator = 91,
+        /// A type parameter with no name.
+        TypeParamWithoutName = 92,
     }
     retired = [42, 43, 50, 51, 52, 53, 71, 75];
 }

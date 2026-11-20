@@ -669,7 +669,18 @@ statements that run belong in a function or a script")
     ) -> (Vec<InternedText<'db>>, Vec<Option<ast::TypeBound>>) {
         let mut sub = Parser::from_branch_with_context(
             self.db, inner, self.source_text(), None, self.module_id());
-        let names = sub.parse_comma_separated(|p| p.eat_declared_name(NameKind::Type));
+        let names = sub.parse_comma_separated(|p| {
+            let ts = p.peek_text_span();
+            let name = p.eat_declared_name(NameKind::Type);
+            if name.is_none() {
+                p.had_error = true;
+                DiagnosticBuilder::error(p.db, "expected a type parameter's name")
+                    .code(PCode::TypeParamWithoutName.as_str())
+                    .primary_label(ts, "a type parameter is a name")
+                    .emit_parse();
+            }
+            name
+        });
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
         let names: Vec<_> = names.into_iter().flatten().collect();
