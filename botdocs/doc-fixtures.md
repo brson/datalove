@@ -33,7 +33,10 @@ engine produced belongs there:
   run by `tests/reactive_tests.rs`.
 - `replays/`, the sessions the posts play, run by `tests/replay_tests.rs`.
 
-Both are checked by step tables.
+Both are checked by step tables. One document has no fixture of its own:
+[Datalit Grammar](datalit-ebnf.md) is run as it is written, by
+`tests/datalit_grammar_tests.rs` with `src/ebnf.rs`, and checked against the
+parser (see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
 
 ## Step tables
 

@@ -1449,6 +1449,9 @@ dependencies = [
 name = "datalove-doc-fixtures"
 version = "0.1.0"
 dependencies = [
+ "bcts",
+ "datalove-datalit",
+ "datalove-diagnostic",
  "datalove-repl",
  "datalove-script-steps",
  "datalove-sys-packages",

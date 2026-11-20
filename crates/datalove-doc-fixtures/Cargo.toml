@@ -10,10 +10,13 @@ publish = false
 repository.workspace = true
 
 [dependencies]
+bct.workspace = true
 rmx.workspace = true
 datalove-script-steps.workspace = true
 
 [dev-dependencies]
+datalove-datalit.workspace = true
+datalove-diagnostic.workspace = true
 datalove-repl.workspace = true
 datalove-vio.workspace = true
 # The replays are recorded against the system library the binary ships.

@@ -4,4 +4,5 @@
 //! produced lives here, beside what it was produced from, so the documents
 //! stay true as the engine changes. See `botdocs/doc-fixtures.md`.
 
+pub mod ebnf;
 pub mod step_tables;

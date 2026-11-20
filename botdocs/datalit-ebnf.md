@@ -2,9 +2,8 @@
 
 The concrete syntax of datalit, the data-literal language, as EBNF. This is a
 reference: it states what the parser in `crates/datalove-datalit/src/parser`
-accepts, over the lexer and bracket matcher in `crates/bcts`. Revised October
-2026 against that code, with every case below that is not plainly read off
-the source run through `datalove lit-ast` and `lit-tycheck`.
+accepts, over the lexer and bracket matcher in `crates/bcts`, and a test
+holds it to that (see [Checking the grammar](#user-content-checking-the-grammar)).
 
 What a well-formed literal means, and which ones type-check, is in
 [Datalit Typing Rules](datalit-typing-rules.md). Datafun embeds most of this
@@ -18,6 +17,7 @@ disagrees with the parser, see [The manual](#user-content-the-manual).
 - [Notation](#user-content-notation)
 - [Grammar](#user-content-grammar)
 - [Rules outside the grammar](#user-content-rules-outside-the-grammar)
+- [Checking the grammar](#user-content-checking-the-grammar)
 - [Diagnostics](#user-content-diagnostics)
 - [Divergences](#user-content-divergences)
   - [The manual](#user-content-the-manual)
@@ -26,7 +26,8 @@ disagrees with the parser, see [The manual](#user-content-the-manual).
 ## Notation
 
 ISO 14977 EBNF: `,` concatenates, `|` separates alternatives, `[ x ]` is
-optional, `{ x }` repeats zero or more times, `"x"` is a terminal, `? x ?` is
+optional, `{ x }` repeats zero or more times, `"x"` is a terminal (with no
+escapes, but `"\n"` is a newline character), `? x ?` is
 a special sequence described in English, and `(* x *)` is a comment.
 Comments in the grammar name the diagnostic a violation produces.
 
@@ -150,6 +151,21 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
 
 ## Rules outside the grammar
 
+The parser refuses some text the grammar derives, by the rules below, and
+then only with these codes: D023, D030, D038, D039, D040, D041, D042, D045,
+D057. Everything else it refuses, the grammar does not derive, and everything
+it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
+[Checking the grammar](#user-content-checking-the-grammar)).
+
+- **Words are whole.** Two letters, digits or `_` written against each other
+  are one word: no keyword, `ident`, `numeric_lit`, `rank` or `extent` ends
+  or begins where another touches it. So `truefalse` is one name, not two
+  booleans, and `[| 12 |]` is one element, while `[|1-2|]` is two.
+- **Comments are whole.** `//` and `/*` start a comment wherever they are
+  written outside a string or a comment, and a line comment runs to the end
+  of its line. So a `/` token never touches a `/` or `*` after it:
+  `: u8/*c*/1` and `: u8 //1` are D049, having lost the hint's `/`, and `(//)`
+  is an open bracket and a comment, not an empty tuple.
 - **Brackets match.** Every bracket is closed by its partner: a close with no
   open is D054, and an open never closed is D055.
 - **A hint is a hint on one expression.** What follows `: T /` is a bare
@@ -161,8 +177,6 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
 - **Grouping is not a node.** `(e)` is `e`, and `(: T / e)` with no hint
   outside it is the hinted `e`. A one-tuple needs its comma: `(1,)`.
   `(,)` and `(1,,)` are D020.
-- **Where the hint's `/` ends.** A `/` glued to `/` or `*` starts a comment,
-  so `: u8/*c*/1` and `: u8 //1` lose their `/` (D049).
 - **Signs.** A sign is a `-` glued to a decimal literal: `- 1` is D050, `-0xF`
   is D061, and `+1` is D020. A float needs digits on both sides of its point:
   `.5` is D020 and `1.` is D019. A letter on the end of a number is D060, not a
@@ -199,6 +213,31 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
   column (D030); each cell is one `full_expr`, so `{| x, y; 1 2, 3 |}` is D021.
   A header cell is one name (D031, D034), and names are unique (D038). The
   header is optional: `{||}` is the empty table.
+
+## Checking the grammar
+
+`crates/datalove-doc-fixtures/tests/datalit_grammar_tests.rs` reads the
+grammar block above and runs it, as a character-level Earley recognizer, beside
+the parser. Whatever the parser accepts the recognizer must too, and whatever
+the recognizer accepts the parser must accept or refuse only with a code from
+the list at the top of [Rules outside the grammar](#user-content-rules-outside-the-grammar).
+The test reads that list from this document.
+
+Its inputs are the examples above (the "`x` is Dnnn", "`x` and `y` are Dnnn"
+and "`x` parses" claims in the prose, each also checked for its code), every
+`.dlt` file under `crates/`, strings generated from the grammar, and each of
+those with a character changed. A disagreement is shrunk to the shortest
+input that still disagrees.
+
+The grammar is run as written but for the rules this document states in
+English, which the test adds: words and comments are whole, a `type_name` is
+no type keyword (those it reads from the type rules), and inside a table
+literal, outside nested brackets, `ws` takes no newline. What each `? x ?` means is given in the test, and a
+new one fails it until it is given a meaning there too.
+
+So an edit here that the parser does not match fails the test. A new rule
+in English that the grammar does not express needs the test taught it, or
+the code it refuses with added to the list.
 
 ## Diagnostics
 
