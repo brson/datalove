@@ -1,4 +1,4 @@
-import Datalove.FunInit
+import Datalove.FunDrop
 
 /-!
 # What is moved (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016)
@@ -49,6 +49,9 @@ that completes, or, where none does, the first (`joinIf`, `joinMatch`), as
 the Rust does. A loop is left with what its ways out agree on: its
 condition or the end of its elements, taken to leave what the loop was
 entered with, and each `break`.
+The walk keeps the drop schedule as it goes, as the Rust's analysis does:
+each statement numbered, each binding given an identity, and each point a
+scope is left by scheduling what is owned there; `FunDrop.lean` says how.
 -/
 
 namespace Datalove.Fun
@@ -75,11 +78,10 @@ structure MVar where
   /-- The collection a `for` walks, or the variable it is a part of, frozen
   for the loop's body (O015). -/
   walked : Bool := false
-  /-- Dropped where it is owned: not a copy, not borrowed, not a const.
-  Only the drop schedule (`FunDrop.lean`) sets it. -/
+  /-- Dropped where it is owned: not a copy, not borrowed, not a const. -/
   owns : Bool := false
   /-- Which binding this is, as the Rust's `BindingId` tells two of one
-  name apart. Only the drop schedule sets it. -/
+  name apart. -/
   uid : Nat := 0
 
 /-- The variables in scope, innermost first, as the run keeps them. -/
@@ -98,11 +100,6 @@ def MSt.give (x : String) : MSt → MSt := MSt.update (fun v => { v with init :=
 
 /-- `x` moved. -/
 def MSt.take (x : String) : MSt → MSt := MSt.update (fun v => { v with live := false }) x
-
-/-- Names bound in order, each innermost of those before it. -/
-def MSt.bind (σ : MSt) (xs : List String) (init lent : Bool) (writable : Bool := false)
-    (byRef : Bool := false) : MSt :=
-  xs.foldl (fun σ x => { name := x, init, live := true, back := false, lent, writable, byRef } :: σ) σ
 
 /-- `x` walked by a `for`. -/
 def MSt.walk (x : String) : MSt → MSt := MSt.update (fun v => { v with walked := true }) x
@@ -133,7 +130,77 @@ def MSt.join (σ τ : MSt) : Option MSt := if σ.sameMoves τ then some (σ.init
 def MSt.keepsLive (σ τ : MSt) : Bool :=
   (σ.zip τ).all fun (v, w) => !v.live || w.live
 
-abbrev MoveM := Except Lit.Code
+/-- The drop schedule, as the move analysis builds it: the next statement's
+index, the next binding's, the bindings a loop turned out to give a value
+they were entered without (the Rust's `maybe_held`), each binding's name, and
+the points scheduled so far, each a kind of point, its statement, the arm for
+a `match`'s, and what it drops, each with the expression that moves it where
+a return may come before the move. -/
+structure DSt where
+  next : Nat := 0
+  uid : Nat := 0
+  held : List Nat := []
+  names : List (Nat × String) := []
+  out : List (String × Nat × Option Nat × List (Nat × Option Nat)) := []
+  /-- The index in the body's expression arena of the next expression to be
+  filed (`Expr.nodes`). -/
+  expr : Nat := 0
+  /-- Where each binding was last moved: the index of the expression that
+  took its value. -/
+  movedAt : List (Nat × Nat) := []
+
+/-- The move analysis, keeping the drop schedule as it goes. -/
+abbrev MoveM := StateT DSt (Except Lit.Code)
+
+/-- The next statement's index, as the Rust's `alloc_stmt_id` gives it. -/
+def stmtId : MoveM Nat := modifyGet fun s => (s.next, { s with next := s.next + 1 })
+
+/-- Bind `x`, a binding of its own, owned where its type in `Γ'`, the
+context the statement leaves, is not copy and it is neither borrowed nor a
+const. -/
+def bindOne (Γ' : Ctx) (konst : Bool) (init lent writable byRef : Bool) (σ : MSt) (x : String) :
+    MoveM MSt := do
+  let s ← get
+  let owns := !lent && !konst && match Γ'.lookup x with
+    | some (t, _) => !t.isCopy
+    | none => false
+  set { s with uid := s.uid + 1, names := (s.uid, x) :: s.names }
+  pure ({ name := x, init, live := true, back := false, lent, writable, byRef, owns, uid := s.uid } :: σ)
+
+/-- Names bound in order, each innermost of those before it. -/
+def bindM (Γ' : Ctx) (σ : MSt) (xs : List String) (init : Bool) (writable : Bool := false)
+    (konst : Bool := false) : MoveM MSt :=
+  xs.foldlM (bindOne Γ' konst init false writable false) σ
+
+/-- What of `vs` is dropped where it is: owned, and live or perhaps holding a
+value (the Rust's `owned_here`). -/
+def ownedIn (vs : MSt) : MoveM (List Nat) := do
+  let held := (← get).held
+  pure ((vs.filter fun v => v.owns && (v.live || held.contains v.uid)).map (·.uid))
+
+/-- Schedule `drops` at a point, where `always`, or where it drops anything. -/
+def record (kind : String) (stmt : Nat) (arm : Option Nat) (drops : List Nat) (always := false) : MoveM Unit :=
+  if always || !drops.isEmpty then
+    modify fun s => { s with out := (kind, stmt, arm, drops.map (·, none)) :: s.out }
+  else pure ()
+
+/-- Schedule, for an early return from statement `stmt` before their moves,
+the bindings `moved`, each with the expression that moved it. -/
+def recordNotYetMoved (stmt : Nat) (moved : List Nat) : MoveM Unit := do
+  let s ← get
+  if !moved.isEmpty then
+    set { s with out := ("try_return_not_yet_moved", stmt, none,
+      moved.map fun u => (u, s.movedAt.lookup u)) :: s.out }
+
+/-- Where the expressions filed next begin. -/
+def exprAt : MoveM Nat := do pure (← get).expr
+
+/-- Go on filing expressions from `start`. -/
+def exprFrom (start : Nat) : MoveM Unit := modify fun s => { s with expr := start }
+
+/-- The bindings a scope made, of `τ`, its state where it ends, entered at
+`σ`. -/
+def scopeOwn (σ τ : MSt) : MSt := List.take (τ.length - σ.length) τ
 
 /-- Refuse a change to what a `for` walks (O015). -/
 def unwalkedM (σ : MSt) (x : String) : MoveM Unit :=
@@ -171,7 +238,10 @@ def moveM (Γ : Ctx) (σ : MSt) (x : String) : MoveM MSt := do
     let σ ← readM σ x
     if t.isCopy then pure σ
     else match σ.find x with
-      | some v => if v.walked then throw "O015" else if v.lent then throw "O003" else pure (σ.take x)
+      | some v =>
+        if v.walked then throw "O015" else if v.lent then throw "O003" else do
+          modify fun s => { s with movedAt := (v.uid, s.expr) :: s.movedAt }
+          pure (σ.take x)
       | none => pure σ
   | none => readM σ x
 
@@ -196,43 +266,47 @@ mutual
 
 /-- An expression, as `evalS` runs it, from a position borrowing or not as
 `b` says: what holds a value after it, or the first thing refused. -/
-def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) : MSt → Expr → MoveM MSt
-  | σ, .var x => if b then readM σ x else moveM Γ σ x
-  | σ, .place x steps => readM σ x >>= fun σ => mSteps sigs Γ σ steps
-  | σ, .hinted _ a => mE sigs Γ (b && !buildsFromParts a) σ a
-  | σ, .adapt a => mE sigs Γ true σ a
-  | σ, .some_ a | σ, .ok a | σ, .er a | σ, .data a | σ, .error a | σ, .term _ a =>
-    mE sigs Γ false σ a
-  | σ, .enum a => mE sigs Γ b σ a
-  | σ, .binop op a c => do
-    let σ ← mE sigs Γ true σ a
-    let σ ← mE sigs Γ true σ c
-    if op.exits then exitM σ else pure σ
-  | σ, .unop op a => do
-    let σ ← mE sigs Γ true σ a
-    match op with
-    | .negC | .negO => exitM σ
-    | _ => pure σ
-  | σ, .tryOpt a => mE sigs Γ b σ a >>= exitM
-  | σ, .tryRes a => mE sigs Γ b σ a >>= exitM
-  | σ, .proj base _ => mE sigs Γ (b || (placeOf base).isSome) σ base
-  | σ, .index base k (some _) => do
-    let σ ← mE sigs Γ (b || (placeOf base).isSome) σ base
-    let σ ← mE sigs Γ true σ k
-    exitM σ
-  | σ, .index _ _ none => pure σ
-  | σ, .call f args => match sigs.lookup f with
-    | some sig => do
-      let ms := sig.params.map (·.1)
-      let σ ← mArgs sigs Γ σ args ms
-      let σ ← if argsExit args ms then exitM σ else pure σ
-      pure (giveArgsM σ args ms)
-    | none => throw "F089"
-  | σ, .tuple es | σ, .list es | σ, .set es | σ, .tensor _ es => mAll sigs Γ σ es
-  | σ, .struct fs => mFields sigs Γ σ fs
-  | σ, .map es => mEntries sigs Γ σ es
-  | σ, .table _ rows => mRows sigs Γ σ rows
-  | σ, .none_ | σ, .tt | σ, .ff | σ, .str _ | σ, .int _ | σ, .float | σ, .hex _ | σ, .atom _ => pure σ
+def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) (σ : MSt) (e : Expr) : MoveM MSt := do
+  let start ← exprAt
+  let σ ← match e with
+    | .var x => if b then readM σ x else moveM Γ σ x
+    | .place x steps => readM σ x >>= fun σ => mSteps sigs Γ σ steps
+    | .hinted _ a => mE sigs Γ (b && !buildsFromParts a) σ a
+    | .adapt a => mE sigs Γ true σ a
+    | .some_ a | .ok a | .er a | .data a | .error a | .term _ a =>
+      mE sigs Γ false σ a
+    | .enum a => mE sigs Γ b σ a
+    | .binop op a c => do
+      let σ ← mE sigs Γ true σ a
+      let σ ← mE sigs Γ true σ c
+      if op.exits then exitM σ else pure σ
+    | .unop op a => do
+      let σ ← mE sigs Γ true σ a
+      match op with
+      | .negC | .negO => exitM σ
+      | _ => pure σ
+    | .tryOpt a => mE sigs Γ b σ a >>= exitM
+    | .tryRes a => mE sigs Γ b σ a >>= exitM
+    | .proj base _ => mE sigs Γ (b || (placeOf base).isSome) σ base
+    | .index base k (some _) => do
+      let σ ← mE sigs Γ (b || (placeOf base).isSome) σ base
+      let σ ← mE sigs Γ true σ k
+      exitM σ
+    | .index _ _ none => pure σ
+    | .call f args => match sigs.lookup f with
+      | some sig => do
+        let ms := sig.params.map (·.1)
+        let σ ← mArgs sigs Γ σ args ms
+        let σ ← if argsExit args ms then exitM σ else pure σ
+        pure (giveArgsM σ args ms)
+      | none => throw "F089"
+    | .tuple es | .list es | .set es | .tensor _ es => mAll sigs Γ σ es
+    | .struct fs => mFields sigs Γ σ fs
+    | .map es => mEntries sigs Γ σ es
+    | .table _ rows => mRows sigs Γ σ rows
+    | .none_ | .tt | .ff | .str _ | .int _ | .float | .hex _ | .atom _ => pure σ
+  exprFrom (start + e.nodes)
+  pure σ
 
 /-- A place's steps, each key in order, an index with `?` or `!` a way out. -/
 def mSteps (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Step → MoveM MSt
@@ -248,20 +322,24 @@ def mSteps (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Step → Move
 /-- A `mut` or `out` argument's place: its variable holds a value where a
 part of it is reached, or where `need` asks, for a `mut` one, and is not
 moved, for an `out` one too, as the Rust checks of a bare name. -/
-def mPlace (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Expr → Bool → MoveM MSt
-  | σ, .var x, need =>
-    if need then readM σ x
-    else match σ.find x with
-      | some v => if !v.live then throw "O001" else pure σ
-      | none => pure σ
-  | σ, .place x steps, _ => readM σ x >>= fun σ => mSteps sigs Γ σ steps
-  | σ, .hinted _ a, need => mPlace sigs Γ σ a need
-  | σ, .proj base _, _ => mPlace sigs Γ σ base true
-  | σ, .index base k (some _), _ => do
-    let σ ← mPlace sigs Γ σ base true
-    let σ ← mE sigs Γ true σ k
-    exitM σ
-  | σ, _, _ => pure σ
+def mPlace (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (e : Expr) (need : Bool) : MoveM MSt := do
+  let start ← exprAt
+  let σ ← match e, need with
+    | .var x, need =>
+      if need then readM σ x
+      else match σ.find x with
+        | some v => if !v.live then throw "O001" else pure σ
+        | none => pure σ
+    | .place x steps, _ => readM σ x >>= fun σ => mSteps sigs Γ σ steps
+    | .hinted _ a, need => mPlace sigs Γ σ a need
+    | .proj base _, _ => mPlace sigs Γ σ base true
+    | .index base k (some _), _ => do
+      let σ ← mPlace sigs Γ σ base true
+      let σ ← mE sigs Γ true σ k
+      exitM σ
+    | _, _ => pure σ
+  exprFrom (start + e.nodes)
+  pure σ
 
 /-- A call's arguments, in order, each as its parameter takes it: one
 passed `mut` or `out` a place, not a temporary the write would be lost in
@@ -317,15 +395,45 @@ def mTarget (σ : MSt) (x : String) (steps : List Step) : Option BinOp → MoveM
       | some v => if !v.init then throw "O009" else if !v.live then throw "O001" else pure σ
       | none => pure σ
 
-/-- `set x … = e` or `set x … ⊕= e`: not to what a `for` walks (O015),
-then the value, then the keys, then the place. -/
-def mSet (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (x : String) (steps : List Step)
-    (op : Option BinOp) (e : Expr) : MoveM MSt :=
-  unwalkedM σ x >>= fun _ =>
-  mE sigs Γ op.isSome σ e >>= fun σ =>
-  mKeys sigs Γ σ steps >>= fun σ =>
-  mTarget σ x steps op >>= fun σ =>
-  (if stepsExit steps || op.any BinOp.exits then exitM σ else pure σ) >>= fun σ =>
+/-- An expression of statement `id` that the Rust's `analyze_leaving_expr`
+reads: where it can return early, what is owned once it has run is dropped
+there, and what it moved on the way, which a return before the move still
+owns, is scheduled apart. -/
+def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt := do
+  if !exprLeaves e then return ← m
+  let before ← ownedIn σ
+  let σ' ← m
+  let drops ← ownedIn σ'
+  recordNotYetMoved id (before.filter (!drops.contains ·))
+  record "before_try_return" id none drops (always := true)
+  pure σ'
+
+/-- `set x … = e` or `set x … ⊕= e` of statement `id`: not to what a `for`
+walks (O015), then the value, then the keys, then the place. A return from
+the value or a key drops what is owned once the value has run, and one from
+a failed `?` or `!` on the way to the place what is owned once the keys have
+run. -/
+def mSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : String) (steps : List Step)
+    (op : Option BinOp) (e : Expr) : MoveM MSt := do
+  unwalkedM σ x
+  let before ← ownedIn σ
+  -- The keys are filed before the value, which runs first.
+  let keys ← exprAt
+  exprFrom (keys + Expr.nodes.keyNodes steps)
+  let σ ← mE sigs Γ op.isSome σ e
+  let next ← exprAt
+  let keysLeave := steps.any fun | .index k _ => exprLeaves k | _ => false
+  if exprLeaves e || keysLeave || op.any BinOp.exits then
+    let drops ← ownedIn σ
+    recordNotYetMoved id (before.filter (!drops.contains ·))
+    record "before_try_return" id none drops (always := true)
+  exprFrom keys
+  let σ ← mKeys sigs Γ σ steps
+  exprFrom next
+  let σ ← mTarget σ x steps op
+  if stepsExit steps then
+    record "before_set_target_early_return" id none (← ownedIn σ) (always := true)
+  let σ ← if stepsExit steps || op.any BinOp.exits then exitM σ else pure σ
   pure (if steps.isEmpty then σ.give x else σ)
 
 /-- The context the then branch of `if c |x| … else |y| …` runs in, or
@@ -409,142 +517,212 @@ def loopEnd (σ σc : MSt) (natural : Bool) (body : List Stmt) (r : MOut) : Move
   if !again.all σ.keepsLive then throw "O007"
   joinAll "O014" σc ((if natural then [σc] else []) ++ r.2.1.map σc.back)
 
+/-- What a loop turns out to perhaps hold, as the Rust's `check_loop_repeats`
+finds it: a `var` moved when the loop is entered (`σc`) and given a value
+again at the body's end, where it gets there, or at a `continue`. It is held
+from then on, and joins each way out of the function scheduled in the loop
+from its first statement on. -/
+def loopHeld (σc : MSt) (body : List Stmt) (r : MOut) (first : Nat) : MoveM Unit := do
+  for v in σc do
+    if v.live || !(v.writable && !v.lent) || !v.owns then continue
+    let liveIn (τ : MSt) := ((σc.back τ).find? (·.uid == v.uid)).any (·.live)
+    if (completes body && liveIn r.1) || r.2.2.any liveIn then
+      modify fun s => { s with
+        held := if s.held.contains v.uid then s.held else v.uid :: s.held,
+        out := s.out.map fun (k, st, a, ds) =>
+          if (k == "before_return" || k == "before_try_return" || k == "before_set_target_early_return")
+            && st ≥ first && !ds.any (·.1 == v.uid) then (k, st, a, ds ++ [(v.uid, none)])
+          else (k, st, a, ds) }
+
 mutual
 
 /-- A statement, as `execStmt` runs it at fuel `n` in context `Γ`, its
-blocks at the fuel and in the contexts it runs them in. Out of fuel, the
-run stops, and nothing is asked. -/
-def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt → Stmt → MoveM MOut
-  | 0, _, σ, _ => pure (σ, [], [])
-  | n + 1, Γ, σ, s => match s with
-    | .let_ p _ e => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false, [], [])
-    | .var_ p _ (some e) => do let σ ← mE sigs Γ false σ e; pure (σ.bind (patNames p) true false true, [], [])
-    | .var_ p (some _) none => pure (σ.bind (patNames p) false false true, [], [])
+blocks at the fuel and in the contexts it runs them in, numbered as the
+Rust's `alloc_stmt_id` numbers it and scheduling what each point it leaves
+a scope by drops. `base` is how many bindings were in scope where the
+innermost loop's body began, which a `break` or `continue` leaves back to.
+Out of fuel, the run stops, and nothing is asked. -/
+def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt → Nat → Stmt → MoveM MOut
+  | 0, _, σ, _, _ => pure (σ, [], [])
+  | n + 1, Γ, σ, base, s => do
+    let id ← stmtId
+    let after := ((checkStmtF env n Γ s).run #[]).1
+    match s with
+    | .let_ p _ e =>
+      let σ ← leaving id σ e (mE sigs Γ false σ e)
+      pure (← bindM after σ (patNames p) true, [], [])
+    | .var_ p _ (some e) =>
+      let σ ← leaving id σ e (mE sigs Γ false σ e)
+      pure (← bindM after σ (patNames p) true (writable := true), [], [])
+    | .var_ p (some _) none => pure (← bindM after σ (patNames p) false (writable := true), [], [])
     | .var_ _ none none => pure (σ, [], [])
-    | .set_ x steps op e => do pure (← mSet sigs Γ σ x steps op e, [], [])
+    | .set_ x steps op e => pure (← mSet sigs Γ id σ x steps op e, [], [])
     | .fun_ _ => pure (σ, [], [])
-    | .ret e => do
+    | .ret e =>
       let σ ← exitM σ
-      match e with
-      | some e => pure (← mE sigs Γ false σ e, [], [])
-      | none => pure (σ, [], [])
+      let σ ← match e with
+        | some e => leaving id σ e (mE sigs Γ false σ e)
+        | none => pure σ
+      record "before_return" id none (← ownedIn σ) (always := true)
+      pure (σ, [], [])
     | .if_ c tB eB t e =>
-      mE sigs Γ false σ c >>= fun σc =>
-      mBlock sigs env n (condCtx env n Γ c tB false) (σc.bind tB.toList true false) t >>= fun rt =>
-      mElse sigs env n (condCtx env n Γ c eB true) (σc.bind eB.toList true false) e >>= fun re =>
-      joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes) >>= fun σ' =>
+      let σc ← leaving id σ c (mE sigs Γ false σ c)
+      let Γt := condCtx env n Γ c tB false
+      let rt ← mBlock sigs env n Γt (← bindM Γt σc tB.toList true) base t
+      record "then_branch_exit" id none (← ownedIn (scopeOwn σc rt.1))
+      let re ← match e with
+        | some eb => do
+          let Γe := condCtx env n Γ c eB true
+          let re ← mBlock sigs env n Γe (← bindM Γe σc eB.toList true) base eb
+          record "else_branch_exit" id none (← ownedIn (scopeOwn σc re.1))
+          pure re
+        | none => pure (σc, [], [])
+      let σ' ← joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes)
       pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
     | .loop c body =>
-      (match c with
-        | some c => mE sigs Γ false σ c
-        | none => pure σ) >>= fun σc =>
-      mBlock sigs env n { Γ with inLoop := true } σc body >>= fun r =>
-      loopEnd σ σc c.isSome body r >>= fun σ' =>
+      let σc ← match c with
+        | some c => leaving id σ c (mE sigs Γ false σ c)
+        | none => pure σ
+      let first := (← get).next
+      let r ← mBlock sigs env n { Γ with inLoop := true } σc σc.length body
+      loopHeld σc body r first
+      record "loop_body_end" id none (← ownedIn (scopeOwn σc r.1))
+      let σ' ← loopEnd σ σc c.isSome body r
       pure (σ', [], [])
-    | .brk => pure (σ, [σ], [])
-    | .cont => pure (σ, [], [σ])
-    | .debuglog e => do pure (← mE sigs Γ true σ e, [], [])
-    | .call e => do pure (← mE sigs Γ false σ e, [], [])
-    | .const_ x _ e => do
-      let σ ← mE sigs { Γ with constExpr := true } false σ e
-      pure (σ.bind [x] true false, [], [])
+    | .brk =>
+      record "before_break" id none (← ownedIn (List.take (σ.length - base) σ))
+      pure (σ, [σ], [])
+    | .cont =>
+      record "before_continue" id none (← ownedIn (List.take (σ.length - base) σ))
+      pure (σ, [], [σ])
+    | .debuglog e => pure (← leaving id σ e (mE sigs Γ true σ e), [], [])
+    | .call e => pure (← leaving id σ e (mE sigs Γ false σ e), [], [])
+    | .const_ x _ e =>
+      let σ ← leaving id σ e (mE sigs { Γ with constExpr := true } false σ e)
+      pure (← bindM after σ [x] true (konst := true), [], [])
     | .type_ _ _ => pure (σ, [], [])
     | .match_ e cases dflt =>
-      mE sigs Γ false σ e >>= fun σc =>
-      mCases sigs env n Γ (matchVariants env n Γ e) σc cases >>= fun r =>
-      mDflt sigs env n Γ σc dflt >>= fun d =>
-      joinMatch σc (r.1 ++ d.1) >>= fun σ' =>
+      let σc ← leaving id σ e (mE sigs Γ false σ e)
+      let r ← mCases sigs env n Γ (matchVariants env n Γ e) σc base id 0 cases
+      let d ← match dflt with
+        | some db => do
+          let rd ← mBlock sigs env n Γ σc base db
+          record "match_arm_exit" id (some cases.length) (← ownedIn (scopeOwn σc rd.1))
+          pure ([(σc.back rd.1, completes db)], rd.2.1, rd.2.2)
+        | none => pure ([], [], [])
+      let σ' ← joinMatch σc (r.1 ++ d.1)
       pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
     | .for_ names coll body =>
-      mE sigs Γ true σ coll >>= fun σc =>
+      let σc ← leaving id σ coll (mE sigs Γ true σ coll)
       -- What the walk freezes, found before the loop's names shadow it. The
       -- loop is left with what `σc` held, so no longer walked.
       let σw := match placeOf coll with
         | some (x, _) => σc.walk x
         | none => σc
-      let σb := (names.zip (forRefs env n Γ names coll)).foldl
-        (fun σ (x, r) => σ.bind [x] true true (byRef := r)) σw
-      mBlock sigs env n (forCtx env n Γ names coll) σb body >>= fun r =>
-      loopEnd σc σc true body r >>= fun σ' =>
+      let Γf := forCtx env n Γ names coll
+      let σb ← (names.zip (forRefs env n Γ names coll)).foldlM
+        (fun σ (x, r) => bindOne Γf false true true false r σ x) σw
+      let first := (← get).next
+      let r ← mBlock sigs env n Γf σb σc.length body
+      loopHeld σc body r first
+      record "loop_body_end" id none (← ownedIn (scopeOwn σc r.1))
+      let σ' ← loopEnd σc σc true body r
       pure (σ', [], [])
 
-/-- An `else`, in its own scope, or nothing, as `execElse` runs it. -/
-def mElse (sigs : List (String × Sig)) (env : InferEnv) (n : Nat) (Γ : Ctx) : MSt → Option (List Stmt) → MoveM MOut
-  | σ, some e => mBlock sigs env n Γ σ e
-  | σ, none => pure (σ, [], [])
-
-/-- A `match`'s default, as `execElse` runs it: what it leaves back in
-`σ`'s scope and whether it completes, and its `break`s and `continue`s. -/
-def mDflt (sigs : List (String × Sig)) (env : InferEnv) (n : Nat) (Γ : Ctx) : MSt → Option (List Stmt) →
-    MoveM (List (MSt × Bool) × List MSt × List MSt)
-  | σ, some d => mBlock sigs env n Γ σ d >>= fun r => pure ([(σ.back r.1, completes d)], r.2.1, r.2.2)
-  | _, none => pure ([], [], [])
-
 /-- A `match`'s cases, each from `σ`, as `execCases` runs them: each at one
-less fuel than the one before. -/
+less fuel than the one before, the `i`th scheduling what its arm drops. -/
 def mCases (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → List (String × Option Ty) → MSt →
-    List Case → MoveM (List (MSt × Bool) × List MSt × List MSt)
-  | 0, _, _, _, _ => pure ([], [], [])
-  | _ + 1, _, _, _, [] => pure ([], [], [])
-  | n + 1, Γ, vs, σ, .atom _ b :: cs =>
-    mBlock sigs env n Γ σ b >>= fun rb =>
-    mCases sigs env n Γ vs σ cs >>= fun r =>
+    Nat → Nat → Nat → List Case → MoveM (List (MSt × Bool) × List MSt × List MSt)
+  | 0, _, _, _, _, _, _, _ => pure ([], [], [])
+  | _ + 1, _, _, _, _, _, _, [] => pure ([], [], [])
+  | n + 1, Γ, vs, σ, base, id, i, .atom _ b :: cs => do
+    let rb ← mBlock sigs env n Γ σ base b
+    record "match_arm_exit" id (some i) (← ownedIn (scopeOwn σ rb.1))
+    let r ← mCases sigs env n Γ vs σ base id (i + 1) cs
     pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
-  | n + 1, Γ, vs, σ, .term a x b :: cs =>
-    mBlock sigs env n (termCtx Γ vs a x) (σ.bind [x] true false) b >>= fun rb =>
-    mCases sigs env n Γ vs σ cs >>= fun r =>
+  | n + 1, Γ, vs, σ, base, id, i, .term a x b :: cs => do
+    let Γa := termCtx Γ vs a x
+    let rb ← mBlock sigs env n Γa (← bindM Γa σ [x] true) base b
+    record "match_arm_exit" id (some i) (← ownedIn (scopeOwn σ rb.1))
+    let r ← mCases sigs env n Γ vs σ base id (i + 1) cs
     pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
 
 /-- A block's statements in order, as `execBlock` runs them: each at one
 less fuel, in the context the one before it leaves (`checkStmtF` at that
 fuel). -/
-def mBlock (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt → List Stmt → MoveM MOut
-  | 0, _, σ, _ => pure (σ, [], [])
-  | _ + 1, _, σ, [] => pure (σ, [], [])
-  | n + 1, Γ, σ, s :: ss =>
-    mStmt sigs env n Γ σ s >>= fun r1 =>
-    mBlock sigs env n ((checkStmtF env n Γ s).run #[]).1 r1.1 ss >>= fun r2 =>
+def mBlock (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt → Nat → List Stmt → MoveM MOut
+  | 0, _, σ, _, _ => pure (σ, [], [])
+  | _ + 1, _, σ, _, [] => pure (σ, [], [])
+  | n + 1, Γ, σ, base, s :: ss => do
+    let r1 ← mStmt sigs env n Γ σ base s
+    let r2 ← mBlock sigs env n ((checkStmtF env n Γ s).run #[]).1 r1.1 base ss
     pure (r2.1, r1.2.1 ++ r2.2.1, r1.2.2 ++ r2.2.2)
 
 end
 
 /-- A function's body, in the context `runCall` runs it in (`funCtx`, with
 no type arguments) at fuel `fuel`: its parameters, the last innermost, each
-given a value but an `out` one, a `ref`, `mut` or `out` one borrowed, then
-the consts it sees; its end a way out where it can complete. -/
+given a value but an `out` one, a `ref`, `mut` or `out` one borrowed, an
+`in` one owned if not copy, then the consts it sees; its end a way out
+where it can complete, which drops what the function's own scope holds
+there. -/
 def mFun (sigs : List (String × Sig)) (env : InferEnv) (aliases : Aliases) (consts : List (String × Ty × Kind))
     (cmarks : List (String × Bool)) : FunDecl → MoveM Unit
   | .mk name tps params _ body =>
     match sigs.lookup name with
     | none => pure ()
     | some sig => do
-      let σ0 : MSt := params.reverse.map (fun (m, x, _) =>
-          { name := x, init := m != .out, live := true, back := m == .out || m == .mut,
-            lent := m == .ref || m == .mut || m == .out, writable := m == .mut || m == .out,
-            byRef := m == .ref }) ++
-        cmarks.map fun (x, s) =>
-          { name := x, init := s, live := true, back := false, lent := false, writable := false,
-            byRef := false }
-      let (σ, _, _) ← mBlock sigs env fuel (funCtx sigs aliases consts tps params sig) σ0 body
+      let Γ := funCtx sigs aliases consts tps params sig
+      let consts : MSt := cmarks.map fun (x, s) =>
+        { name := x, init := s, live := true, back := false, lent := false, writable := false, byRef := false }
+      let σ0 ← params.foldlM (fun σ (m, x, _) => do
+          let σ ← bindOne Γ false (m != .out) (m == .ref || m == .mut || m == .out) (m == .mut || m == .out)
+            (m == .ref) σ x
+          pure (match σ with
+            | v :: rest => { v with back := m == .out || m == .mut } :: rest
+            | [] => [])) consts
+      let (σ, _, _) ← mBlock sigs env fuel Γ σ0 0 body
       if completes body then discard (exitM σ)
+      record "at_function_exit" 0 none (← ownedIn (scopeOwn consts σ))
 
 /-- A script's statements, as `runScriptMoves` runs them: each at fuel
 `fuel`, the context threaded by `checkStmt`, and each function's body as a
-call runs it. -/
+call runs it, with a schedule of its own. -/
 def mTop (sigs : List (String × Sig)) (env : InferEnv) : Ctx → MSt → List Stmt → MoveM Unit
   | _, _, [] => pure ()
-  | Γ, σ, .fun_ f :: ss =>
-    mFun sigs env Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f >>= fun _ =>
-      mTop sigs env Γ σ ss
-  | Γ, σ, s :: ss =>
-    mStmt sigs env fuel Γ σ s >>= fun r => mTop sigs env ((checkStmt Γ s).run #[]).1 r.1 ss
+  | Γ, σ, .fun_ f :: ss => do
+    StateT.lift ((mFun sigs env Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f).run' {})
+    mTop sigs env Γ σ ss
+  | Γ, σ, s :: ss => do
+    let r ← mStmt sigs env fuel Γ σ 0 s
+    mTop sigs env ((checkStmt Γ s).run #[]).1 r.1 ss
 
 /-- What a script's move analysis refuses first, if anything, following
 the run that moves (`runScriptMoves`). -/
 def moveScript (ss : List Stmt) : Option Lit.Code :=
   let sigs := (resolveNames ss).1
-  match mTop sigs movesEnv { ret := .ty (.result unitTy), sigs } [] ss with
+  match (mTop sigs movesEnv { ret := .ty (.result unitTy), sigs } [] ss).run' {} with
   | .ok _ => none
   | .error c => some c
+
+/-- A script's top-level functions' drop schedules, by name, each as
+`mTop` reaches the function: in the context the statements before it leave.
+None for a function the move analysis refuses. -/
+def scriptDrops (ss : List Stmt) : List (String × Option (List DropPoint)) :=
+  let sigs := (resolveNames ss).1
+  let rec go (Γ : Ctx) : List Stmt → List (String × Option (List DropPoint))
+    | [] => []
+    | .fun_ f :: rest =>
+      let name := match f with | .mk n .. => n
+      let r := (mFun sigs movesEnv Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f).run {}
+      let points := match r with
+        | .ok (_, s) => some (s.out.reverse.map fun (k, st, a, ds) =>
+            (k, st, a, ds.map fun
+              | (u, some e) => s!"{(s.names.lookup u).getD "?"}@{e}"
+              | (u, none) => (s.names.lookup u).getD "?"))
+        | .error _ => none
+      (name, points) :: go Γ rest
+    | s :: rest => go ((checkStmt Γ s).run #[]).1 rest
+  go { ret := .ty (.result unitTy), sigs } ss
 
 end Datalove.Fun

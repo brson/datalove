@@ -847,46 +847,52 @@ Four things are proved of it:
   as the checker has it, read empty; the review that found it, run on the
   model by hand, is why the run is now held to the analysis directly.
 - **What is dropped where is modelled and held to the Rust, but not
-  proved** (`FunDrop.lean`). The ownership analysis decides, for each point
-  a function leaves a scope by, which bindings still own a value there
-  (`DropSchedule`), and lowering only carries that out, so the schedule is
-  where a drop is decided right or wrong. The model follows a body as the
-  move analysis does (`dStmt`, over `mE`, `mSet`'s parts, `joinIf`,
-  `joinMatch` and `loopEnd`), numbering its statements as the Rust's
-  `alloc_stmt_id` does, every one in order, each before what it holds,
-  dead ones too, and gives each binding an identity of its own, as a
-  `BindingId` is. What is dropped is what is owned -- not copy, not
-  borrowed, not a const -- and live, or perhaps holding a value: a `var`
-  moved before a loop that the loop gives a value again holds one from
-  then on, and joins every way out of the function scheduled in the loop,
-  as the Rust's `maybe_held` does. A branch's, an arm's or a loop body's
-  end drops what its own scope made, even where the scope never reaches
-  its end; a `break` or `continue` what the scopes back to the loop made;
-  a `ret`, and the body's end, what the function holds; a `?` what is held
-  once its statement's expression has run, with what that expression
-  moved on the way listed apart, for a return before the move; and a
-  `set` through `?` or `!` what is held once its keys have run.
+  proved** (`FunMove.lean`, `FunDrop.lean`). The ownership analysis decides,
+  for each point a function leaves a scope by, which bindings still own a
+  value there (`DropSchedule`), and lowering only carries that out, so the
+  schedule is where a drop is decided right or wrong. The move analysis
+  keeps it as it goes, as the Rust's does, in the state its walk threads
+  (`DSt`): it numbers the statements as the Rust's `alloc_stmt_id` does,
+  every one in order, each before what it holds, dead ones too
+  (`stmtKinds`, in `FunDrop.lean`, says what that numbering is), and gives
+  each binding an identity of its own, as a `BindingId` is. What is dropped
+  is what is owned -- not copy, not borrowed, not a const -- and live, or
+  perhaps holding a value: a `var` moved before a loop that the loop gives a
+  value again holds one from then on, and joins every way out of the
+  function scheduled in the loop, as the Rust's `maybe_held` does. A
+  branch's, an arm's or a loop body's end drops what its own scope made,
+  even where the scope never reaches its end; a `break` or `continue` what
+  the scopes back to the loop made; a `ret`, and the body's end, what the
+  function holds; a `?` what is held once its statement's expression has
+  run, with what that expression moved on the way listed apart, for a
+  return before the move, each with the expression that moved it; and a
+  `set` through `?` or `!` what is held once its keys have run. An
+  expression is named as the Rust names it, by its index in its function's
+  expression arena, which the walk keeps as the parser fills it: each
+  expression after its parts, a place its root and one for each step after
+  its keys, and an index under `?` or `!` two (`Expr.nodes`).
   `datalove script-drops` writes a script's schedules, the statements in
   the order they were numbered too in a debug build, and `drops_agree` in
   `fun_tests` holds the two to each other on `moves_agree`'s scripts the
   Rust accepts: the numbering first, then every point, its names sorted,
-  since the Rust lists them in the order of a map, and without the
-  expression a binding not yet moved is moved at, which the model does not
-  number. Over ten thousand seeds, eighty-four thousand points, none differ.
-  Counting a copy or a borrowed binding as owned makes five hundred
-  functions of a hundred seeds differ, never holding what a loop gives a
-  value two of a thousand, dropping at a `?` what was held before its
-  expression four of the corpus, and no point for a `set`'s place three.
-  The model found that a `?` in a `debuglog` scheduled nothing: a failed
-  one returned without dropping what the function owned, which leaked on
-  every engine; it is `analyze_leaving_expr`'s now, as every other
-  statement's expression is (backend fixture
-  `1047_a_question_mark_in_debuglog_drops_what_is_owned`), and the move
-  generator writes a `?` in a `debuglog`, and after a value given to the
-  same call, which with the fix undone fails 67 of the ownership fuzz
-  test's 2000 seeds. The walk copies the move analysis's statement layer,
-  calling its parts, rather than the move analysis keeping a schedule:
-  `MVar` carries the two fields only it sets (`owns`, `uid`).
+  since the Rust lists them in the order of a map. Over ten thousand seeds,
+  eighty-four thousand points, a hundred and thirty-seven of them naming
+  where a binding is moved, none differ. Counting a copy or a borrowed
+  binding as owned makes five hundred functions of a hundred seeds differ,
+  never holding what a loop gives a value two of a thousand, dropping at a
+  `?` what was held before its expression four of the corpus, and no point
+  for a `set`'s place three; naming each move one expression late makes 23
+  functions of a thousand seeds differ, and a struct literal filing no
+  expression of its own 17. The model found that a `?` in a `debuglog`
+  scheduled nothing: a failed one returned without dropping what the
+  function owned, which leaked on every engine; it is
+  `analyze_leaving_expr`'s now, as every other statement's expression is
+  (backend fixture `1047_a_question_mark_in_debuglog_drops_what_is_owned`),
+  and the move generator writes a `?` in a `debuglog`, and after a value
+  given to the same call, which with the fix undone fails 67 of the
+  ownership fuzz test's 2000 seeds. A place a hint was folded into,
+  `(: T / p).a`, the model takes as steps on what is hinted, each an
+  expression, where the parser files one place; no generator writes one.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every

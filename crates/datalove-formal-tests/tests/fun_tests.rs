@@ -2380,25 +2380,26 @@ const DROP_KINDS: &[&str] = &[
 ];
 
 /// A line of a drop schedule as `datalove script-drops` writes it, its names
-/// sorted, since the analysis lists them in the order of a map, and without
-/// the expression a binding not yet moved is moved at, which the model does
-/// not number; or none if it is of a kind `drops_agree` does not compare.
+/// sorted, since the analysis lists them in the order of a map, a binding not
+/// yet moved with the index of the expression that moves it (`name@index`);
+/// or none if it is of a kind `drops_agree` does not compare.
 fn drop_line(line: &str) -> Option<String> {
     let (point, names) = line.split_once(':').X();
     let kind = point.split_whitespace().next().X();
     if !DROP_KINDS.contains(&kind) {
         return None;
     }
-    let mut names: Vec<&str> = names.split_whitespace().map(|n| n.split('@').next().X()).collect();
+    let mut names: Vec<&str> = names.split_whitespace().collect();
     names.sort();
     Some(fmt!("{point}: {}", names.join(" ")))
 }
 
-/// The model's drop schedule (`formal/Datalove/FunDrop.lean`) held to the
+/// The model's drop schedule (`formal/Datalove/FunMove.lean`) held to the
 /// Rust's ownership analysis, on the scripts `moves_agree` asks about that
 /// the Rust accepts: the two number each function's statements alike, which
 /// every point the schedule names is keyed by, and schedule the same drops
-/// at the same points.
+/// at the same points, naming a binding a return may come before the move of
+/// by the same expression.
 #[test]
 fn drops_agree() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -2427,6 +2428,7 @@ fn drops_agree() {
     let mut mismatches = Vec::new();
     let mut functions = 0;
     let mut points = 0;
+    let mut moved_at = 0;
     for ((what, text, _, rust), oracle) in cases.iter().zip(&answers) {
         assert!(oracle.get("unsupported").is_none(), "the model does not take:\n{text}\n{oracle}");
         for f in oracle["funs"].as_array().X() {
@@ -2455,6 +2457,7 @@ fn drops_agree() {
                 })
                 .collect();
             points += rust_lines.len();
+            moved_at += rust_lines.iter().filter(|l| l.starts_with("try_return_not_yet_moved")).count();
             if model_lines != rust_lines {
                 let only_rust: Vec<_> = rust_lines.difference(&model_lines).collect();
                 let only_model: Vec<_> = model_lines.difference(&rust_lines).collect();
@@ -2463,7 +2466,7 @@ fn drops_agree() {
         }
     }
     println!(
-        "{} scripts, {functions} functions, {points} points, over seeds {}..{}: {} differ; {refused} refused",
+        "{} scripts, {functions} functions, {points} points ({moved_at} naming where a binding is moved), over seeds {}..{}: {} differ; {refused} refused",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(5) {
