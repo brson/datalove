@@ -71,14 +71,16 @@ impl<'db> Iterator for Lines<'db> {
 
     fn next(&mut self) -> Option<Cursor<'db>> {
         loop {
-            let Some(index) = self.rest.next_index() else {
+            let Some((_, broke)) = self.rest.next_index_after_break() else {
                 let line = self.rest.between(self.start, self.rest.end());
                 self.start = self.rest.end();
                 return (!line.is_empty()).then_some(line);
             };
-            if self.rest.raw(index).newline_before {
-                let line = self.rest.between(self.start, index);
-                self.start = index;
+            // A line begins at its break, which a stray close passed over
+            // may carry for the token after it.
+            if let Some(at) = broke {
+                let line = self.rest.between(self.start, at);
+                self.start = at;
                 if !line.is_empty() {
                     return Some(line);
                 }

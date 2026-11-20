@@ -25,6 +25,16 @@ pub struct Bracer<'db> {
 const HIDDEN: u32 = u32::MAX;
 /// A token its level hands out as it is.
 const PLAIN: u32 = u32::MAX - 1;
+/// Set on an open bracket's entry where it was never closed: it ran to the
+/// end, or was cut off by the close of a bracket around it. Its contents can
+/// still end with a close of its kind, a bracket's inside it, so the last
+/// token cannot say.
+const UNCLOSED: u32 = 1 << 31;
+
+/// Where the level around an open bracket resumes, from its entry.
+fn resume_of(entry: u32) -> u32 {
+    entry & !UNCLOSED
+}
 
 impl<'db> Bracer<'db> {
     /// Where the level around token `index` resumes, if the token opens a
@@ -32,7 +42,7 @@ impl<'db> Bracer<'db> {
     pub fn resume(&self, db: &'db dyn crate::Db, index: usize) -> Option<usize> {
         match self.layout(db)[index] {
             HIDDEN | PLAIN => None,
-            resume => Some(resume as usize),
+            entry => Some(resume_of(entry) as usize),
         }
     }
 
@@ -93,9 +103,38 @@ impl<'db> Cursor<'db> {
                     self.pos = index + 1;
                     return Some(index);
                 }
-                resume => {
-                    self.pos = resume;
+                entry => {
+                    self.pos = resume_of(entry);
                     return Some(index);
+                }
+            }
+        }
+        None
+    }
+
+    /// The index of the next token handed out, the cursor moved past it, and
+    /// the index of the first token on the way to it that had a line break
+    /// before it, if one did.
+    ///
+    /// The tokens a level passes over to reach the next are stray closes,
+    /// whose break, the line one stood at the start of, would otherwise be
+    /// lost: a close matched is passed over with its bracket.
+    pub fn next_index_after_break(&mut self) -> Option<(u32, Option<u32>)> {
+        let mut broke = None;
+        while self.pos < self.end {
+            let index = self.pos;
+            if broke.is_none() && self.tokens[index as usize].newline_before {
+                broke = Some(index);
+            }
+            match self.layout[index as usize] {
+                HIDDEN => self.pos = index + 1,
+                PLAIN => {
+                    self.pos = index + 1;
+                    return Some((index, broke));
+                }
+                entry => {
+                    self.pos = resume_of(entry);
+                    return Some((index, broke));
                 }
             }
         }
@@ -108,16 +147,14 @@ impl<'db> Cursor<'db> {
         match self.layout[index as usize] {
             PLAIN => TreeToken::Token(token.C()),
             HIDDEN => bug!(),
-            resume => {
+            entry => {
                 let TokenKind::Sigil(sigil) = token.kind else { bug!() };
                 // The contents run to `resume`, the close included where
-                // there is one, so the last token says whether there is.
+                // there is one.
+                let resume = resume_of(entry);
                 let last = &self.tokens[resume as usize - 1];
-                let (close, end_byte) = if last.kind == TokenKind::Sigil(sigil.close_sigil()) {
-                    (Some(last.C()), last.span().end)
-                } else {
-                    (None, last.span().end)
-                };
+                let close = (entry & UNCLOSED == 0).then(|| last.C());
+                let end_byte = last.span().end;
                 TreeToken::Branch {
                     sigil,
                     open: token.C(),
@@ -250,13 +287,13 @@ pub fn bracer<'db>(
             }
             // Cut off by the close of a bracket around it.
             open.errors.push((open.index..index, open.sigil));
-            layout[open.index] = u32::try_from(index).X();
+            layout[open.index] = u32::try_from(index).X() | UNCLOSED;
             around(&mut stack, &mut top_errors).append(&mut open.errors);
         }
     }
 
     while let Some(mut open) = stack.pop() {
-        layout[open.index] = u32::try_from(count).X();
+        layout[open.index] = u32::try_from(count).X() | UNCLOSED;
         let errors = around(&mut stack, &mut top_errors);
         errors.push((open.index..count, open.sigil));
         errors.append(&mut open.errors);
