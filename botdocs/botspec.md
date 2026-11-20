@@ -2332,7 +2332,6 @@ from Datafun through literals and data files.
 | Code | Name | Description |
 |------|------|-------------|
 | O001 | UseAfterMove | Using a value after it was moved |
-| O002 | DoubleMove | Moving a value twice |
 | O003 | CannotMoveBorrowed | Moving a `ref`/`mut`/`out` parameter |
 | O004 | CannotMutFromRef | Passing `ref` where `mut` required |
 | O005 | ReadUninitialized | Reading before initialization |

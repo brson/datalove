@@ -600,16 +600,6 @@ pub enum AnalysisError<'db> {
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
-    /// Moving a value multiple times.
-    /// O002 - Recoverable with @ (clone before second move)
-    DoubleMove {
-        /// Location of the second move (where error is detected).
-        expr_key: ExprKey<'db>,
-        /// Location of the first move (where @ should be inserted).
-        moved_at: ExprKey<'db>,
-        name: String,
-        recovery_hint: OwnershipRecoveryHint,
-    },
     /// Attempting to move a borrowed value (ref/mut/out parameter).
     /// O003
     CannotMoveBorrowed {
@@ -763,7 +753,6 @@ impl AnalysisError<'_> {
         match self {
             AnalysisError::UseAfterMoveInEarlierUnit { .. } => OCode::UseAfterMoveInEarlierUnit,
             AnalysisError::UseAfterMove { .. } => OCode::UseAfterMove,
-            AnalysisError::DoubleMove { .. } => OCode::DoubleMove,
             AnalysisError::CannotMoveBorrowed { .. } => OCode::CannotMoveBorrowed,
             AnalysisError::CannotMoveConst { .. } => OCode::CannotMoveConst,
             AnalysisError::CannotMutFromRef { .. } => OCode::CannotMutFromRef,
@@ -813,10 +802,6 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::UseAfterMove { expr_key: _, moved_at: _, name, recovery_hint } => {
             let base = format!("error[{code}]: use of moved value: `{}`", name);
-            format_with_hint(base, recovery_hint)
-        }
-        AnalysisError::DoubleMove { expr_key: _, moved_at: _, name, recovery_hint } => {
-            let base = format!("error[{code}]: value moved twice: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::CannotMoveBorrowed { expr_key: _, name } => {

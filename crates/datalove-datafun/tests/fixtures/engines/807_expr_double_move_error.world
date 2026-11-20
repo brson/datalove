@@ -4,6 +4,6 @@ scriptunit-fragment
 
 // Error test: double move in expression within the same fragment.
 // The tuple construction (x, x) tries to move x twice.
-// This should produce a DoubleMove error.
+// The second reads what the first moved, which is a use after move (O001).
 let x: int = :int/42
 let y = (x, x)

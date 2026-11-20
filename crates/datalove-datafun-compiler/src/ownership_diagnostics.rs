@@ -101,28 +101,6 @@ pub fn ownership_diagnostic<'db>(
             }
             builder
         }
-        AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint } => {
-            let (text, span) = error_span(spans, *expr_key);
-            let mut builder = DiagnosticBuilder::error(db, &fmt!("value moved twice: `{name}`"))
-                .code(code)
-                .primary_label(TextSpan::new(text, span.C()), "second move here");
-
-            let move_span = match moved_at == expr_key {
-                true => None,
-                false => expr_span(spans, *moved_at).map(|(_, span)| span),
-            };
-            if let Some(move_span) = &move_span {
-                builder = builder
-                    .secondary_label(TextSpan::new(text, move_span.C()), "first move here");
-            }
-
-            let source = text.as_str(db);
-            let suggestion_span = move_span.unwrap_or(span);
-            if let Some(help) = adapt_help(recovery_hint, source, &suggestion_span, name) {
-                builder = builder.help(&help);
-            }
-            builder
-        }
         AnalysisError::CannotMoveBorrowed { expr_key, name } => {
             let (text, span) = error_span(spans, *expr_key);
             DiagnosticBuilder::error(db, &fmt!("cannot move borrowed value: `{name}`"))

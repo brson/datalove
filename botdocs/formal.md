@@ -806,9 +806,8 @@ Four things are proved of it:
   `for` binds but an index), and a `let`, an `in` parameter, a const or what
   a condition or `match` binds O011, checked after O015, and before both,
   what is not a place at all, a temporary the write would be lost in, is
-  O012 (a hinted place is a place, to both). O002, a second move, the Rust
-  never reports: its one way in reads the value first, which is O001, and
-  the branch is an assertion now. The corpus found
+  O012 (a hinted place is a place, to both). O002, a second move, is
+  retired: the Rust's one way to it read the value first, which is O001. The corpus found
   that the Rust let a const declared outside a function through as a `mut`
   argument in its body, which then changed the const on every engine (the
   pass knew it only as a name); it is O011 now (backend fixture

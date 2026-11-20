@@ -1519,7 +1519,6 @@ gives each its `OCode`.
 | Code | Variant | Trigger |
 |------|---------|---------|
 | O001 | `UseAfterMove` | Using value after move |
-| O002 | `DoubleMove` | Moving value twice: never reported, since the second move reads a moved value, which is O001 first |
 | O003 | `CannotMoveBorrowed` | Moving `ref`/`mut`/`out` param |
 | O004 | `CannotMutFromRef` | Passing `ref` to `mut` param |
 | O005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
@@ -1536,7 +1535,11 @@ gives each its `OCode`.
 | O016 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
 | O017 | `HeldByEarlierOperand` | Taking `mut`, `out` or moving what an earlier operand reads by reference |
 
-O001, O002, O007 and O013 carry an `OwnershipRecoveryHint` suggesting an `@`,
+O002, `DoubleMove`, a value moved twice, is retired: the analysis checks
+a read of a moved value (O001) before it takes one, so a second move was
+never reached.
+
+O001, O007 and O013 carry an `OwnershipRecoveryHint` suggesting an `@`,
 as O016 does for a move out of a const. The parse codes are datalit's D-codes
 and datafun's P-codes; see
 [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).

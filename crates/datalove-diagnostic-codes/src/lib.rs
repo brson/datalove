@@ -112,8 +112,6 @@ codes! {
     pub enum OCode = b'O' {
         /// Using a value after it was moved.
         UseAfterMove = 1,
-        /// Moving a value twice.
-        DoubleMove = 2,
         /// Moving a `ref`, `mut` or `out` parameter.
         CannotMoveBorrowed = 3,
         /// Passing `ref` where `mut` is required.
@@ -149,7 +147,7 @@ codes! {
         /// operand of the expression still reads it through a reference.
         HeldByEarlierOperand = 17,
     }
-    retired = [];
+    retired = [2];
 }
 
 codes! {

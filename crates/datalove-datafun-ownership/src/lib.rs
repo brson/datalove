@@ -22,8 +22,6 @@
 //! # Errors detected
 //!
 //! - O001 UseAfterMove: using a value after ownership was transferred
-//! - O002 DoubleMove: transferring ownership twice, never reported: the second
-//!   move reads what was moved, which is O001 first
 //! - O003 CannotMoveBorrowed: attempting to move a ref/mut/out parameter
 //! - O004 CannotMutFromRef: passing immutable ref where mutable is required
 //! - O005 ReadUninitialized: reading binding before initialization
