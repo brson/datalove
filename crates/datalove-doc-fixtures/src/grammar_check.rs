@@ -278,64 +278,85 @@ pub fn mutate_at(text: &str, rng: &mut SeededRng) -> Mutation {
     Mutation { text: cs.into_iter().collect(), at, touched }
 }
 
-/// One claim a document makes about an example.
+/// The fence that opens a block of examples; the word after it is what each
+/// input is parsed as.
+pub const EXAMPLES_FENCE: &str = "```examples ";
+
+/// One example in a document's `examples` blocks.
 #[derive(Debug)]
-pub enum Claim {
-    /// The parser refuses it with this code.
-    Refused(String),
-    /// It parses, perhaps to be refused later by the type checker.
-    Parses,
+pub struct Example {
+    /// What the input is parsed as, from the block's fence.
+    pub context: String,
+    /// The codes the parser refuses the input with, in the order of the
+    /// source; none for `ok`.
+    pub codes: Vec<String>,
+    pub text: String,
+    /// The document's line the example begins on, from 1.
+    pub line: usize,
 }
 
-/// The examples in a document's prose: "`x` is D020", "`x` and `y` are
-/// D020", "`x` and `y` parse" and "`x` is T032", which parses.
-pub fn claims(doc: &str) -> Vec<(String, Claim)> {
-    let prose: String = {
-        let mut out = String::new();
-        let mut fenced = false;
-        for line in doc.lines() {
-            if line.starts_with("```") {
-                fenced = !fenced;
-            } else if !fenced {
-                out.push_str(line);
-                out.push(' ');
+/// The examples in a document's `examples` blocks.
+///
+/// Each example begins on a line of its own with `ok` or its codes, joined
+/// by commas, then spaces and the input. The column the input begins at is
+/// its margin: lines after it that begin with a space continue it, with the
+/// margin removed. A blank line or the end of the block ends it.
+pub fn examples(doc: &str, name: &str) -> Vec<Example> {
+    let mut out: Vec<Example> = vec![];
+    let mut context: Option<String> = None;
+    // The margin of the example a line beginning with a space continues.
+    let mut open: Option<usize> = None;
+    for (i, line) in doc.lines().enumerate() {
+        let at = || fmt!("{name}:{}", i + 1);
+        let Some(ctx) = &context else {
+            if let Some(c) = line.strip_prefix(EXAMPLES_FENCE) {
+                context = Some(c.trim().S());
             }
-        }
-        out.split_whitespace().collect::<Vec<_>>().join(" ")
-    };
-    let mut spans: Vec<(usize, usize)> = vec![];
-    let mut rest = 0;
-    while let Some(open) = prose[rest..].find('`') {
-        let open = rest + open;
-        let Some(close) = prose[open + 1..].find('`') else { break };
-        let close = open + 1 + close;
-        spans.push((open, close + 1));
-        rest = close + 1;
-    }
-    let code = |s: &str| s.split(|c: char| !c.is_ascii_alphanumeric()).next().filter(|w| is_code(w)).map(|w| w.S());
-    let mut out = vec![];
-    let mut group: Vec<String> = vec![];
-    for (k, &(start, end)) in spans.iter().enumerate() {
-        let joined_before = k > 0 && [", ", " and ", ", and "].contains(&&prose[spans[k - 1].1..start]);
-        if !joined_before {
-            group.clear();
-        }
-        let text = prose[start + 1..end - 1].S();
-        group.push(text.C());
-        let after = &prose[end..];
-        if let Some(c) = after.strip_prefix(" is ").and_then(code) {
-            out.push((text, claim_of(c)));
-        } else if let Some(c) = after.strip_prefix(" are ").and_then(code) {
-            out.extend(group.iter().map(|t| (t.C(), claim_of(c.C()))));
-        } else if [" parse", " parses"].iter().any(|p| {
-            after.strip_prefix(p).is_some_and(|r| r.is_empty() || r.starts_with(['.', ',', ';', ':', ')']))
-        }) {
-            out.extend(group.iter().map(|t| (t.C(), Claim::Parses)));
+            continue;
+        };
+        if line.starts_with("```") {
+            context = None;
+            open = None;
+        } else if line.trim().is_empty() {
+            open = None;
+        } else if line.starts_with(' ') {
+            let margin = open.unwrap_or_else(|| panic!("{}: a continued line with no example to continue", at()));
+            let (pad, rest) = line.split_at(margin.min(line.len()));
+            assert!(pad.trim().is_empty() && !rest.is_empty(), "{}: a continued line not indented to its margin", at());
+            let ex = out.last_mut().X();
+            ex.text.push('\n');
+            ex.text.push_str(rest);
+        } else {
+            let (codes, rest) = line.split_once(' ').unwrap_or_else(|| panic!("{}: an example with no input", at()));
+            let input = rest.trim_start();
+            let codes: Vec<String> = match codes {
+                "ok" => vec![],
+                codes => codes.split(',').map(|c| c.S()).collect(),
+            };
+            assert!(codes.iter().all(|c| is_code(c)), "{}: `{}` is not `ok` or codes", at(), line);
+            open = Some(line.len() - input.len());
+            out.push(Example { context: ctx.C(), codes, text: input.S(), line: i + 1 });
         }
     }
+    assert!(context.is_none(), "{name}: an examples block is not closed");
     out
 }
 
-fn claim_of(code: String) -> Claim {
-    if code.starts_with('T') { Claim::Parses } else { Claim::Refused(code) }
+/// The codes of `diags` in the order of the source, by their primary spans.
+pub fn codes_in_order(mut diags: Vec<Diag>) -> Vec<String> {
+    diags.sort_by_key(|d| d.primary.as_ref().map(|p| (p.start, p.end)));
+    diags.into_iter().map(|d| d.code).collect()
+}
+
+/// Where an example and the parser disagree, as a line of a report.
+pub fn example_wrong(name: &str, ex: &Example, found: Result<Vec<Diag>, String>) -> Option<String> {
+    let said = if ex.codes.is_empty() { "ok".S() } else { ex.codes.join(",") };
+    match found {
+        Ok(ds) => {
+            let codes = codes_in_order(ds);
+            let found = if codes.is_empty() { "ok".S() } else { codes.join(",") };
+            (codes != ex.codes).then(|| fmt!("{name}:{}: {:?} is {said}, the parser says {found}", ex.line, ex.text))
+        }
+        Err(msg) => Some(fmt!("{name}:{}: {:?} panics the parser: {msg}", ex.line, ex.text)),
+    }
 }

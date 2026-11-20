@@ -7,7 +7,8 @@
 //! - what the grammar derives, the parser must accept, or refuse only with
 //!   the codes the document lists as refused outside the grammar.
 //!
-//! The inputs are the document's own examples, every `.dlt` file under
+//! The inputs are the document's `examples` blocks, each of which must also
+//! get exactly the codes the block gives it, every `.dlt` file under
 //! `crates/`, strings generated from the grammar, and all of those mutated a
 //! character at a time. A disagreement is shrunk to the shortest input that
 //! still disagrees the same way.
@@ -18,9 +19,9 @@
 use rmx::prelude::*;
 
 use bct::random::{SeededRng, env_seeds, seed_of};
-use datalove_doc_fixtures::datalit_grammar::{DOC, doc_text, grammar, parse_codes, repair, sample, term};
+use datalove_doc_fixtures::datalit_grammar::{DOC, doc_text, grammar, parse_codes, parse_diags, repair, sample, term};
 use datalove_doc_fixtures::ebnf::{Generator, Recognizer, join_chars};
-use datalove_doc_fixtures::grammar_check::{Claim, Findings, Judge, claims, files, mutate, outside_codes, workspace_dir};
+use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, files, mutate, outside_codes, workspace_dir};
 
 fn recognizer() -> Recognizer<[char]> {
     Recognizer::new(&grammar(), "datalit", &term)
@@ -33,23 +34,18 @@ fn derives(rec: &Recognizer<[char]>, text: &str) -> bool {
 
 #[test]
 fn doc_examples() {
-    let claims = claims(&doc_text());
-    assert!(claims.len() > 10, "found only {} claims in {DOC}", claims.len());
+    let doc = doc_text();
+    let examples = examples(&doc, DOC);
+    assert!(examples.len() > 20, "found only {} examples in {DOC}", examples.len());
     let rec = recognizer();
-    let outside = outside_codes(&doc_text(), DOC);
+    let outside = outside_codes(&doc, DOC);
     let judge = Judge { derives: &|t| derives(&rec, t), parse: &parse_codes, outside: &outside };
     let mut findings = Findings::default();
     let mut wrong = vec![];
-    for (text, claim) in &claims {
-        let codes = parse_codes(text).unwrap_or_else(|msg| vec![fmt!("panic: {msg}")]);
-        let holds = match claim {
-            Claim::Refused(c) => codes.contains(c),
-            Claim::Parses => codes.is_empty(),
-        };
-        if !holds {
-            wrong.push(fmt!("`{text}`: the document says {claim:?}, the parser says {codes:?}"));
-        }
-        findings.check(&judge, "datalit", text);
+    for ex in &examples {
+        assert_eq!(ex.context, "datalit", "{DOC}:{}: datalit examples are all `datalit`", ex.line);
+        wrong.extend(example_wrong(DOC, ex, parse_diags(&ex.text)));
+        findings.check(&judge, "datalit", &ex.text);
     }
     assert!(wrong.is_empty(), "{DOC} is wrong about:\n{}", wrong.join("\n"));
     findings.finish("the document's examples");

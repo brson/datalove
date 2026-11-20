@@ -14,18 +14,18 @@
 //! time. A string is generated from each seed of `DATALOVE_DF_GRAMMAR_SEED`
 //! and `DATALOVE_DF_GRAMMAR_COUNT` (see `bct::random::env_seeds`).
 //!
-//! The document's prose examples are not checked here, as datalit's are:
-//! most are fragments of a statement, not whole scripts.
+//! The document's `examples` blocks are inputs too, each of which must also
+//! get exactly the codes the block gives it.
 
 use rmx::prelude::*;
 use std::collections::BTreeSet;
 
 use bct::random::{SeededRng, env_seeds, seed_of};
 use datalove_doc_fixtures::datafun_grammar::{
-    DOC, Recognizers, Start, corpus, doc_text, grammars, join_tokens, parse_codes, sample,
+    DOC, Recognizers, Start, corpus, doc_text, grammars, join_tokens, parse_codes, parse_diags, sample,
 };
 use datalove_doc_fixtures::ebnf::Generator;
-use datalove_doc_fixtures::grammar_check::{Findings, Judge, mutate, outside_codes};
+use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, mutate, outside_codes};
 
 struct Checker {
     recs: Recognizers,
@@ -52,6 +52,28 @@ impl Checker {
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[test]
+fn doc_examples() {
+    let gs = grammars();
+    let checker = Checker::new(&gs);
+    let examples = examples(&doc_text(), DOC);
+    assert!(examples.len() > 20, "found only {} examples in {DOC}", examples.len());
+    let mut findings = Findings::default();
+    let mut wrong = vec![];
+    for ex in &examples {
+        let start = match ex.context.as_str() {
+            "script" => Start::Script,
+            "module" => Start::Module,
+            "interface" => Start::Interface,
+            other => panic!("{DOC}:{}: `{other}` is not script, module or interface", ex.line),
+        };
+        wrong.extend(example_wrong(DOC, ex, parse_diags(start, &ex.text)));
+        checker.check(&mut findings, start, &ex.text);
+    }
+    assert!(wrong.is_empty(), "{DOC} is wrong about:\n{}", wrong.join("\n"));
+    findings.finish("the document's examples");
+}
 
 #[test]
 fn corpus_agrees() {

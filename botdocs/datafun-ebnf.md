@@ -248,8 +248,8 @@ derive, and everything it accepts, the grammar does. A test checks this (see
   P081 and then P001, while the same split inside `(1 +` ... `2)` is one
   statement. A `;` is a line break, so a run of them is blank lines.
 - `end`, `else` and `case` are recognised only at the start of a line. An
-  `end fun` inside an open `if` is P001 for that line and then P034 for both
-  blocks.
+  `end fun` inside an open `if` closes both, and the `if`, which lost its
+  `end`, is P034 (see [Recovery](#user-content-recovery)).
 - `inline` is only the whole first line of a function body.
 - `require`, `import`, `fun`, `native fun` and `type` are declarations, read
   only at the top level. Inside a block each is P074, though it is still parsed
@@ -261,6 +261,35 @@ derive, and everything it accepts, the grammar does. A test checks this (see
   parsed by its own query, `parse_rider_interface`, and checked by
   `check_rider_interface` in `datalove-datafun-compiler`, whose accumulated
   diagnostics are the interface's.
+
+```examples script
+P081,P001  let y = 1 +
+           2
+ok         let y = (1 +
+             2)
+ok         let y = 1;;; let z = 2
+P034       fun f()
+             if a
+             end fun
+P074       if a
+             fun g()
+             end fun
+           end if
+P076       fun f()
+             let y = 1
+             inline
+           end fun
+```
+
+```examples module
+ok         const x = 1
+P077       let x = 1
+```
+
+```examples interface
+ok         native fun f(x: u8): u8
+P084       const x = 1
+```
 
 **Spacing.** The glue test decides fixity
 ([spec Section 2.4](botspec.md#user-content-24-spacing)):
@@ -282,6 +311,24 @@ derive, and everything it accepts, the grammar does. A test checks this (see
 - In a tensor row, elements are separated by this rule alone:
   `[| 1 -2 |]` has two elements and `[| a + b c |]` two.
 
+```examples script
+P091       let y = a -b
+P091       let y = a- b
+ok         let y = a and-b
+P090       let y = p . 0
+P090       let y = x ?
+P090       let y = f (1)
+P090       let y = u8 .max(1)
+ok         let y = xs[i]!=3
+ok         let y = - x
+D019       let y = 1.x
+D060       let y = 1x
+ok         let y = : i32 / -5
+ok         let y = -0x10
+ok         let y = [| 1 -2 |]
+ok         let y = [| a + b c |]
+```
+
 **Operators and payloads.**
 
 - Comparisons do not chain. A second comparison at the same level is P067
@@ -301,6 +348,22 @@ derive, and everything it accepts, the grammar does. A test checks this (see
   on: `: u32 / o?` and `: u32 / (o)?` both hint what `?` produces, and
   `: u8 / (p).x` hints the field.
 
+```examples script
+P067       let y = a == b == c
+ok         let y = (a == b) == c
+ok         let y = a == b and c != d
+P065       let y = some 1 == x
+ok         let y = x == some 1
+ok         let y = not list.is_empty(ref xs)
+ok         let y = u8.max(1)
+ok         let y = (u8).max(1)
+P072       let y = a.b.c(1)
+P072       let y = p.0(1)
+P072       let y = f(x)(1)
+ok         let y = : u32 / x + 1
+ok         let y = : u32 / (o)?
+```
+
 **Bindings and signatures.**
 
 - A one-name tuple pattern needs its comma, `(a,)`; `(a)` is P070. A nested
@@ -313,11 +376,38 @@ derive, and everything it accepts, the grammar does. A test checks this (see
 - Every declared name is checked against the reserved words (P064),
   including the name a struct pattern's `{f}` shorthand binds.
 
+```examples script
+P070       let (a) = t
+ok         let (a,) = t
+P069       let ((a, b),) = t
+D038       let (a, a) = t
+P064       let {some} = s
+P073       if a
+           else if b |x|
+           end if
+P066       if a |x|
+           else |e| if b
+           end if
+P048       match x
+             let y = 1
+             case default
+           end match
+P001       fun f<T>(x: T)
+           where {T is ord}
+           end fun
+```
+
 **Leftover tokens.** P021 is the code for any other token left over after a
 complete statement, or after the last element of a bracket: `debuglog 1 2`
 is P021 at the `2`. It is suppressed after any earlier error in the same
 sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 `extra`.
+
+```examples script
+P021       debuglog 1 2
+P012       fun f(a, b: u32): u32 extra
+           end fun
+```
 
 ## Recovery
 
@@ -378,6 +468,42 @@ makes errors in one statement only, unless it moved a statement boundary:
 made or unmade a line break, matched a bracket that spans lines differently,
 or exposed a `;` in a comment.
 
+```examples module
+P010       fun (x: int)
+             let y = 1
+           end fun
+P002       fun g@()
+           end fun
+P001       fnu f()
+             let y = 1
+           end fun
+P093       fun f()
+             if a
+             end loop
+           end fun
+P093       fun f()
+           end
+P034       fun f()
+             if a
+             end fun
+P074       fun f()
+             fun g()
+             end fun
+           end fun
+P034       fun f()
+             let y = 1
+           fun g()
+           end fun
+P001       fun f()
+             if a
+             ned if
+           end fun
+D055       fun f()
+             debuglog [1,
+           end fun
+P001       fnord x
+```
+
 ## Checking the grammar
 
 `crates/datalove-doc-fixtures/tests/datafun_grammar_tests.rs` reads the grammar
@@ -401,9 +527,10 @@ shares with it.
 Its inputs are every `.dfs`, `.dfm` and `.dli` file under `crates/` and
 `sys/`, the module and script sections of every worldfile there, strings
 generated from the grammar, and each of those with a character changed, each
-parsed as a script, module or rider interface. The examples in this
-document's prose are not checked, as datalit's are: most are a piece of a
-statement rather than a script.
+parsed as a script, module or rider interface, and the `examples` blocks
+above, fenced as ```` ```examples script ````, `module` or `interface` and
+written as [datalit's are](datalit-ebnf.md#user-content-checking-the-grammar):
+the parser must refuse each with exactly the codes given.
 
 ## Productions and their typing rules
 

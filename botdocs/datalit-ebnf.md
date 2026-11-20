@@ -215,6 +215,53 @@ it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
   A header cell is one name (D031, D034), and names are unique (D038). The
   header is optional: `{||}` is the empty table.
 
+The examples above, and more, each with the codes the parser refuses it
+with, or `ok` (see [Checking the grammar](#user-content-checking-the-grammar)):
+
+```examples datalit
+D059       truefalse
+ok         [| 12 |]
+ok         [|1-2|]
+D049       : u8/*c*/1
+D049       : u8 //1
+D055       (//)
+D054       1)
+D055       [1, 2
+D020       : u8 / : u8 / 1
+ok         : u32 / (: u8 / 1)
+ok         (1,)
+D020       (,)
+D020       (1,,)
+D050       - 1
+D061       -0xF
+D020       +1
+D020       .5
+D019       1.
+D060       1u8
+ok         {none = 1}
+ok         atom true
+D059       True
+D046       : 5 / 1
+D057       : rec int [int] / []
+D057       : rec rec [rec] / []
+ok         [| 1 -2 |]
+D050       [| 1 - 2 |]
+D023       [| 1 2, 3 |]
+D033       [| , 1 |]
+ok         [| 0 3 | |]
+D041       [| 2 2 | 1 2 3 |]
+ok         [| : u8 / 1 2 |]
+ok         {| x, y
+              1, 2
+              3, 4 |}
+ok         {| x, y; 1, 2,; ; 3, 4 |}
+D033       {| x, y; , 1 |}
+D030       {| x, y; 1 |}
+D021       {| x, y; 1 2, 3 |}
+D038       {| x, x; 1, 2 |}
+ok         {||}
+```
+
 ## Recovery
 
 A literal is one expression, so one statement however many lines it spans,
@@ -228,6 +275,14 @@ opens. `recovery_contract` in `crates/datalove-doc-fixtures/tests/recovery_tests
 holds the parser to this, as it holds datafun's to
 [its rules](datafun-ebnf.md#user-content-recovery).
 
+```examples datalit
+D020       [1,
+            +1,
+            +2]
+D033       {| x, y; , 1; , 2 |}
+D055       [1, (2
+```
+
 ## Checking the grammar
 
 `crates/datalove-doc-fixtures/tests/datalit_grammar_tests.rs` reads the
@@ -237,10 +292,9 @@ the recognizer accepts the parser must accept or refuse only with a code from
 the list at the top of [Rules outside the grammar](#user-content-rules-outside-the-grammar).
 The test reads that list from this document.
 
-Its inputs are the examples above (the "`x` is Dnnn", "`x` and `y` are Dnnn"
-and "`x` parses" claims in the prose, each also checked for its code), every
-`.dlt` file under `crates/`, strings generated from the grammar, and each of
-those with a character changed. A disagreement is shrunk to the shortest
+Its inputs are the `examples` blocks above, every `.dlt` file under
+`crates/`, strings generated from the grammar, and each of those with a
+character changed. A disagreement is shrunk to the shortest
 input that still disagrees.
 
 The grammar is run as written but for the rules this document states in
@@ -249,6 +303,13 @@ no type keyword (those it reads from the type rules), and inside a table
 literal, outside nested brackets, `ws` takes no newline. These, and what each `? x ?` means, are in
 `crates/datalove-doc-fixtures/src/datalit_grammar.rs`, and a new special
 sequence fails the test until it is given a meaning there too.
+
+An `examples` block is fenced as ```` ```examples datalit ````. Each example
+begins on a line of its own with `ok` or the codes the parser refuses it
+with, joined by commas and in the order of the source, then spaces and the
+input. Lines after it indented to where its input began continue it. The test
+holds the parser to exactly those codes, besides holding it and the grammar
+to each other.
 
 So an edit here that the parser does not match fails the test. A new rule
 in English that the grammar does not express needs the test taught it, or
