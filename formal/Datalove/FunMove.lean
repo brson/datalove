@@ -1,7 +1,7 @@
 import Datalove.FunInit
 
 /-!
-# What is moved (O001, O003, O004, O007, O008, O011, O014, O015, O016)
+# What is moved (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016)
 
 Reading a variable whose type is not copy, where the ownership analysis has
 the read take the value rather than borrow it (`Ctx.lends` false: a `let`'s
@@ -20,7 +20,7 @@ a part of it, since the walk points into it. What is passed `mut` or `out`
 has to be something the caller may change: a `var` or a `mut` or `out`
 parameter, not a `ref` parameter or what a `for` binds by reference (O004),
 nor a `let`, an `in` parameter, a const or what a condition or `match`
-binds (O011). This is that
+binds (O011), and not a temporary at all (O012). This is that
 analysis, as `datalove-datafun-ownership` makes it with its `BindingState`,
 beside what holds a value (`FunInit.lean`), which it takes in: a variable
 declared with no value holds nothing until written (O005), and an `out`
@@ -257,7 +257,10 @@ def mPlace (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Expr → Bool → 
     exitM σ
   | σ, _, _ => pure σ
 
-/-- A call's arguments, in order, each as its parameter takes it. -/
+/-- A call's arguments, in order, each as its parameter takes it: one
+passed `mut` or `out` a place, not a temporary the write would be lost in
+(O012), then not walked (O015), then one the caller may change (O004,
+O011). -/
 def mArgs (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Option Mode × Expr) → List Mode → MoveM MSt
   | σ, (_, e) :: args, m :: ms => do
     let σ ← match placeOf e with
@@ -265,7 +268,7 @@ def mArgs (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Option Mode �
         if m == .mut || m == .out then
           unwalkedM σ x >>= fun _ => writableM σ x >>= fun _ => mPlace sigs Γ σ e (m == .mut)
         else mE sigs Γ (m != .in_) σ e
-      | none => if m == .out then pure σ else mE sigs Γ (m != .in_) σ e
+      | none => if m == .mut || m == .out then throw "O012" else mE sigs Γ (m != .in_) σ e
     mArgs sigs Γ σ args ms
   | σ, _, _ => pure σ
 

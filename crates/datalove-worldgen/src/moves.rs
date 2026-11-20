@@ -241,10 +241,11 @@ impl Gen {
     }
 
     /// A string variable or field to lend `mut`: one that holds a value, or
-    /// at the chaos rate any string named, which may not be changed.
+    /// at the chaos rate any string named, which may not be changed, or a
+    /// literal, which is not a place.
     fn lent(&mut self, scope: &mut Scope) -> Option<String> {
         if let Some(any) = self.chaos(scope, Kind::Str, false) {
-            return Some(any);
+            return Some(if self.chance(0.2) { "\"lit\"".S() } else { any });
         }
         if self.chance(0.3) {
             let vars: Vec<String> = scope.held(Kind::Struct).into_iter().filter(|n| scope.vars.contains(n)).collect();

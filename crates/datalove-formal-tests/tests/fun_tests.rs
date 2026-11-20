@@ -2204,6 +2204,10 @@ const MOVES_CORPUS: &[&str] = &[
     "  if maybe(c) |v|\n    call change(mut v)\n  end if\n",
     "  let q: Q = {xs = [\"a\"], n = 1}\n  call bump(mut q.n)\n",
     "  var q: Q = {xs = [\"a\"], n = 1}\n  call bump(mut q.n)\n",
+    "  call change(mut \"lit\")\n",
+    "  call fill(out \"lit\")\n",
+    "  call change(mut (: string / x))\n",
+    "  for w in ref l\n    call grow(mut [\"a\"])\n  end for\n",
     // Branches.
     "  if c\n    call take(x)\n  end if\n",
     "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
@@ -2237,7 +2241,7 @@ const MOVES_CORPUS: &[&str] = &[
 
 /// The ownership codes the formal model's move analysis decides
 /// (`formal/Datalove/FunMove.lean`), with what holds a value.
-const MOVE_CODES: [&str; 12] = ["O001", "O003", "O004", "O005", "O006", "O007", "O008", "O009", "O011", "O014", "O015", "O016"];
+const MOVE_CODES: [&str; 13] = ["O001", "O003", "O004", "O005", "O006", "O007", "O008", "O009", "O011", "O012", "O014", "O015", "O016"];
 
 /// The move analysis (`formal/Datalove/FunMove.lean`) held to the Rust's
 /// ownership pass, on `datalove_worldgen::moves_script`'s functions with

@@ -22,7 +22,8 @@
 //! # Errors detected
 //!
 //! - O001 UseAfterMove: using a value after ownership was transferred
-//! - O002 DoubleMove: transferring ownership twice
+//! - O002 DoubleMove: transferring ownership twice, never reported: the second
+//!   move reads what was moved, which is O001 first
 //! - O003 CannotMoveBorrowed: attempting to move a ref/mut/out parameter
 //! - O004 CannotMutFromRef: passing immutable ref where mutable is required
 //! - O005 ReadUninitialized: reading binding before initialization
@@ -871,21 +872,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             return;
         }
 
-        if self.get_state(id) == Some(BindingState::Moved) {
-            // Double move error - can be recovered by cloning before the second move.
-            let name = self.bindings[id.0 as usize].name.C();
-            let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
-            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                description: format!("clone `{}` before the second use", name),
-            };
-            self.errors.push(AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint });
-        } else {
-            // Track the move for error detection.
-            // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
-            // but are NOT scheduled for drops since they're exported.
-            self.set_state(id, BindingState::Moved);
-            self.set_moved_at(id, expr_key);
-        }
+        // The one caller reports a read of a moved binding (O001) and stops
+        // before it gets here, so a second move is never reached.
+        assert_ne!(self.get_state(id), Some(BindingState::Moved), "a moved binding moved again");
+        // ScriptUnit bindings are tracked for error detection (e.g., move in
+        // loop) but are not scheduled for drops since they're exported.
+        self.set_state(id, BindingState::Moved);
+        self.set_moved_at(id, expr_key);
     }
 
     /// Allocate and return the next global statement ID.

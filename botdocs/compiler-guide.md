@@ -1519,7 +1519,7 @@ gives each its `OCode`.
 | Code | Variant | Trigger |
 |------|---------|---------|
 | O001 | `UseAfterMove` | Using value after move |
-| O002 | `DoubleMove` | Moving value twice |
+| O002 | `DoubleMove` | Moving value twice: never reported, since the second move reads a moved value, which is O001 first |
 | O003 | `CannotMoveBorrowed` | Moving `ref`/`mut`/`out` param |
 | O004 | `CannotMutFromRef` | Passing `ref` to `mut` param |
 | O005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
