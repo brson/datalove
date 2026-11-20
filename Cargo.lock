@@ -1457,6 +1457,7 @@ dependencies = [
  "datalove-script-steps",
  "datalove-sys-packages",
  "datalove-vio",
+ "enum-iterator",
  "rustmax",
  "salsa",
 ]

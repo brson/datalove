@@ -22,9 +22,10 @@ use std::collections::BTreeSet;
 
 use bct::random::{SeededRng, env_seeds, seed_of};
 use datalove_doc_fixtures::datafun_grammar::{
-    DOC, Recognizers, Start, corpus, doc_text, grammars, join_tokens, parse_codes, parse_diags, sample,
+    DOC, Start, corpus, doc_text, grammar, parse_codes, parse_diags, recognizers, sample,
 };
 use datalove_doc_fixtures::ebnf::Generator;
+use datalove_doc_fixtures::token_grammar::{Recognizers, TokenGrammar, join_tokens};
 use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, mutate, outside_codes};
 
 struct Checker {
@@ -33,12 +34,12 @@ struct Checker {
 }
 
 impl Checker {
-    fn new(gs: &datalove_doc_fixtures::datafun_grammar::Grammars) -> Checker {
-        Checker { recs: Recognizers::new(gs), outside: outside_codes(&doc_text(), DOC) }
+    fn new(g: &TokenGrammar) -> Checker {
+        Checker { recs: recognizers(g), outside: outside_codes(&doc_text(), DOC) }
     }
 
     fn derives(&self, start: Start, text: &str) -> bool {
-        self.recs.derives(start, text)
+        self.recs.derives(start.rule(), text)
     }
 
     fn check(&self, findings: &mut Findings, start: Start, text: &str) {
@@ -55,8 +56,8 @@ impl Checker {
 
 #[test]
 fn doc_examples() {
-    let gs = grammars();
-    let checker = Checker::new(&gs);
+    let g = grammar();
+    let checker = Checker::new(&g);
     let examples = examples(&doc_text(), DOC);
     assert!(examples.len() > 20, "found only {} examples in {DOC}", examples.len());
     let mut findings = Findings::default();
@@ -77,8 +78,8 @@ fn doc_examples() {
 
 #[test]
 fn corpus_agrees() {
-    let gs = grammars();
-    let checker = Checker::new(&gs);
+    let g = grammar();
+    let checker = Checker::new(&g);
     let mut findings = Findings::default();
     let corpus = corpus();
     assert!(corpus.len() > 500, "found only {} datafun sources", corpus.len());
@@ -92,18 +93,18 @@ fn corpus_agrees() {
 
 #[test]
 fn generated_agree() {
-    let gs = grammars();
-    let sampler = |text: &str, rng: &mut SeededRng| sample(&gs, text, rng);
-    let generator = Generator::new(&gs.tokens, &sampler);
-    let checker = Checker::new(&gs);
+    let g = grammar();
+    let sampler = |text: &str, rng: &mut SeededRng| sample(&g, text, rng);
+    let generator = Generator::new(&g.typed, &sampler);
+    let checker = Checker::new(&g);
     let mut findings = Findings::default();
     let mut dropped = 0;
     let seeds = env_seeds("DATALOVE_DF_GRAMMAR", 0, 600);
     for seed in seeds.iter() {
         let start = [Start::Script, Start::Module, Start::Interface][(seed % 3) as usize];
-        let text = join_tokens(&generator.generate(start.rule(), &mut SeededRng::new(seed)));
-        // An exception's words and a space that ends a glued run are not
-        // repaired when generating, so some strings are not derived.
+        let mut rng = SeededRng::new(seed);
+        let text = join_tokens(&generator.generate(start.rule(), &mut rng), &mut rng);
+        // Spacing is drawn at random, and some decides what is glued.
         if !checker.derives(start, &text) {
             dropped += 1;
             continue;
@@ -113,5 +114,6 @@ fn generated_agree() {
     }
     let n = seeds.count;
     assert!(dropped < n / 2, "{dropped} of {n} generated strings were not derived");
+    println!("{dropped} of {n} generated strings were not derived");
     findings.finish("generated strings and their mutants");
 }

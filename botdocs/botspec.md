@@ -101,9 +101,9 @@ In syntax descriptions, the following conventions apply:
 - `[...]` denotes optional elements
 - `...` denotes repetition
 
-The complete grammars, as EBNF checked against the parsers, are
-[Datalit Grammar](datalit-ebnf.md) and [Datafun Grammar](datafun-ebnf.md),
-and the type systems are [Datalit Typing Rules](datalit-typing-rules.md) and
+The complete grammars, as EBNF checked against the lexer and parsers, are
+[Lexical Grammar](lexical-grammar.md), [Datalit Grammar](datalit-ebnf.md) and
+[Datafun Grammar](datafun-ebnf.md), and the type systems are [Datalit Typing Rules](datalit-typing-rules.md) and
 [Datafun Typing Rules](datafun-typing-rules.md). They state formally what this
 document states in prose; a disagreement between them is a bug in one or the
 other.
@@ -123,6 +123,9 @@ are F049, as in any function that does not return an option. An error returned
 from a script's top level ends the script, which prints it.
 
 ## 2. Lexical Conventions
+
+The tokens themselves, words, sigils, strings and what the lexer drops, are
+[Lexical Grammar](lexical-grammar.md).
 
 ### 2.1 Reserved Words
 

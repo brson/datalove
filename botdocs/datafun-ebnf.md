@@ -28,8 +28,9 @@ says which rule types each form.
 ## Notation
 
 The EBNF is as in the [datalit grammar](datalit-ebnf.md#user-content-notation),
-over tokens rather than characters: whitespace and comments between tokens are
-not written. More notation carries what tokens alone cannot:
+over the tokens of [Lexical Grammar](lexical-grammar.md): whitespace and
+comments between tokens are not written. More notation carries what tokens
+alone cannot:
 
 - `~x` means `x` is glued to the token before it: no space, newline or comment
   between them. Spacing decides fixity in datafun
@@ -42,10 +43,12 @@ not written. More notation carries what tokens alone cannot:
   more; blank lines are free.
 - `end_line(k)` is a rule with a parameter, written once for every block's
   closing line: `end_line("fun")` is `"end", "fun"` on a line of its own.
-- The rules under `(* Written in characters *)` describe the text of one
-  glued run of tokens, as the datalit grammar describes text, rather than
-  tokens. The rules that are `? as in the datalit grammar ?` are those rules
-  of [Datalit Grammar](datalit-ebnf.md), read the same way.
+- `newline` is a table's row break, and the rules under
+  `(* Written in characters *)` describe the text of one glued run of tokens,
+  as in the [datalit grammar](datalit-ebnf.md#user-content-notation). The
+  rules that are `? as in the datalit grammar ?` are those rules of it, with
+  the rules they use, and a rule both grammars write is written the same in
+  both.
 
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
 parsing (D054, D055). `<` and `>` are always brackets, never operators.
@@ -167,7 +170,7 @@ primary       = hinted
               | "term", NAME, payload                 (* D036 *)
               | "enum", "{", expr, [ "," ], "}"       (* D037 *)
               | "icall", NAME, ~"(", [ arg_list ], ")"  (* P040, P041; spaced "(": P090 *)
-              | dec_number | hex_number               (* no sign: "-" is prefix_op *)
+              | number                                (* no sign: "-" is prefix_op *)
               | string_lit                            (* D039 *)
               | value_name, [ ~"(", [ arg_list ], ")" ]   (* a call only when glued *)
               | paren | collection ;
@@ -202,24 +205,24 @@ tensor_row    = expr, { expr } ;                (* elements end where fixity say
 comma_run     = ",", { "," } ;
 
 (* ===== Types ===== *)
-type          = ? the datalit type grammar, datalit-ebnf.md, parsed by the same
-                  code (datalove-datalit/src/parser/type_hint.rs) ? ;
-                (* a type_name there is an alias or a type parameter here,
+type          = ? as in the datalit grammar ? ;
+                (* parsed by the same code, datalove-datalit/src/parser/type_hint.rs;
+                   a type_name there is an alias or a type parameter here,
                    which F064 refuses when it names neither. There are no
                    function types and no type application. *)
 
-(* ===== Lexical  (bcts lexer.rs, parser_util.rs) ===== *)
+(* ===== Tokens  (lexical-grammar.md) ===== *)
 EOLS          = EOL, { EOL } ;
 EOL           = ? a newline outside brackets ? ;
-newline       = ? a newline in a table literal, outside brackets nested in it ? ;
-NAME          = ? an ASCII word not beginning with a digit ? ;
-                (* a word is a run of [A-Za-z0-9_] or Unicode alphanumerics;
-                   a non-ASCII one: D043 *)
+newline       = ? a newline in a table, outside brackets nested in it ? ;
+NAME          = ? an ASCII word not beginning with a digit ? ;   (* non-ASCII: D043 *)
 value_name    = NAME - ( "true" | "false" | "none" | "some" | "ok" | "er" | "data"
                        | "error" | "atom" | "term" | "enum" | "not" | "icall" ) ;
 param_name    = value_name - ( "mut" | "out" | "ref" | "const" ) ;
 type_name     = NAME - ( scalar_type | "atom" | "term" | "enum" | "rec" ) ;
                 (* each exclusion is P064, and the name is still taken *)
+scalar_type   = ? as in the datalit grammar ? ;
+number        = ( dec_number | hex_number ), ? no "." or word glued after it ? ;
 
 (* Written in characters, each one glued run of tokens. *)
 dec_number    = digit_run, [ ".", digit_run ], [ ( "e" | "E" ), [ "+" | "-" ], digit_run ] ;
@@ -230,7 +233,6 @@ string_lit    = ? as in the datalit grammar ? ;
 digit_run     = ? as in the datalit grammar ? ;
 hex_run       = ? as in the datalit grammar ? ;
 digit         = ? as in the datalit grammar ? ;
-scalar_type   = ? as in the datalit grammar ? ;
 ```
 
 ## Rules outside the grammar
@@ -515,14 +517,10 @@ code from the list at the top of
 [Rules outside the grammar](#user-content-rules-outside-the-grammar), which
 the test reads from this document.
 
-The recognizer reads the tokens the real lexer makes, with an `EOL` added
-before a token that has a newline before it outside brackets, and a table's
-`newline` before one in a table literal. `type` matches a run of tokens with
-its brackets matched whose text the datalit grammar's `type` rule derives, and
-the rules written in characters and those `? as in the datalit grammar ?`
-each match one glued run of tokens by its text, a number only the whole of
-one. So the datalit grammar is run here too, as the reading of what datafun
-shares with it.
+The recognizer reads tokens as datalit's does, with an `EOL` added before a
+token that has a newline before it outside brackets. The rules taken from
+the datalit grammar are run as part of this one, so the datalit grammar is
+checked here too, as the reading of what datafun shares with it.
 
 Its inputs are every `.dfs`, `.dfm` and `.dli` file under `crates/` and
 `sys/`, the module and script sections of every worldfile there, strings

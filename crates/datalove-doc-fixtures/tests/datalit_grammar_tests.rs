@@ -19,17 +19,17 @@
 use rmx::prelude::*;
 
 use bct::random::{SeededRng, env_seeds, seed_of};
-use datalove_doc_fixtures::datalit_grammar::{DOC, doc_text, grammar, parse_codes, parse_diags, repair, sample, term};
-use datalove_doc_fixtures::ebnf::{Generator, Recognizer, join_chars};
+use datalove_doc_fixtures::datalit_grammar::{DOC, START, doc_text, grammar, parse_codes, parse_diags, recognizers, sample};
+use datalove_doc_fixtures::ebnf::Generator;
 use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, files, mutate, outside_codes, workspace_dir};
+use datalove_doc_fixtures::token_grammar::{Recognizers, join_tokens};
 
-fn recognizer() -> Recognizer<[char]> {
-    Recognizer::new(&grammar(), "datalit", &term)
+fn recognizer() -> Recognizers {
+    recognizers(&grammar())
 }
 
-fn derives(rec: &Recognizer<[char]>, text: &str) -> bool {
-    let cs: Vec<char> = text.chars().collect();
-    rec.accepts(&cs, cs.len())
+fn derives(rec: &Recognizers, text: &str) -> bool {
+    rec.derives(START, text)
 }
 
 #[test]
@@ -73,17 +73,18 @@ fn corpus_agrees() {
 #[test]
 fn generated_agree() {
     let g = grammar();
-    let generator = Generator::new(&g, &sample);
-    let rec = recognizer();
+    let sampler = |text: &str, rng: &mut SeededRng| sample(&g, text, rng);
+    let generator = Generator::new(&g.typed, &sampler);
+    let rec = recognizers(&g);
     let outside = outside_codes(&doc_text(), DOC);
     let judge = Judge { derives: &|t| derives(&rec, t), parse: &parse_codes, outside: &outside };
     let mut findings = Findings::default();
     let mut dropped = 0;
     let seeds = env_seeds("DATALOVE_GRAMMAR", 0, 1500);
     for seed in seeds.iter() {
-        let text = join_chars(&generator.generate("datalit", &mut SeededRng::new(seed)), &repair);
-        // A repair can fail: a newline after a line comment in a table row
-        // ends the row, and a name can be a type word.
+        let mut rng = SeededRng::new(seed);
+        let text = join_tokens(&generator.generate(START, &mut rng), &mut rng);
+        // Spacing is drawn at random, and some decides what is glued.
         if !derives(&rec, &text) {
             dropped += 1;
             continue;
@@ -93,5 +94,6 @@ fn generated_agree() {
     }
     let n = seeds.count;
     assert!(dropped < n / 2, "{dropped} of {n} generated strings were not derived");
+    println!("{dropped} of {n} generated strings were not derived");
     findings.finish("generated strings and their mutants");
 }

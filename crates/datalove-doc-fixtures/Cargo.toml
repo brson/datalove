@@ -17,6 +17,7 @@ datalove-diagnostic.workspace = true
 rmx.workspace = true
 salsa.workspace = true
 datalove-script-steps.workspace = true
+enum-iterator.workspace = true
 
 [dev-dependencies]
 datalove-repl.workspace = true

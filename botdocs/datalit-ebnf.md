@@ -27,23 +27,38 @@ disagrees with the parser, see [The manual](#user-content-the-manual).
 ## Notation
 
 ISO 14977 EBNF: `,` concatenates, `|` separates alternatives, `[ x ]` is
-optional, `{ x }` repeats zero or more times, `"x"` is a terminal (with no
-escapes, but `"\n"` is a newline character), `? x ?` is
-a special sequence described in English, and `(* x *)` is a comment.
-Comments in the grammar name the diagnostic a violation produces.
+optional, `{ x }` repeats zero or more times, `( x )` groups, `a - b` is what
+`a` matches that `b` does not, `"x"` is a terminal (with no escapes, but
+`"\n"` is a newline character), `"a" .. "z"` is a range of characters,
+`? x ?` is a special sequence described in English, and `(* x *)` is a
+comment. Comments in the grammar name the diagnostic a violation produces.
 
-The terminals are tokens as `crates/bcts/src/lexer.rs` makes them, matched
-longest first, so `%{`, `#{`, `{|`, `|}`, `[|`, `|]` and `->` are each one token:
-`% {` and `[ | 1 | ]` are not maps or tensors. Brackets are matched before
-parsing.
+The grammar is over the tokens of [Lexical Grammar](lexical-grammar.md): a
+terminal matches a token by its text, and the whitespace and comments
+between tokens are not written. So `%{`, `#{`, `{|`, `|}`, `[|`, `|]` and `->`
+are each one token, and `% {` and `[ | 1 | ]` are not maps or tensors;
+`truefalse` is one name, not two booleans; and `: u8/*c*/1` and `: u8 //1`
+are D049, the comment having taken the hint's `/`. Brackets are matched
+before parsing.
+
+A newline means nothing but in a table, where it is the token `newline` and
+breaks a row. A type reads it as whitespace, so a table type may be written
+over several lines.
+
+The rules under `(* Written in characters *)` describe the text of one glued
+run of tokens, character by character, as the lexical grammar does: a
+number, a string, a rank. A rule over tokens that uses one matches the tokens
+of a glued run whose text it derives. `? no "." or word glued after it ?`
+says a number is the whole of what is glued there, so `1.x` is a malformed
+number, not `1` and something after it.
 
 ## Grammar
 
 ```ebnf
 (* ===== Top level ===== *)
-datalit        = ws, full_expr, ws ;                (* anything after it: D021 *)
-full_expr      = [ type_hint, ws ], expr ;
-type_hint      = ":", ws, type, ws, "/" ;           (* no "/": D049 *)
+datalit        = full_expr ;                       (* anything after it: D021 *)
+full_expr      = [ type_hint ], expr ;
+type_hint      = ":", type, "/" ;                  (* no "/": D049 *)
 
 (* ===== Types ===== *)
 type           = option_type | result_type | list_type | tuple_type
@@ -54,27 +69,27 @@ scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
                | "i8" | "i16" | "i32" | "i64"
                | "index" | "offset" | "f32" | "f64"
                | "int" | "string" | "data" | "error" ;
-option_type    = "?", ws, type ;
-result_type    = "!", ws, type ;
-list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
-tuple_type     = "(", ws, [ type_list ], ws, ")" ;  (* (T,) is the 1-tuple *)
-struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
-table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
-map_type       = "%{", ws, type, ws, "->", ws, type, [ ws, "," ], ws, "}" ;  (* D044 *)
-set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
-tensor_type    = "[|", ws, type, ws, ",", ws, rank, [ ws, "," ], ws, "|]" ;  (* D047 *)
-rank           = digit, { digit } ;                 (* 1 to 2^32-1, no "_": D045; 0: D042 *)
-atom_type      = "atom", ws, ident ;                (* D051 *)
-term_type      = "term", ws, ident, ws, type ;      (* D052 *)
-enum_type      = "enum", ws, "{", ws, [ enum_variant_list ], ws, "}" ;  (* D032 *)
-enum_variant_list = enum_variant, { ws, ",", ws, enum_variant }, [ ws, "," ] ;
-enum_variant   = atom_type | term_type ;            (* else D053; names unique: D038 *)
-rec_type       = "rec", ws, ident, ws, type ;       (* no name: D056; a type word: D057 *)
-type_name      = ident ;                            (* a rec's name in its body, else T059 *)
+option_type    = "?", type ;
+result_type    = "!", type ;
+list_type      = "[", type, [ "," ], "]" ;
+tuple_type     = "(", [ type_list ], ")" ;        (* (T,) is the 1-tuple *)
+struct_type    = "{", [ type_field_list ], "}" ;
+table_type     = "{|", [ type_field_list ], "|}" ;
+map_type       = "%{", type, "->", type, [ "," ], "}" ;  (* D044 *)
+set_type       = "#{", type, [ "," ], "}" ;
+tensor_type    = "[|", type, ",", rank, [ "," ], "|]" ;  (* D047 *)
+atom_type      = "atom", NAME ;                    (* D051 *)
+term_type      = "term", NAME, type ;              (* D052 *)
+enum_type      = "enum", "{", [ enum_variant_list ], "}" ;  (* D032 *)
+enum_variant_list = enum_variant, { ",", enum_variant }, [ "," ] ;
+enum_variant   = atom_type | term_type ;           (* else D053; names unique: D038 *)
+rec_type       = "rec", NAME, type ;               (* no name: D056; a type word: D057 *)
+type_name      = NAME - ( scalar_type | "atom" | "term" | "enum" | "rec" ) ;
+                 (* a rec's name in its body, else T059 *)
 
-type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;
-type_field_list = type_field, { ws, ",", ws, type_field }, [ ws, "," ] ;
-type_field     = ident, ws, ":", ws, type ;         (* D048; names unique: D038 *)
+type_list      = type, { ",", type }, [ "," ] ;
+type_field_list = type_field, { ",", type_field }, [ "," ] ;
+type_field     = NAME, ":", type ;                 (* D048; names unique: D038 *)
 
 (* ===== Expressions ===== *)
 expr           = none_lit | bool_lit | numeric_lit | string_lit
@@ -85,69 +100,63 @@ expr           = none_lit | bool_lit | numeric_lit | string_lit
 
 none_lit       = "none" ;
 bool_lit       = "true" | "false" ;
-option_expr    = "some", ws, full_expr ;
-result_expr    = ( "ok" | "er" ), ws, full_expr ;
-existential_expr = ( "data" | "error" ), ws, full_expr ;
-atom_expr      = "atom", ws, ident ;                (* D035 *)
-term_expr      = "term", ws, ident, ws, full_expr ; (* D036 *)
-enum_expr      = "enum", ws, "{", ws, full_expr, [ ws, "," ], ws, "}" ;  (* D037 *)
+option_expr    = "some", full_expr ;
+result_expr    = ( "ok" | "er" ), full_expr ;
+existential_expr = ( "data" | "error" ), full_expr ;
+atom_expr      = "atom", NAME ;                    (* D035 *)
+term_expr      = "term", NAME, full_expr ;         (* D036 *)
+enum_expr      = "enum", "{", full_expr, [ "," ], "}" ;  (* D037 *)
 
-group_expr     = "(", ws, full_expr, ws, ")" ;      (* (e) is e *)
-tuple_expr     = "(", ws, ")"
-               | "(", ws, full_expr, ws, ",", [ ws, expr_list ], ws, ")" ;
-list_expr      = "[", ws, [ expr_list ], ws, "]" ;
-struct_expr    = "{", ws, [ field_list ], ws, "}" ;
-map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
-set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
+group_expr     = "(", full_expr, ")" ;             (* (e) is e *)
+tuple_expr     = "(", ")"
+               | "(", full_expr, ",", [ expr_list ], ")" ;
+list_expr      = "[", [ expr_list ], "]" ;
+struct_expr    = "{", [ field_list ], "}" ;
+map_expr       = "%{", [ entry_list ], "}" ;
+set_expr       = "#{", [ expr_list ], "}" ;
 
-expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
-field_list     = field, { ws, ",", ws, field }, [ ws, "," ] ;
-field          = ident, ws, "=", ws, full_expr ;    (* D058; names unique: D038 *)
-entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
-entry          = full_expr, ws, "->", ws, full_expr ;  (* D017 *)
+expr_list      = full_expr, { ",", full_expr }, [ "," ] ;
+field_list     = field, { ",", field }, [ "," ] ;
+field          = NAME, "=", full_expr ;            (* D058; names unique: D038 *)
+entry_list     = entry, { ",", entry }, [ "," ] ;
+entry          = full_expr, "->", full_expr ;      (* D017 *)
 
 (* Tensor. The rank is the longest comma_run plus one. *)
-tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
-tensor_header  = extent, { ws, extent }, ws, "|", ws ;  (* D040; body must fit: D041 *)
-extent         = digit_run ;                        (* fits u32, else D040 *)
-tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row } ;
-tensor_row     = full_expr, { ws, full_expr } ;
-comma_run      = ",", { ws, "," } ;
+tensor_expr    = "[|", [ tensor_header ], [ tensor_body ], "|]" ;
+tensor_header  = extent, { extent }, "|" ;         (* D040; body must fit: D041 *)
+extent         = digit_run ;                       (* fits u32, else D040 *)
+tensor_body    = tensor_row, { comma_run, tensor_row } ;
+tensor_row     = full_expr, { full_expr } ;
+comma_run      = ",", { "," } ;
 
-(* Table. Between "{|" and "|}", outside nested brackets, ws does not
-   include a newline: a newline separates rows. *)
-table_expr     = "{|", tbl_ws,
-                 [ table_header, { ws, newline, tbl_ws, table_row } ],
-                 tbl_ws, "|}" ;
-table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ] ;   (* D031, D034, D038 *)
-table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;  (* D030 *)
-tbl_ws         = { ws | newline } ;
+(* Table. A newline token breaks a row. *)
+table_expr     = "{|", { newline },
+                 [ table_header, { newline, { newline }, table_row } ],
+                 { newline }, "|}" ;
+table_header   = NAME, { ",", NAME }, [ "," ] ;    (* D031, D034, D038 *)
+table_row      = full_expr, { ",", full_expr }, [ "," ] ;  (* D030 *)
 
-(* ===== Literals: one glued run, no ws or comment inside ===== *)
-numeric_lit    = float_lit | hex_lit | int_lit ;   (* malformed: D019; suffixed: D060 *)
+(* ===== Tokens  (lexical-grammar.md) ===== *)
+NAME           = ? an ASCII word not beginning with a digit ? ;
+                 (* keywords allowed; non-ASCII: D043 *)
+newline        = ? a newline in a table, outside brackets nested in it ? ;
+numeric_lit    = number, ? no "." or word glued after it ? ;
+
+(* Written in characters, each one glued run of tokens. *)
+number         = float_lit | hex_lit | int_lit ;   (* malformed: D019; suffixed: D060 *)
 int_lit        = [ "-" ], digit_run ;
 float_lit      = [ "-" ], digit_run, ( ".", digit_run, [ exponent ] | exponent ) ;
 exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
-hex_lit        = "0", ( "x" | "X" ), hex_run ;      (* no sign: D061 *)
+hex_lit        = "0", ( "x" | "X" ), hex_run ;     (* no sign: D061 *)
+rank           = digit, { digit } ;                (* 1 to 2^32-1, no "_": D045; 0: D042 *)
 digit_run      = digit, [ { digit | "_" }, digit ] ;
 hex_run        = hex_digit, [ { hex_digit | "_" }, hex_digit ] ;
-string_lit     = '"', { string_char }, '"' ;        (* unterminated: D020 *)
+string_lit     = '"', { string_char }, '"' ;       (* unterminated: D020 *)
 string_char    = escape_seq | ? any character except '"' and '\', newlines included ? ;
 escape_seq     = "\", ( '"' | "\" | "n" | "r" | "t" | "0"
                | "u{", hex_digit, { hex_digit }, "}" ) ;  (* 1-6 digits, a scalar value: D039 *)
-
-(* ===== Lexical ===== *)
-ident          = ident_start, { ident_start | digit } ;  (* keywords allowed; non-ASCII: D043 *)
-ident_start    = "a" .. "z" | "A" .. "Z" | "_" ;
 digit          = "0" .. "9" ;
 hex_digit      = digit | "a" .. "f" | "A" .. "F" ;
-ws             = { whitespace | newline | comment } ;
-whitespace     = ? any Unicode whitespace character but "\n" ? ;
-newline        = "\n" | ";" ;                     (* the lexer reads ";" as a newline *)
-comment        = line_comment | block_comment ;
-line_comment   = "//", { ? any character except newline ? } ;
-block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "*/" ? }, "*/" ;
-                 (* nests; unclosed: D020 *)
 ```
 
 ## Rules outside the grammar
@@ -158,15 +167,6 @@ D057. Everything else it refuses, the grammar does not derive, and everything
 it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
 [Checking the grammar](#user-content-checking-the-grammar)).
 
-- **Words are whole.** Two letters, digits or `_` written against each other
-  are one word: no keyword, `ident`, `numeric_lit`, `rank` or `extent` ends
-  or begins where another touches it. So `truefalse` is one name, not two
-  booleans, and `[| 12 |]` is one element, while `[|1-2|]` is two.
-- **Comments are whole.** `//` and `/*` start a comment wherever they are
-  written outside a string or a comment, and a line comment runs to the end
-  of its line. So a `/` token never touches a `/` or `*` after it:
-  `: u8/*c*/1` and `: u8 //1` are D049, having lost the hint's `/`, and `(//)`
-  is an open bracket and a comment, not an empty tuple.
 - **Brackets match.** Every bracket is closed by its partner: a close with no
   open is D054, and an open never closed is D055.
 - **A hint is a hint on one expression.** What follows `: T /` is a bare
@@ -183,12 +183,12 @@ it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
   `.5` is D020 and `1.` is D019. A letter on the end of a number is D060, not a
   suffix: `1u8` is written `: u8 / 1`.
 - **Names.** Field, column and variant names and the names after `atom` and
-  `term` are any `ident`, keywords included: `{none = 1}` and `atom true`
+  `term` are any `NAME`, keywords included: `{none = 1}` and `atom true`
   parse. Datalit reserves no words; `true` is a keyword only where an
-  expression is expected, and `True` there is D059. A `type_name` is any
-  `ident` not already a type keyword; the type checker refuses every one that
-  is not the name of a `rec` around it (T059), datalit having no aliases. A
-  word beginning with a digit is no name anywhere: `: 5 / 1` is D046.
+  expression is expected, and `True` there is D059. The type checker refuses
+  every `type_name` that is not the name of a `rec` around it (T059), datalit
+  having no aliases. A word beginning with a digit is no name anywhere:
+  `: 5 / 1` is D046.
 - **Recursive types.** `rec L T` names `T` as `L` inside `T`; the uses of `L`
   parse as `type_name`s, and the type checker tells them apart. A `rec`'s name
   is a name of a type, so it cannot be a word that is a type or starts one
@@ -201,19 +201,16 @@ it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
   is D033. Whitespace and comments may sit inside a run: `, ,` is `,,`. Inside
   a row, elements are simply written one after another, and spacing matters
   only where it decides what is glued: `[| 1 -2 |]` and `[|1-2|]` are two
-  elements, `1` and `-2`, and `[| 1 - 2 |]` is D050. A `;` is a line break,
-  which a tensor passes over like any other. With a header, the body is
+  elements, `1` and `-2`, and `[| 1 - 2 |]` is D050. With a header, the body is
   either flat, as many elements as the product of the extents, or shaped
   exactly as the header says (D041); zero extents are allowed, `[| 0 3 | |]`.
   A hint covers one element: `[| : u8 / 1 2 |]` is two elements.
-- **Table rows.** A newline or a `;` separates rows, outside nested brackets
-  and outside block comments; a line comment's own newline counts. A `;` is a
-  line break -- the lexer takes it for a newline -- so a run of them is blank
-  rows, which are free. A `,` with nothing before it is D033, a trailing one is
-  fine. Every row has one cell per
-  column (D030); each cell is one `full_expr`, so `{| x, y; 1 2, 3 |}` is D021.
-  A header cell is one name (D031, D034), and names are unique (D038). The
-  header is optional: `{||}` is the empty table.
+- **Table rows.** A `;` is a line break, so a run of them is blank rows,
+  which are free. A `,` with nothing before it is D033, a trailing one is
+  fine. Every row has one cell per column (D030); each cell is one
+  `full_expr`, so `{| x, y; 1 2, 3 |}` is D021. A header cell is one name
+  (D031, D034), and names are unique (D038). The header is optional: `{||}`
+  is the empty table.
 
 The examples above, and more, each with the codes the parser refuses it
 with, or `ok` (see [Checking the grammar](#user-content-checking-the-grammar)):
@@ -255,6 +252,15 @@ ok         {| x, y
               1, 2
               3, 4 |}
 ok         {| x, y; 1, 2,; ; 3, 4 |}
+ok         {| x, y // a comment; not a row
+              1, 2 /* nor
+              this */ |}
+ok         : {| a: int,
+                b: int |} / {||}
+ok         : {| a:
+                int |} / {||}
+D022       : {| a: int
+                b: int |} / {||}
 D033       {| x, y; , 1 |}
 D030       {| x, y; 1 |}
 D021       {| x, y; 1 2, 3 |}
@@ -286,9 +292,9 @@ D055       [1, (2
 ## Checking the grammar
 
 `crates/datalove-doc-fixtures/tests/datalit_grammar_tests.rs` reads the
-grammar block above and runs it, as a character-level Earley recognizer, beside
-the parser. Whatever the parser accepts the recognizer must too, and whatever
-the recognizer accepts the parser must accept or refuse only with a code from
+grammar block above and runs it, as an Earley recognizer, beside the parser.
+Whatever the parser accepts the recognizer must too, and whatever the
+recognizer accepts the parser must accept or refuse only with a code from
 the list at the top of [Rules outside the grammar](#user-content-rules-outside-the-grammar).
 The test reads that list from this document.
 
@@ -297,12 +303,16 @@ Its inputs are the `examples` blocks above, every `.dlt` file under
 character changed. A disagreement is shrunk to the shortest
 input that still disagrees.
 
-The grammar is run as written but for the rules this document states in
-English, which the test adds: words and comments are whole, a `type_name` is
-no type keyword (those it reads from the type rules), and inside a table
-literal, outside nested brackets, `ws` takes no newline. These, and what each `? x ?` means, are in
-`crates/datalove-doc-fixtures/src/datalit_grammar.rs`, and a new special
-sequence fails the test until it is given a meaning there too.
+The recognizer reads the tokens the real lexer makes, which
+[Lexical Grammar](lexical-grammar.md) holds to its own grammar, with a
+`newline` before a token in a `{|` `|}` pair, outside the brackets nested in
+it. A `type` matches a run of tokens with its brackets matched, read by the
+type rules with the `newline`s in it dropped, and a rule written in
+characters matches a glued run by its text. The grammar is otherwise run as
+written. What each `? x ?` means is in
+`crates/datalove-doc-fixtures/src/token_grammar.rs` and `datalit_grammar.rs`
+beside it, and a new special sequence fails the test until it is given a
+meaning there too.
 
 An `examples` block is fenced as ```` ```examples datalit ````. Each example
 begins on a line of its own with `ok` or the codes the parser refuses it

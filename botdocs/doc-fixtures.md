@@ -33,13 +33,15 @@ engine produced belongs there:
   run by `tests/reactive_tests.rs`.
 - `replays/`, the sessions the posts play, run by `tests/replay_tests.rs`.
 
-Both are checked by step tables. Two documents have no fixtures of their
-own: [Datalit Grammar](datalit-ebnf.md) and [Datafun Grammar](datafun-ebnf.md)
-are run as they are written and checked against their parsers, by
+Both are checked by step tables. Three documents have no fixtures of their
+own: [Lexical Grammar](lexical-grammar.md), [Datalit Grammar](datalit-ebnf.md)
+and [Datafun Grammar](datafun-ebnf.md) are run as they are written and
+checked against the lexer and parsers, by `tests/lexical_grammar_tests.rs`,
 `tests/datalit_grammar_tests.rs` and `tests/datafun_grammar_tests.rs`, with
-`src/ebnf.rs`, `src/grammar_check.rs`, `src/datalit_grammar.rs` and
-`src/datafun_grammar.rs` (see
-[Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
+the recognizer and generator in `src/ebnf.rs`, the checking in
+`src/grammar_check.rs`, and the grammars made executable in `src/lexical.rs`,
+`src/token_grammar.rs`, `src/datalit_grammar.rs` and `src/datafun_grammar.rs`
+(see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
 `tests/recovery_tests.rs` uses the same grammars to measure how the parsers
 recover from errors (see [Plan: Parse Error Recovery](plan-parse-recovery.md)).
 

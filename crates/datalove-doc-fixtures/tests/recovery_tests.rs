@@ -19,12 +19,11 @@
 //!   codes than datalit's, with examples.
 
 use rmx::prelude::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use bct::random::{SeededRng, env_seeds, seed_of};
 use datalove_doc_fixtures::datafun_grammar::{self as df, Start};
 use datalove_doc_fixtures::datalit_grammar as dl;
-use datalove_doc_fixtures::ebnf::Recognizer;
 use datalove_doc_fixtures::grammar_check::{Diag, Mutation, files, mutate_at, outside_codes, shrink, workspace_dir};
 
 /// How many changes are made to each clean source.
@@ -314,15 +313,6 @@ fn read_change(lang: &Lang, report: &mut Report, text: &str, at: usize) {
     }
 }
 
-fn datalit_first_error(rec: &Recognizer<[char]>, text: &str) -> Option<usize> {
-    let cs: Vec<char> = text.chars().collect();
-    let i = rec.viable_prefix(&cs, cs.len());
-    if i == cs.len() && rec.accepts(&cs, cs.len()) {
-        return None;
-    }
-    Some(cs[..i].iter().map(|c| c.len_utf8()).sum())
-}
-
 /// A datalit code and the datafun code the same fault gets, where the two
 /// grammars differ, as `botdocs/datafun-ebnf.md` lists them.
 const SHARED_DIFFERENCES: &[(&str, &[&str])] = &[("D018", &["P080", "P081"]), ("D020", &["P080", "P081"]), ("D059", &["P080", "P081"])];
@@ -483,8 +473,8 @@ fn recovery_contract() {
     // Each seed makes one change to every source.
     let seeds = env_seeds("DATALOVE_RECOVERY", 0, MUTANTS as u64);
 
-    let rec = Recognizer::new(&dl::grammar(), "datalit", &dl::term);
-    let first_error = |t: &str| datalit_first_error(&rec, t);
+    let recs = dl::recognizers(&dl::grammar());
+    let first_error = |t: &str| recs.first_error(dl::START, t);
     let lang = Lang {
         name: "datalit",
         parse: &dl::parse_diags,
@@ -502,11 +492,10 @@ fn recovery_contract() {
         }
     }
 
-    let gs = df::grammars();
-    let recs = df::Recognizers::new(&gs);
+    let recs = df::recognizers(&df::grammar());
     for start in [Start::Script, Start::Module, Start::Interface] {
         let parse = move |t: &str| df::parse_diags(start, t);
-        let first_error = |t: &str| recs.first_error(start, t);
+        let first_error = |t: &str| recs.first_error(start.rule(), t);
         let lang = Lang {
             name: start.rule(),
             parse: &parse,
@@ -536,8 +525,8 @@ fn recovery_contract() {
 #[ignore = "a report, run by hand"]
 fn report() {
     // Datalit.
-    let rec = Recognizer::new(&dl::grammar(), "datalit", &dl::term);
-    let first_error = |t: &str| datalit_first_error(&rec, t);
+    let recs = dl::recognizers(&dl::grammar());
+    let first_error = |t: &str| recs.first_error(dl::START, t);
     let lang = Lang {
         name: "datalit",
         parse: &dl::parse_diags,
@@ -574,11 +563,10 @@ fn report() {
     shared.print("datalit literals read by datafun's parser");
 
     // Datafun.
-    let gs = df::grammars();
-    let recs = df::Recognizers::new(&gs);
+    let recs = df::recognizers(&df::grammar());
     for start in [Start::Script, Start::Module, Start::Interface] {
         let parse = move |t: &str| df::parse_diags(start, t);
-        let first_error = |t: &str| recs.first_error(start, t);
+        let first_error = |t: &str| recs.first_error(start.rule(), t);
         let lang = Lang {
             name: start.rule(),
             parse: &parse,

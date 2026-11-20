@@ -7,6 +7,7 @@
 ---
 
 - [Language Specification](botspec.md)
+- [Lexical Grammar (EBNF)](lexical-grammar.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datafun Grammar (EBNF)](datafun-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)

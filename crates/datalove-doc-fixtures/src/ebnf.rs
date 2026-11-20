@@ -113,6 +113,28 @@ impl Grammar {
         self.rules.iter_mut().find(|r| r.name == name)
     }
 
+    /// The terminals `e` matches, through the rules it names: the words an
+    /// exception's `b` excepts. A rule this grammar lacks names nothing.
+    pub fn words(&self, e: &Expr) -> BTreeSet<String> {
+        let mut words = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut stack = vec![e.C()];
+        while let Some(e) = stack.pop() {
+            e.visit(&mut |x| match x {
+                Expr::Lit(s) => {
+                    words.insert(s.C());
+                }
+                Expr::Ref(r) => {
+                    if seen.insert(r.C()) && let Some(rule) = self.get(r) {
+                        stack.push(rule.body.C());
+                    }
+                }
+                _ => {}
+            });
+        }
+        words
+    }
+
     /// The names of the rules reachable from `roots`, the roots included.
     pub fn reachable(&self, roots: &[&str]) -> BTreeSet<String> {
         let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -443,6 +465,8 @@ pub struct Recognizer<I: ?Sized> {
     prods: Vec<(u32, Vec<Sym<I>>)>,
     by_lhs: Vec<Vec<u32>>,
     start: u32,
+    /// The grammar's rule names, by nonterminal.
+    names: Vec<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -452,24 +476,60 @@ struct Item {
     origin: u32,
 }
 
+/// A set of small numbers, nonterminals here.
+#[derive(Default)]
+struct Bits(Vec<u64>);
+
+impl Bits {
+    /// Adds `n`, saying whether it was new.
+    fn insert(&mut self, n: u32) -> bool {
+        let (w, b) = ((n / 64) as usize, n % 64);
+        if self.0.len() <= w {
+            self.0.resize(w + 1, 0);
+        }
+        let new = self.0[w] & (1 << b) == 0;
+        self.0[w] |= 1 << b;
+        new
+    }
+
+    fn contains(&self, n: u32) -> bool {
+        self.0.get((n / 64) as usize).is_some_and(|w| w & (1 << (n % 64)) != 0)
+    }
+}
+
 #[derive(Default)]
 struct ItemSet {
     items: Vec<Item>,
     seen: LookupSet<Item>,
-    /// Items whose next symbol is the nonterminal, by nonterminal.
-    waiting: LookupMap<u32, Vec<Item>>,
+    /// Items whose next symbol is a nonterminal, with it.
+    waiting: Vec<(u32, Item)>,
     /// Nonterminals that have matched the empty string here.
-    empty: LookupSet<u32>,
+    empty: Bits,
+    /// Nonterminals predicted here, each once.
+    predicted: Bits,
+    /// Whether anything was predicted here: the input up to here is a prefix
+    /// of some string, even where no item is kept.
+    reached: bool,
 }
 
 impl ItemSet {
     fn add<I: ?Sized>(&mut self, item: Item, prods: &[(u32, Vec<Sym<I>>)]) {
         if self.seen.insert(item) {
-            self.items.push(item);
-            if let Some(Sym::Nt(n)) = prods[item.prod as usize].1.get(item.dot as usize) {
-                self.waiting.entry(*n).or_default().push(item);
-            }
+            self.push(item, prods);
         }
+    }
+
+    /// Keeps an item known to be new here.
+    fn push<I: ?Sized>(&mut self, item: Item, prods: &[(u32, Vec<Sym<I>>)]) {
+        self.items.push(item);
+        if let Some(Sym::Nt(n)) = prods[item.prod as usize].1.get(item.dot as usize) {
+            self.waiting.push((*n, item));
+        }
+    }
+
+    /// The items waiting here on nonterminal `n`.
+    fn waiters(&self, n: u32) -> Vec<Item> {
+        self.waiting.iter().filter(|(m, _)| *m == n).map(|(_, item)| *item).collect()
     }
 }
 
@@ -554,16 +614,38 @@ impl<I: ?Sized> Recognizer<I> {
             by_lhs[*lhs as usize].push(i as u32);
         }
         let start = *c.names.get(start).unwrap_or_else(|| panic!("no rule {start}"));
-        Recognizer { prods: c.prods, by_lhs, start }
+        Recognizer { prods: c.prods, by_lhs, start, names: g.rules.iter().map(|r| r.name.C()).collect() }
     }
 
     /// Whether the whole of `input`, `n` long, is the start rule.
     pub fn accepts(&self, input: &I, n: usize) -> bool {
+        self.prefixes(input, n).last() == Some(&n)
+    }
+
+    /// The lengths of the prefixes of `input`, `n` long, that are the start
+    /// rule, shortest first.
+    pub fn prefixes(&self, input: &I, n: usize) -> Vec<usize> {
         let sets = self.sets(input, n);
-        sets[n].items.iter().any(|item| {
-            let (lhs, rhs) = &self.prods[item.prod as usize];
-            *lhs == self.start && item.origin == 0 && item.dot as usize == rhs.len()
-        })
+        (0..sets.len())
+            .filter(|&i| {
+                sets[i].items.iter().any(|item| {
+                    let (lhs, rhs) = &self.prods[item.prod as usize];
+                    *lhs == self.start && item.origin == 0 && item.dot as usize == rhs.len()
+                })
+            })
+            .collect()
+    }
+
+    /// The longest prefix of `input`, `n` long, that is the start rule, and
+    /// the rules that match the whole of it, the start rule among them.
+    pub fn longest(&self, input: &I, n: usize) -> Option<(usize, BTreeSet<&str>)> {
+        let sets = self.sets(input, n);
+        let complete = |i: usize| {
+            sets[i].items.iter().filter(|item| item.origin == 0 && item.dot as usize == self.prods[item.prod as usize].1.len())
+        };
+        let k = (0..sets.len()).rev().find(|&i| complete(i).any(|item| self.prods[item.prod as usize].0 == self.start))?;
+        let names = complete(k).filter_map(|item| self.names.get(self.prods[item.prod as usize].0 as usize)).map(|s| s.as_str()).collect();
+        Some((k, names))
     }
 
     /// How much of `input`, `n` long, begins some string of the start rule:
@@ -571,54 +653,78 @@ impl<I: ?Sized> Recognizer<I> {
     /// first place any parser of the grammar could see an error, `n` if none.
     pub fn viable_prefix(&self, input: &I, n: usize) -> usize {
         let sets = self.sets(input, n);
-        (0..=n).rev().find(|&i| !sets[i].items.is_empty()).X()
+        (0..sets.len()).rev().find(|&i| sets[i].reached || !sets[i].items.is_empty()).X()
     }
 
+    /// The item sets, up to the furthest any item reaches: past it nothing
+    /// can be matched, so a long input with a short match costs little.
+    ///
+    /// Each nonterminal is predicted once in a set, so the items it predicts
+    /// are new there without asking, and one beginning with a terminal is
+    /// scanned at once rather than kept: those two were most of the cost.
     fn sets(&self, input: &I, n: usize) -> Vec<ItemSet> {
-        let mut sets: Vec<ItemSet> = (0..=n).map(|_| ItemSet::default()).collect();
-        for &p in &self.by_lhs[self.start as usize] {
-            sets[0].add(Item { prod: p, dot: 0, origin: 0 }, &self.prods);
-        }
+        let mut sets: Vec<ItemSet> = vec![ItemSet::default()];
         let mut lens = vec![];
-        for i in 0..=n {
+        self.predict(&mut sets, 0, self.start, input, n, &mut lens);
+        let mut i = 0;
+        while i < sets.len() {
             let mut k = 0;
             while k < sets[i].items.len() {
                 let item = sets[i].items[k];
                 k += 1;
                 let (lhs, rhs) = &self.prods[item.prod as usize];
-                let advanced = Item { dot: item.dot + 1, ..item };
                 match rhs.get(item.dot as usize) {
                     None => {
                         let origin = item.origin as usize;
                         if origin == i {
                             sets[i].empty.insert(*lhs);
                         }
-                        let waiters = sets[origin].waiting.get(lhs).cloned().unwrap_or_default();
+                        let waiters = sets[origin].waiters(*lhs);
                         for w in waiters {
                             sets[i].add(Item { dot: w.dot + 1, ..w }, &self.prods);
                         }
                     }
                     Some(Sym::Nt(m)) => {
-                        for &p in &self.by_lhs[*m as usize] {
-                            sets[i].add(Item { prod: p, dot: 0, origin: i as u32 }, &self.prods);
-                        }
-                        if sets[i].empty.contains(m) {
-                            sets[i].add(advanced, &self.prods);
+                        self.predict(&mut sets, i, *m, input, n, &mut lens);
+                        if sets[i].empty.contains(*m) {
+                            sets[i].add(Item { dot: item.dot + 1, ..item }, &self.prods);
                         }
                     }
-                    Some(Sym::T(term)) => {
-                        lens.clear();
-                        term(input, i, &mut lens);
-                        for &len in &lens {
-                            if i + len <= n {
-                                sets[i + len].add(advanced, &self.prods);
-                            }
-                        }
-                    }
+                    Some(Sym::T(term)) => self.scan(&mut sets, i, item, term, input, n, &mut lens),
                 }
             }
+            i += 1;
         }
         sets
+    }
+
+    fn predict(&self, sets: &mut Vec<ItemSet>, i: usize, m: u32, input: &I, n: usize, lens: &mut Vec<usize>) {
+        sets[i].reached = true;
+        if !sets[i].predicted.insert(m) {
+            return;
+        }
+        for &p in &self.by_lhs[m as usize] {
+            let item = Item { prod: p, dot: 0, origin: i as u32 };
+            match self.prods[p as usize].1.first() {
+                Some(Sym::T(term)) => self.scan(sets, i, item, term, input, n, lens),
+                _ => sets[i].push(item, &self.prods),
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn scan(&self, sets: &mut Vec<ItemSet>, i: usize, item: Item, term: &Term<I>, input: &I, n: usize, lens: &mut Vec<usize>) {
+        lens.clear();
+        term(input, i, lens);
+        for k in 0..lens.len() {
+            let to = i + lens[k];
+            if to <= n {
+                while sets.len() <= to {
+                    sets.push(ItemSet::default());
+                }
+                sets[to].add(Item { dot: item.dot + 1, ..item }, &self.prods);
+            }
+        }
     }
 }
 
@@ -707,7 +813,22 @@ impl<'g> Generator<'g> {
                     }
                 }
             }
-            Expr::Except(a, _) => self.emit(a, depth, rng, out),
+            Expr::Except(a, b) => {
+                // Draw `a` again while it is one of the words `b` names.
+                let words = self.grammar.words(b);
+                let mark = out.len();
+                for _ in 0..20 {
+                    out.truncate(mark);
+                    self.emit(a, depth, rng, out);
+                    let text: String = out[mark..]
+                        .iter()
+                        .filter_map(|p| if let Piece::Text(t) = p { Some(t.as_str()) } else { None })
+                        .collect();
+                    if !words.contains(&text) {
+                        break;
+                    }
+                }
+            }
             Expr::Glue(x) => {
                 out.push(Piece::Mark("~".S()));
                 if let Some(x) = x {

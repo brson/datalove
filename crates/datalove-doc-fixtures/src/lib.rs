@@ -8,4 +8,6 @@ pub mod datafun_grammar;
 pub mod datalit_grammar;
 pub mod ebnf;
 pub mod grammar_check;
+pub mod lexical;
 pub mod step_tables;
+pub mod token_grammar;
