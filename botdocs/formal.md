@@ -767,7 +767,7 @@ Four things are proved of it:
   signatures makes 164 of a thousand worlds differ, and marking every const
   as holding a value 219.
 - **What is moved is modelled, run, and held to the Rust, but not yet
-  proved** (`FunMove.lean`, of O001, O003, O007, O008, O014 and O016, with
+  proved** (`FunMove.lean`, of O001, O003, O007, O008, O014, O015 and O016, with
   O005, O006 and O009 as `FunInit.lean` has them). A read of a variable
   whose type is not copy, where the ownership analysis has the read take
   the value rather than borrow it, moves it: a `let`'s or `set`'s value, an
@@ -789,7 +789,12 @@ Four things are proved of it:
   analysis; the run lends every key, so there the analysis moves what the
   run does not, which only refuses more. Reading a moved variable is O001,
   moving a `ref`, `mut` or `out` parameter or a `for`'s element O003, and
-  a const O016. Where branches meet, whether a variable was moved has to
+  a const O016. A `for`'s body may not change what it walks (O015): the
+  variable its collection is a place in, the binding as it was before the
+  loop's names shadow it, is marked walked (`MVar.walked`), and moving it,
+  passing it or a part of it `mut` or `out`, or a `set` to it or a part of
+  it is refused, the `set` before its value is looked at, as the Rust's
+  `analyze_set` does, and a move before O003. Where branches meet, whether a variable was moved has to
   agree, where whether it was given a value need not: an `if`'s or
   `match`'s branches that complete (O008), what is moved after being what
   the first of them left, or the first branch where none completes, as the
@@ -802,7 +807,10 @@ Four things are proved of it:
   `ownership_fuzz_tests` runs too, with three operands in ten naming
   whatever they like, and on a corpus of hand-written bodies in the shapes
   the generator makes rarely: loop exits, a condition that moves, branches
-  that both return, keys, consts and borrowed bindings. It also runs each
+  that both return, keys, consts and borrowed bindings, and a walked
+  collection changed through a field, shadowed, walked twice and changed
+  after its loop. Over ten thousand seeds, two hundred O015, none differ;
+  not marking what is walked makes the corpus's seven differ. It also runs each
   script with `runScriptMoves` and requires that where the analysis lets it
   through, and the Rust reports neither O010 nor O017, which see that no
   argument a call writes back through is moved before the call takes it,

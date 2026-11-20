@@ -2152,6 +2152,10 @@ const MOVES_PRELUDE: &str = "fun take(x: string)\nend fun\n\
 fun look(ref x: string): int\n  ret 1\nend fun\n\
 fun maybe(c: bool): ?string\n  ret none\nend fun\n\
 fun pass(x: string): bool\n  ret true\nend fun\n\
+fun grow(mut xs: [string])\nend fun\n\
+fun bump(mut n: int)\nend fun\n\
+fun drain(xs: [string])\nend fun\n\
+type Q = {xs: [string], n: int}\n\
 const ka: string = \"ka\"\n";
 
 /// Bodies written by hand for `moves_agree`, of `go(c, s, ref r, mut u, l)`,
@@ -2173,6 +2177,18 @@ const MOVES_CORPUS: &[&str] = &[
     "  for w in ref l\n    call take(w)\n  end for\n",
     "  call take(ka)\n",
     "  const kb: string = ka\n  debuglog kb\n",
+    // What a `for` walks, frozen for its body.
+    "  for w in ref l\n    call drain(l)\n  end for\n",
+    "  for w in ref l\n    call grow(mut l)\n  end for\n",
+    "  var m: [string] = [\"a\"]\n  for w in ref m\n    set m = [\"b\"]\n  end for\n",
+    "  var m: [string] = [\"a\"]\n  for w in ref m\n    set m[0]? = \"b\"\n  end for\n",
+    "  var q: Q = {xs = [\"a\"], n = 1}\n  for w in ref q.xs\n    set q.n = 2\n  end for\n",
+    "  var q: Q = {xs = [\"a\"], n = 1}\n  for w in ref q.xs\n    call bump(mut q.n)\n  end for\n",
+    "  for l in ref l\n    call take(l)\n  end for\n",
+    "  for w in ref l\n    let l = [\"b\"]\n    call drain(l)\n  end for\n",
+    "  var m: [string] = [\"a\"]\n  for w in ref m\n    debuglog w\n  end for\n  call grow(mut m)\n  call drain(m)\n",
+    "  for w in ref l\n    for v in ref l\n      debuglog v\n    end for\n    call grow(mut l)\n  end for\n",
+    "  for w in ref l\n    debuglog l\n    let n = look(ref w)\n  end for\n",
     // Branches.
     "  if c\n    call take(x)\n  end if\n",
     "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
@@ -2206,7 +2222,7 @@ const MOVES_CORPUS: &[&str] = &[
 
 /// The ownership codes the formal model's move analysis decides
 /// (`formal/Datalove/FunMove.lean`), with what holds a value.
-const MOVE_CODES: [&str; 9] = ["O001", "O003", "O005", "O006", "O007", "O008", "O009", "O014", "O016"];
+const MOVE_CODES: [&str; 10] = ["O001", "O003", "O005", "O006", "O007", "O008", "O009", "O014", "O015", "O016"];
 
 /// The move analysis (`formal/Datalove/FunMove.lean`) held to the Rust's
 /// ownership pass, on `datalove_worldgen::moves_script`'s functions with

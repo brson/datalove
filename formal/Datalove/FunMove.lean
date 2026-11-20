@@ -1,7 +1,7 @@
 import Datalove.FunInit
 
 /-!
-# What is moved (O001, O003, O007, O008, O014, O016)
+# What is moved (O001, O003, O007, O008, O014, O015, O016)
 
 Reading a variable whose type is not copy, where the ownership analysis has
 the read take the value rather than borrow it (`Ctx.lends` false: a `let`'s
@@ -13,7 +13,10 @@ borrowed binding -- a `ref`, `mut` or `out` parameter, or a `for`'s element
 (O003) -- or a const (O016), or whose ways to one point disagree about
 whether a variable was moved: the branches of an `if` or `match` that
 complete (O008), a loop's ways out (O014), or a loop body's way back to its
-start, which may not have moved what it was given (O007). This is that
+start, which may not have moved what it was given (O007). Nor may a
+`for`'s body change what it walks, the variable its collection is a place
+in (O015): move it, pass it or a part of it `mut` or `out`, or `set` it or
+a part of it, since the walk points into it. This is that
 analysis, as `datalove-datafun-ownership` makes it with its `BindingState`,
 beside what holds a value (`FunInit.lean`), which it takes in: a variable
 declared with no value holds nothing until written (O005), and an `out`
@@ -59,6 +62,9 @@ structure MVar where
   back : Bool
   /-- A borrowed binding, which a move may not take (O003). -/
   lent : Bool
+  /-- The collection a `for` walks, or the variable it is a part of, frozen
+  for the loop's body (O015). -/
+  walked : Bool := false
 
 /-- The variables in scope, innermost first, as the run keeps them. -/
 abbrev MSt := List MVar
@@ -80,6 +86,12 @@ def MSt.take (x : String) : MSt → MSt := MSt.update (fun v => { v with live :=
 /-- Names bound in order, each innermost of those before it. -/
 def MSt.bind (σ : MSt) (xs : List String) (init lent : Bool) : MSt :=
   xs.foldl (fun σ x => { name := x, init, live := true, back := false, lent } :: σ) σ
+
+/-- `x` walked by a `for`. -/
+def MSt.walk (x : String) : MSt → MSt := MSt.update (fun v => { v with walked := true }) x
+
+/-- Whether `x` is walked by a `for`. -/
+def MSt.isWalked (σ : MSt) (x : String) : Bool := (σ.find x).any (·.walked)
 
 /-- `τ`, of a scope inside `σ`'s, back to `σ`'s. -/
 def MSt.back (σ τ : MSt) : MSt := τ.drop (τ.length - σ.length)
@@ -106,6 +118,10 @@ def MSt.keepsLive (σ τ : MSt) : Bool :=
 
 abbrev MoveM := Except Lit.Code
 
+/-- Refuse a change to what a `for` walks (O015). -/
+def unwalkedM (σ : MSt) (x : String) : MoveM Unit :=
+  if σ.isWalked x then throw "O015" else pure ()
+
 /-- What the ways in `L` agree on, `code` where they disagree, or `σ` with
 none. -/
 def joinAll (code : Lit.Code) (σ : MSt) : List MSt → MoveM MSt
@@ -122,7 +138,7 @@ def readM (σ : MSt) (x : String) : MoveM MSt :=
   | none => pure σ
 
 /-- A read of `x` that takes its value, where its type is not copy: not a
-const (O016), nor borrowed (O003). -/
+const (O016), nor what a `for` walks (O015), nor borrowed (O003). -/
 def moveM (Γ : Ctx) (σ : MSt) (x : String) : MoveM MSt := do
   match Γ.lookup x with
   | some (t, .const_) => if t.isCopy then readM σ x else throw "O016"
@@ -130,7 +146,7 @@ def moveM (Γ : Ctx) (σ : MSt) (x : String) : MoveM MSt := do
     let σ ← readM σ x
     if t.isCopy then pure σ
     else match σ.find x with
-      | some v => if v.lent then throw "O003" else pure (σ.take x)
+      | some v => if v.walked then throw "O015" else if v.lent then throw "O003" else pure (σ.take x)
       | none => pure σ
   | none => readM σ x
 
@@ -226,8 +242,8 @@ def mPlace (sigs : List (String × Sig)) (Γ : Ctx) : MSt → Expr → Bool → 
 def mArgs (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Option Mode × Expr) → List Mode → MoveM MSt
   | σ, (_, e) :: args, m :: ms => do
     let σ ← match placeOf e with
-      | some _ =>
-        if m == .mut || m == .out then mPlace sigs Γ σ e (m == .mut)
+      | some (x, _) =>
+        if m == .mut || m == .out then unwalkedM σ x >>= fun _ => mPlace sigs Γ σ e (m == .mut)
         else mE sigs Γ (m != .in_) σ e
       | none => if m == .out then pure σ else mE sigs Γ (m != .in_) σ e
     mArgs sigs Γ σ args ms
@@ -272,10 +288,11 @@ def mTarget (σ : MSt) (x : String) (steps : List Step) : Option BinOp → MoveM
       | some v => if !v.init then throw "O009" else if !v.live then throw "O001" else pure σ
       | none => pure σ
 
-/-- `set x … = e` or `set x … ⊕= e`: the value, then the keys, then the
-place. -/
+/-- `set x … = e` or `set x … ⊕= e`: not to what a `for` walks (O015),
+then the value, then the keys, then the place. -/
 def mSet (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (x : String) (steps : List Step)
     (op : Option BinOp) (e : Expr) : MoveM MSt :=
+  unwalkedM σ x >>= fun _ =>
   mE sigs Γ op.isSome σ e >>= fun σ =>
   mKeys sigs Γ σ steps >>= fun σ =>
   mTarget σ x steps op >>= fun σ =>
@@ -402,7 +419,12 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
     | .for_ names coll body =>
       mE sigs Γ true σ coll >>= fun σc =>
-      mBlock sigs env n (forCtx env n Γ names coll) (σc.bind names true true) body >>= fun r =>
+      -- What the walk freezes, found before the loop's names shadow it. The
+      -- loop is left with what `σc` held, so no longer walked.
+      let σw := match placeOf coll with
+        | some (x, _) => σc.walk x
+        | none => σc
+      mBlock sigs env n (forCtx env n Γ names coll) (σw.bind names true true) body >>= fun r =>
       loopEnd σc σc true body r >>= fun σ' =>
       pure (σ', [], [])
 
