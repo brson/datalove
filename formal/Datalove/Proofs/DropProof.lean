@@ -17,6 +17,11 @@ the function's walk ends with.
 
 namespace Datalove.Fun
 
+/-- A path that does not go on to what follows. -/
+def POut.notNorm : POut → Prop
+  | .norm _ => False
+  | _ => True
+
 section
 variable (sigs : List (String × Sig)) (env : InferEnv)
 
@@ -136,9 +141,177 @@ inductive PStmt : Nat → Ctx → MSt → Nat → Stmt → DSt → List Bool →
       exprLeaves e = true → Between (delta σ σ1 π) π πk →
       PStmt (n + 1) Γ σ base (.const_ x t e) st π .exit [tryEv st1 st2 σ πk]
 
+  | if_exit {n Γ σ base c tB eB t e st π id st1 σc st2 πk} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ c (mE sigs Γ false σ c)).run st1 = .ok (σc, st2) →
+      exprLeaves c = true → Between (delta σ σc π) π πk →
+      PStmt (n + 1) Γ σ base (.if_ c tB eB t e) st π .exit [tryEv st1 st2 σ πk]
+  | if_then {n Γ σ base c tB eB t e st π id st1 σc st2 out evs} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ c (mE sigs Γ false σ c)).run st1 = .ok (σc, st2) →
+      PBranch n (condCtx env n Γ c tB false) σc tB.toList base t id "then_branch_exit" none st2
+        (delta σ σc π) out evs →
+      PStmt (n + 1) Γ σ base (.if_ c tB eB t e) st π out evs
+  | if_else {n Γ σ base c tB eB t eb st π id st1 σc st2 rt st3 out evs} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ c (mE sigs Γ false σ c)).run st1 = .ok (σc, st2) →
+      (mBranch (condCtx env n Γ c tB false) σc tB.toList id "then_branch_exit" none fun σb =>
+        mBlock sigs env n (condCtx env n Γ c tB false) σb base t).run st2 = .ok (rt, st3) →
+      PBranch n (condCtx env n Γ c eB true) σc eB.toList base eb id "else_branch_exit" none st3
+        (delta σ σc π) out evs →
+      PStmt (n + 1) Γ σ base (.if_ c tB eB t (some eb)) st π out evs
+  | if_skip {n Γ σ base c tB eB t st π id st1 σc st2} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ c (mE sigs Γ false σ c)).run st1 = .ok (σc, st2) →
+      PStmt (n + 1) Γ σ base (.if_ c tB eB t none) st π (.norm (delta σ σc π)) []
+  | match_exit {n Γ σ base e cases dflt st π id st1 σc st2 πk} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ e (mE sigs Γ false σ e)).run st1 = .ok (σc, st2) →
+      exprLeaves e = true → Between (delta σ σc π) π πk →
+      PStmt (n + 1) Γ σ base (.match_ e cases dflt) st π .exit [tryEv st1 st2 σ πk]
+  | match_arm {n Γ σ base e cases dflt st π id st1 σc st2 out evs} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ e (mE sigs Γ false σ e)).run st1 = .ok (σc, st2) →
+      PCases n Γ (matchVariants env n Γ e) σc base id 0 cases st2 (delta σ σc π) out evs →
+      PStmt (n + 1) Γ σ base (.match_ e cases dflt) st π out evs
+  | match_dflt {n Γ σ base e cases db st π id st1 σc st2 r st3 out evs} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ e (mE sigs Γ false σ e)).run st1 = .ok (σc, st2) →
+      (mCases sigs env n Γ (matchVariants env n Γ e) σc base id 0 cases).run st2 = .ok (r, st3) →
+      PBranch n Γ σc [] base db id "match_arm_exit" (some cases.length) st3 (delta σ σc π) out evs →
+      PStmt (n + 1) Γ σ base (.match_ e cases (some db)) st π out evs
+
+/-- The paths through a block: its statements in order, until one does not
+go on. -/
+inductive PBlock : Nat → Ctx → MSt → Nat → List Stmt → DSt → List Bool → POut → List Ev → Prop where
+  | nil {n Γ σ base st π} : PBlock (n + 1) Γ σ base [] st π (.norm π) []
+  | cons_norm {n Γ σ base s ss st π π1 evs1 r1 st1 out evs2} :
+      PStmt n Γ σ base s st π (.norm π1) evs1 →
+      (mStmt sigs env n Γ σ base s).run st = .ok (r1, st1) →
+      PBlock n ((checkStmtF env n Γ s).run #[]).1 r1.1 base ss st1 π1 out evs2 →
+      PBlock (n + 1) Γ σ base (s :: ss) st π out (evs1 ++ evs2)
+  | cons_stop {n Γ σ base s ss st π out evs} :
+      PStmt n Γ σ base s st π out evs → out.notNorm →
+      PBlock (n + 1) Γ σ base (s :: ss) st π out evs
+
+/-- The paths through a branch, an arm or a default (`mBranch`): its
+bindings, its block, and, where the block goes on, the end of its scope. -/
+inductive PBranch : Nat → Ctx → MSt → List String → Nat → List Stmt → Nat → String → Option Nat → DSt →
+    List Bool → POut → List Ev → Prop where
+  | norm {n Γb σc binds base body id kind arm st π σb st1 rb st2 ds st3 πe evs} :
+      (bindM Γb σc binds true).run st = .ok (σb, st1) →
+      (mBlock sigs env n Γb σb base body).run st1 = .ok (rb, st2) →
+      (ownedIn (scopeOwn σc rb.1)).run st2 = .ok (ds, st2) →
+      (record kind id arm ds).run st2 = .ok ((), st3) →
+      PBlock n Γb σb base body st1 (newFlags σc σb ++ π) (.norm πe) evs →
+      PBranch n Γb σc binds base body id kind arm st π (.norm (πe.drop (πe.length - σc.length)))
+        (evs ++ [recEv st2 st3 (scopeOwn σc rb.1) (πe.take (πe.length - σc.length))])
+  | other {n Γb σc binds base body id kind arm st π σb st1 out evs} :
+      (bindM Γb σc binds true).run st = .ok (σb, st1) →
+      PBlock n Γb σb base body st1 (newFlags σc σb ++ π) out evs → out.notNorm →
+      PBranch n Γb σc binds base body id kind arm st π out evs
+
+/-- The paths through a `match`'s cases: an arm, or past it to a later
+one. -/
+inductive PCases : Nat → Ctx → List (String × Option Ty) → MSt → Nat → Nat → Nat → List Case → DSt →
+    List Bool → POut → List Ev → Prop where
+  | here_atom {n Γ vs σ base id i a b cs st π out evs} :
+      PBranch n Γ σ [] base b id "match_arm_exit" (some i) st π out evs →
+      PCases (n + 1) Γ vs σ base id i (.atom a b :: cs) st π out evs
+  | here_term {n Γ vs σ base id i a x b cs st π out evs} :
+      PBranch n (termCtx Γ vs a x) σ [x] base b id "match_arm_exit" (some i) st π out evs →
+      PCases (n + 1) Γ vs σ base id i (.term a x b :: cs) st π out evs
+  | later_atom {n Γ vs σ base id i a b cs st π rb st1 out evs} :
+      (mBranch Γ σ [] id "match_arm_exit" (some i) fun σb => mBlock sigs env n Γ σb base b).run st
+        = .ok (rb, st1) →
+      PCases n Γ vs σ base id (i + 1) cs st1 π out evs →
+      PCases (n + 1) Γ vs σ base id i (.atom a b :: cs) st π out evs
+  | later_term {n Γ vs σ base id i a x b cs st π rb st1 out evs} :
+      (mBranch (termCtx Γ vs a x) σ [x] id "match_arm_exit" (some i) fun σb =>
+        mBlock sigs env n (termCtx Γ vs a x) σb base b).run st = .ok (rb, st1) →
+      PCases n Γ vs σ base id (i + 1) cs st1 π out evs →
+      PCases (n + 1) Γ vs σ base id i (.term a x b :: cs) st π out evs
+
 end
 
 end
+
+section
+variable {sigs : List (String × Sig)} {env : InferEnv}
+set_option maxHeartbeats 2000000
+
+mutual
+
+/-- A path that goes on past a statement: the statement completes, as the
+analysis reads it syntactically (`completesS`). -/
+theorem pstmt_completes {n Γ σ base s st π π' evs} (hp : PStmt sigs env n Γ σ base s st π (.norm π') evs) :
+    completesS s = true := by
+  cases hp with
+  | @if_then _ _ _ _ c tB eB t e _ _ _ _ _ _ _ _ _ _ hb =>
+    have := pbranch_completes hb
+    cases e with
+    | none => simp [completesS]
+    | some eb => simp [completesS, this]
+  | if_else _ _ _ hb => have := pbranch_completes hb; simp [completesS, this]
+  | if_skip => simp [completesS]
+  | match_arm _ _ hc => have := pcases_completes hc; simp [completesS, this]
+  | match_dflt _ _ _ hb => have := pbranch_completes hb; simp [completesS, completesElse, this]
+  | let_fin => simp [completesS]
+  | var_fin => simp [completesS]
+  | var_bare => simp [completesS]
+  | var_none => simp [completesS]
+  | fun_ => simp [completesS]
+  | type_ => simp [completesS]
+  | set_fin => simp [completesS]
+  | debuglog_fin => simp [completesS]
+  | call_fin => simp [completesS]
+  | const_fin => simp [completesS]
+
+theorem pblock_completes {n Γ σ base ss st π π' evs} (hp : PBlock sigs env n Γ σ base ss st π (.norm π') evs) :
+    completes ss = true := by
+  cases hp with
+  | nil => rfl
+  | cons_norm h1 _ h2 => simp [completes, pstmt_completes h1, pblock_completes h2]
+  | cons_stop _ hn => exact hn.elim
+
+theorem pbranch_completes {n Γb σc binds base body id kind arm st π π' evs}
+    (hp : PBranch sigs env n Γb σc binds base body id kind arm st π (.norm π') evs) : completes body = true := by
+  cases hp with
+  | norm _ _ _ _ hb => exact pblock_completes hb
+  | other _ _ hn => exact hn.elim
+
+theorem pcases_completes {n Γ vs σ base id i cs st π π' evs}
+    (hp : PCases sigs env n Γ vs σ base id i cs st π (.norm π') evs) : casesComplete cs = true := by
+  cases hp with
+  | here_atom hb => simp [casesComplete, pbranch_completes hb]
+  | here_term hb => simp [casesComplete, pbranch_completes hb]
+  | later_atom _ hc => simp [casesComplete, pcases_completes hc]
+  | later_term _ hc => simp [casesComplete, pcases_completes hc]
+
+end
+
+end
+
+theorem MSt.Ids.toSame : ∀ {a b : MSt}, MSt.Ids a b → a.Same b
+  | [], [], .nil => .nil
+  | _ :: _, _ :: _, .cons u o t => .cons u o (MSt.Ids.toSame t)
+
+theorem mem_take_mono {α} {v : α} : ∀ {l : List α} {k m : Nat}, v ∈ List.take k l → k ≤ m → v ∈ List.take m l
+  | [], _, _, h, _ => by simp at h
+  | x :: l, k, m, h, hkm => by
+    cases k with
+    | zero => simp at h
+    | succ k =>
+      cases m with
+      | zero => omega
+      | succ m =>
+        simp only [List.take_succ_cons, List.mem_cons] at h ⊢
+        rcases h with h | h
+        · exact .inl h
+        · exact .inr (mem_take_mono h (by omega))
+
+theorem Inv.toMade {F st : DSt} {U : Nat} {H : Nat → Prop} {base : Nat} {σ : MSt} {π : List Bool}
+    (h : Inv F st U H base σ π) : Made σ st := fun v hv ho => h.lt v hv ho
 
 /-- What a path through a statement ends with, as the walk's result there
 says: on to what follows, with what it carries; at a `break` or a
@@ -146,6 +319,16 @@ says: on to what follows, with what it carries; at a `break` or a
 function. -/
 def OutOk (F st : DSt) (U : Nat) (H : Nat → Prop) (base : Nat) (r : MOut) : POut → Prop
   | .norm π => Inv F st U H base r.1 π
+  | .brk π => ∃ τ, τ ∈ r.2.1 ∧ Inv F st U H base τ π
+  | .cont π => ∃ τ, τ ∈ r.2.2 ∧ Inv F st U H base τ π
+  | .exit => True
+
+/-- What a path through a `match`'s cases ends with: on to what follows,
+with what it carries at an arm that completes; at a `break` or a
+`continue`; or out of the function. -/
+def CasesOk (F st : DSt) (U : Nat) (H : Nat → Prop) (base : Nat)
+    (r : List (MSt × Bool) × List MSt × List MSt) : POut → Prop
+  | .norm π => ∃ a, a ∈ r.1 ∧ a.2 = true ∧ Inv F st U H base a.1 π
   | .brk π => ∃ τ, τ ∈ r.2.1 ∧ Inv F st U H base τ π
   | .cont π => ∃ τ, τ ∈ r.2.2 ∧ Inv F st U H base τ π
   | .exit => True
@@ -185,6 +368,8 @@ theorem mSet_decomp {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' 
 
 section
 variable (sigs : List (String × Sig)) (env : InferEnv)
+
+mutual
 
 theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DSt} {π : List Bool} {out : POut}
     {evs : List Ev} (hp : PStmt sigs env n Γ σ base s st π out evs) {r : MOut} {st' F : DSt} {U : Nat}
@@ -622,6 +807,529 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     rw [u']
     exact inv.madeBefore (x1.trans (x2.trans ((SchedGrows.record _ _ _ _ _ _ _ _ x2.wf hr).trans hF))) w' hw'
       (o' ▸ ho)
+  | @if_exit _ _ _ _ c tB eB t e _ _ id st1 σc st2 πk hid h2 hl hb =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ c)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ c) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨rt, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨x3, _⟩ := mBranch_made x2.wf invc.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h3
+    have it := (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h3).1
+    obtain ⟨re, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ MSt.Ids (σc.back re.1) σc := by
+      cases e with
+      | some eb =>
+        dsimp only at h4
+        exact ⟨(mBranch_made x3.wf (invc.toMade.ext x3)
+          (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h4).1,
+          (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h4).1⟩
+      | none =>
+        cases h4; exact ⟨SchedExt.refl x3.wf, by rw [back_eq_sfx, sfx_self]; exact MSt.Ids.refl _⟩
+    obtain ⟨x4, ie⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have te : (σc.back rt.1).Same (σc.back re.1) := (it.trans ie.symm).toSame
+    have jl := joinIf_live h5 te
+    obtain ⟨e5, -⟩ := joinIf_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    obtain ⟨rfl, _⟩ := stmtId_eq hid
+    refine ⟨fun ev hev => ?_, trivial⟩
+    simp only [List.mem_singleton] at hev
+    subst hev
+    unfold leaving at h2
+    rw [hl] at h2
+    have xF := x3.trans (x4.trans hF)
+    exact tryEv_good (mE_shr sigs Γ false σ c) h2 xF x1.wf inv.rel x1.held
+      (inv.madeBefore (x1.trans (x2.trans xF))) hb
+  | @if_then _ _ _ _ c tB eB t e _ _ id st1 σc st2 out evs hid h2 hb =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ c)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ c) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨rt, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨x3, _⟩ := mBranch_made x2.wf invc.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h3
+    have it := (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h3).1
+    obtain ⟨re, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ MSt.Ids (σc.back re.1) σc := by
+      cases e with
+      | some eb =>
+        dsimp only at h4
+        exact ⟨(mBranch_made x3.wf (invc.toMade.ext x3)
+          (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h4).1,
+          (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h4).1⟩
+      | none =>
+        cases h4; exact ⟨SchedExt.refl x3.wf, by rw [back_eq_sfx, sfx_self]; exact MSt.Ids.refl _⟩
+    obtain ⟨x4, ie⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have te : (σc.back rt.1).Same (σc.back re.1) := (it.trans ie.symm).toSame
+    have jl := joinIf_live h5 te
+    obtain ⟨e5, -⟩ := joinIf_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    obtain ⟨g, o⟩ := branch_ok hb h3 x2.wf invc (x4.trans hF)
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => exact (o.sameLive (jl.1 (pbranch_completes hb))).ext x4
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x4⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x4⟩
+    | exit => trivial
+  | @if_else _ _ _ _ c tB eB t eb _ _ id st1 σc st2 rtc st3c out evs hid h2 hrt hb =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ c)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ c) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨rt, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨erl, est⟩ := Prod.mk.inj (MoveM.det hrt h3)
+    subst rtc; subst st3c
+    obtain ⟨x3, _⟩ := mBranch_made x2.wf invc.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h3
+    have it := (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h3).1
+    obtain ⟨re, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ MSt.Ids (σc.back re.1) σc := by
+      try dsimp only at h4
+      exact ⟨(mBranch_made x3.wf (invc.toMade.ext x3)
+        (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h4).1,
+        (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h4).1⟩
+    obtain ⟨x4, ie⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have te : (σc.back rt.1).Same (σc.back re.1) := (it.trans ie.symm).toSame
+    have jl := joinIf_live h5 te
+    obtain ⟨e5, -⟩ := joinIf_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    try dsimp only at h4
+    obtain ⟨g, o⟩ := branch_ok hb h4 x3.wf (invc.ext x3) hF
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => exact o.sameLive (jl.2 (by simpa [Option.all] using pbranch_completes hb))
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | exit => trivial
+  | @if_skip _ _ _ _ c tB eB t _ _ id st1 σc st2 hid h2 =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ c)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ c) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨rt, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨x3, _⟩ := mBranch_made x2.wf invc.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) h3
+    have it := (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') h3).1
+    obtain ⟨re, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ MSt.Ids (σc.back re.1) σc := by
+      cases h4; exact ⟨SchedExt.refl x3.wf, by rw [back_eq_sfx, sfx_self]; exact MSt.Ids.refl _⟩
+    obtain ⟨x4, ie⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have te : (σc.back rt.1).Same (σc.back re.1) := (it.trans ie.symm).toSame
+    have jl := joinIf_live h5 te
+    obtain ⟨e5, -⟩ := joinIf_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    cases h4
+    refine ⟨(fun _ h => by cases h), ?_⟩
+    have s := jl.2 (by simp [Option.all])
+    rw [back_eq_sfx, sfx_self] at s
+    exact (invc.ext x3).sameLive s
+  | @match_exit _ _ _ _ e cases dflt _ _ id st1 σc st2 πk hid h2 hl hb =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ e)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ e) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨r, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨x3, _⟩ := (walk_ext sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ x2.wf invc.toMade h3
+    have ar := ((walk_shape sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ hbc h3).1
+    obtain ⟨d, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ (∀ a, a ∈ d.1 → MSt.Ids a.1 σc) := by
+      cases dflt with
+      | some db =>
+        dsimp only at h4
+        obtain ⟨rd, s1, g1, g⟩ := MoveM.bind_ok h4
+        cases g
+        refine ⟨(mBranch_made x3.wf (invc.toMade.ext x3)
+          (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) g1).1, fun a ha => ?_⟩
+        cases ha with
+        | head => exact (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') g1).1
+        | tail _ h => cases h
+      | none => cases h4; exact ⟨SchedExt.refl x3.wf, fun _ h => by cases h⟩
+    obtain ⟨x4, ad⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have arms : ∀ a b, a ∈ r.1 ++ d.1 → b ∈ r.1 ++ d.1 → a.1.Same b.1 := by
+      have all : ∀ a, a ∈ r.1 ++ d.1 → MSt.Ids a.1 σc := fun a ha => by
+        rcases List.mem_append.mp ha with ha | ha
+        · exact ar a ha
+        · exact ad a ha
+      intro a b ha hb'
+      exact ((all a ha).trans (all b hb').symm).toSame
+    have jl := joinMatch_live h5 arms
+    obtain ⟨e5, -⟩ := joinMatch_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    obtain ⟨rfl, _⟩ := stmtId_eq hid
+    refine ⟨fun ev hev => ?_, trivial⟩
+    simp only [List.mem_singleton] at hev
+    subst hev
+    unfold leaving at h2
+    rw [hl] at h2
+    have xF := x3.trans (x4.trans hF)
+    exact tryEv_good (mE_shr sigs Γ false σ e) h2 xF x1.wf inv.rel x1.held
+      (inv.madeBefore (x1.trans (x2.trans xF))) hb
+  | @match_arm _ _ _ _ e cases dflt _ _ id st1 σc st2 out evs hid h2 hc =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ e)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ e) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨r, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨x3, _⟩ := (walk_ext sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ x2.wf invc.toMade h3
+    have ar := ((walk_shape sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ hbc h3).1
+    obtain ⟨d, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ (∀ a, a ∈ d.1 → MSt.Ids a.1 σc) := by
+      cases dflt with
+      | some db =>
+        dsimp only at h4
+        obtain ⟨rd, s1, g1, g⟩ := MoveM.bind_ok h4
+        cases g
+        refine ⟨(mBranch_made x3.wf (invc.toMade.ext x3)
+          (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) g1).1, fun a ha => ?_⟩
+        cases ha with
+        | head => exact (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') g1).1
+        | tail _ h => cases h
+      | none => cases h4; exact ⟨SchedExt.refl x3.wf, fun _ h => by cases h⟩
+    obtain ⟨x4, ad⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have arms : ∀ a b, a ∈ r.1 ++ d.1 → b ∈ r.1 ++ d.1 → a.1.Same b.1 := by
+      have all : ∀ a, a ∈ r.1 ++ d.1 → MSt.Ids a.1 σc := fun a ha => by
+        rcases List.mem_append.mp ha with ha | ha
+        · exact ar a ha
+        · exact ad a ha
+      intro a b ha hb'
+      exact ((all a ha).trans (all b hb').symm).toSame
+    have jl := joinMatch_live h5 arms
+    obtain ⟨e5, -⟩ := joinMatch_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    obtain ⟨g, o⟩ := cases_ok hc h3 x2.wf invc (x4.trans hF)
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ =>
+      obtain ⟨a, ha, hca, ia⟩ := o
+      exact (ia.sameLive (jl a (List.mem_append_left _ ha) hca)).ext x4
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x4⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x4⟩
+    | exit => trivial
+  | @match_dflt _ _ _ _ e cases db _ _ id st1 σc st2 rc st3c out evs hid h2 hr hb =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ e)) _ _ _ x1.wf h2
+    have b2 := leavingIf_below (mE_shr sigs Γ false σ e) h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below b2)
+    have hbc : base ≤ σc.length := invc.base
+    have blk : ∀ {m : Nat} {Γ' σb st1 r st2 body}, base ≤ σb.length →
+        (mBlock sigs env m Γ' σb base body).run st1 = .ok (r, st2) → LenOk σb base r ∧ ShapeOk σb base r := by
+      intro m Γ' σb st1 r st2 body hb' h'
+      exact ⟨(walk_len sigs env m).2.1 _ _ _ _ _ _ _ hb' h', (walk_shape sigs env m).2.1 _ _ _ _ _ _ _ hb' h'⟩
+    obtain ⟨r, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨erl, est⟩ := Prod.mk.inj (MoveM.det hr h3)
+    subst rc; subst st3c
+    obtain ⟨x3, _⟩ := (walk_ext sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ x2.wf invc.toMade h3
+    have ar := ((walk_shape sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ hbc h3).1
+    obtain ⟨d, st4, h4, hw⟩ := MoveM.bind_ok hw
+    have r4 : SchedExt st3 st4 ∧ (∀ a, a ∈ d.1 → MSt.Ids a.1 σc) := by
+      try dsimp only at h4
+      obtain ⟨rd, s1, g1, g⟩ := MoveM.bind_ok h4
+      cases g
+      refine ⟨(mBranch_made x3.wf (invc.toMade.ext x3)
+        (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) g1).1, fun a ha => ?_⟩
+      cases ha with
+      | head => exact (mBranch_shape hbc (fun σb st1 r st2 hb' h' => blk hb' h') g1).1
+      | tail _ h => cases h
+    obtain ⟨x4, ad⟩ := r4
+    obtain ⟨σ', st5, h5, hw⟩ := MoveM.bind_ok hw
+    have arms : ∀ a b, a ∈ r.1 ++ d.1 → b ∈ r.1 ++ d.1 → a.1.Same b.1 := by
+      have all : ∀ a, a ∈ r.1 ++ d.1 → MSt.Ids a.1 σc := fun a ha => by
+        rcases List.mem_append.mp ha with ha | ha
+        · exact ar a ha
+        · exact ad a ha
+      intro a b ha hb'
+      exact ((all a ha).trans (all b hb').symm).toSame
+    have jl := joinMatch_live h5 arms
+    obtain ⟨e5, -⟩ := joinMatch_eq h5
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    subst e5
+    try dsimp only at h4
+    obtain ⟨rd, s1, g1, g⟩ := MoveM.bind_ok h4
+    cases g
+    obtain ⟨gg, o⟩ := branch_ok hb g1 x3.wf (invc.ext x3) hF
+    refine ⟨gg, ?_⟩
+    cases out with
+    | norm _ =>
+      exact o.sameLive (jl _ (List.mem_append_right _ (.head _)) (pbranch_completes hb))
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | exit => trivial
+termination_by (n, 0)
+
+theorem block_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {ss : List Stmt} {st : DSt} {π : List Bool}
+    {out : POut} {evs : List Ev} (hp : PBlock sigs env n Γ σ base ss st π out evs) {r : MOut} {st' F : DSt}
+    {U : Nat} {H : Nat → Prop} (hw : (mBlock sigs env n Γ σ base ss).run st = .ok (r, st')) (w : st.WF)
+    (inv : Inv F st U H base σ π) (hF : SchedExt st' F) :
+    (∀ ev, ev ∈ evs → ev.Good F) ∧ OutOk F st' U H base r out := by
+  cases hp with
+  | nil =>
+    unfold mBlock at hw; cases hw
+    exact ⟨(fun _ h => by cases h), inv⟩
+  | cons_norm h1 hr1 h2 =>
+    unfold mBlock at hw
+    obtain ⟨r1', st1', hr1', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hr1 hr1')
+    obtain ⟨r2, st2, hr2, hw⟩ := MoveM.bind_ok hw
+    cases hw
+    obtain ⟨x1, o1⟩ := (walk_ext sigs env _).1 _ _ _ _ _ _ _ w inv.toMade hr1
+    obtain ⟨x2, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x1.wf o1.1 hr2
+    obtain ⟨g1, i1⟩ := stmt_ok h1 hr1 w inv (x2.trans hF)
+    obtain ⟨g2, i2⟩ := block_ok h2 hr2 x1.wf i1 hF
+    refine ⟨fun ev hev => ?_, ?_⟩
+    · rcases List.mem_append.mp hev with h | h
+      · exact g1 ev h
+      · exact g2 ev h
+    · cases out with
+      | norm _ => exact i2
+      | brk _ => obtain ⟨τ, hτ, iτ⟩ := i2; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+      | cont _ => obtain ⟨τ, hτ, iτ⟩ := i2; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+      | exit => trivial
+  | cons_stop h1 hn =>
+    unfold mBlock at hw
+    obtain ⟨r1, st1, hr1, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨r2, st2, hr2, hw⟩ := MoveM.bind_ok hw
+    cases hw
+    obtain ⟨x1, o1⟩ := (walk_ext sigs env _).1 _ _ _ _ _ _ _ w inv.toMade hr1
+    obtain ⟨x2, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x1.wf o1.1 hr2
+    obtain ⟨g1, i1⟩ := stmt_ok h1 hr1 w inv (x2.trans hF)
+    refine ⟨g1, ?_⟩
+    cases out with
+    | norm _ => exact hn.elim
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := i1; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := i1; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
+    | exit => trivial
+termination_by (n, 0)
+
+theorem branch_ok {n : Nat} {Γb : Ctx} {σc : MSt} {binds : List String} {base : Nat} {body : List Stmt}
+    {id : Nat} {kind : String} {arm : Option Nat} {st : DSt} {π : List Bool} {out : POut} {evs : List Ev}
+    (hp : PBranch sigs env n Γb σc binds base body id kind arm st π out evs) {rb : MOut} {st' F : DSt}
+    {U : Nat} {H : Nat → Prop}
+    (hw : (mBranch Γb σc binds id kind arm fun σb => mBlock sigs env n Γb σb base body).run st = .ok (rb, st'))
+    (w : st.WF) (inv : Inv F st U H base σc π) (hF : SchedExt st' F) :
+    (∀ ev, ev ∈ evs → ev.Good F) ∧ OutOk F st' U H base (σc.back rb.1, rb.2.1, rb.2.2) out := by
+  cases hp with
+  | @norm _ _ _ _ _ _ _ _ _ _ _ σb st1 rb st2 ds st3 πe evs hb1 hb2 hb3 hb4 hblock =>
+    unfold mBranch at hw
+    obtain ⟨σb', st1', hb1', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hb1 hb1')
+    obtain ⟨rb', st2', hb2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hb2 hb2')
+    obtain ⟨ds', st3', hb3', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hb3 hb3')
+    obtain ⟨_, st4', hb4', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hb4 hb4')
+    cases hw
+    have x1 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ w hb1
+    have invb := inv.bind w hb1
+    obtain ⟨xb, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x1.wf invb.toMade hb2
+    have x4 := SchedGrows.record _ _ _ _ _ _ _ _ xb.wf hb4
+    obtain ⟨g, ib⟩ := block_ok hblock hb2 x1.wf invb (x4.trans hF)
+    have lb := ((walk_len sigs env _).2.1 _ _ _ _ _ _ _ invb.base hb2).1
+    obtain ⟨new, hσb⟩ := bindM_shape hb1
+    have hcl : σc.length ≤ rb.1.length := by
+      have : σc.length ≤ σb.length := by rw [hσb]; simp
+      omega
+    have hl : πe.length = rb.1.length := ib.rel.length
+    have hk : (rb.1.length - σc.length) + base ≤ rb.1.length := by have := inv.base; omega
+    obtain ⟨-, rfl⟩ := ownedIn_run hb3
+    refine ⟨fun ev hev => ?_, ?_⟩
+    · rcases List.mem_append.mp hev with h | h
+      · exact g ev h
+      · simp only [List.mem_singleton] at h
+        subst h
+        rw [hl]
+        refine recEv_good hb4 hF xb.wf (ib.rel.take _) (fun _ h => h) (.inr fun v hv ho hH => ?_)
+        have hv' := mem_take_mono hv (show rb.1.length - σc.length ≤ rb.1.length - base by have := inv.base; omega)
+        exact absurd (ib.hU _ hH) (Nat.not_lt.mpr (ib.scope v hv' ho))
+    · show Inv F _ U H base (rb.1.drop (rb.1.length - σc.length)) (πe.drop (πe.length - σc.length))
+      rw [hl]
+      exact (ib.drop _ hk).ext x4
+  | other hb1 hblock hn =>
+    unfold mBranch at hw
+    obtain ⟨σb', st1', hb1', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hb1 hb1')
+    obtain ⟨rb', st2, hb2, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨ds, st3, hb3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨_, st4, hb4, hw⟩ := MoveM.bind_ok hw
+    cases hw
+    have x1 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ w hb1
+    have invb := inv.bind w hb1
+    obtain ⟨xb, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x1.wf invb.toMade hb2
+    have x3 := SchedGrows.ownedIn _ _ _ _ xb.wf hb3
+    have x4 := SchedGrows.record _ _ _ _ _ _ _ _ x3.wf hb4
+    obtain ⟨g, ib⟩ := block_ok hblock hb2 x1.wf invb (x3.trans (x4.trans hF))
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => exact hn.elim
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := ib; exact ⟨τ, hτ, iτ.ext (x3.trans x4)⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := ib; exact ⟨τ, hτ, iτ.ext (x3.trans x4)⟩
+    | exit => trivial
+termination_by (n, 1)
+
+theorem cases_ok {n : Nat} {Γ : Ctx} {vs : List (String × Option Ty)} {σ : MSt} {base id i : Nat}
+    {cs : List Case} {st : DSt} {π : List Bool} {out : POut} {evs : List Ev}
+    (hp : PCases sigs env n Γ vs σ base id i cs st π out evs) {r : List (MSt × Bool) × List MSt × List MSt}
+    {st' F : DSt} {U : Nat} {H : Nat → Prop}
+    (hw : (mCases sigs env n Γ vs σ base id i cs).run st = .ok (r, st')) (w : st.WF)
+    (inv : Inv F st U H base σ π) (hF : SchedExt st' F) :
+    (∀ ev, ev ∈ evs → ev.Good F) ∧ CasesOk F st' U H base r out := by
+  cases hp with
+  | here_atom hb =>
+    unfold mCases at hw
+    obtain ⟨rb, st1, hrb, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨r', st2, hr', hw⟩ := MoveM.bind_ok hw
+    cases hw
+    obtain ⟨x1, _⟩ := mBranch_made w inv.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) hrb
+    obtain ⟨x2, _⟩ := (walk_ext sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ x1.wf (inv.toMade.ext x1) hr'
+    obtain ⟨g, o⟩ := branch_ok hb hrb w inv (x2.trans hF)
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => exact ⟨_, .head _, pbranch_completes hb, o.ext x2⟩
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
+    | exit => trivial
+  | here_term hb =>
+    unfold mCases at hw
+    dsimp only at hw
+    obtain ⟨rb, st1, hrb, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨r', st2, hr', hw⟩ := MoveM.bind_ok hw
+    cases hw
+    obtain ⟨x1, _⟩ := mBranch_made w inv.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) hrb
+    obtain ⟨x2, _⟩ := (walk_ext sigs env _).2.2 _ _ _ _ _ _ _ _ _ _ x1.wf (inv.toMade.ext x1) hr'
+    obtain ⟨g, o⟩ := branch_ok hb hrb w inv (x2.trans hF)
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => exact ⟨_, .head _, pbranch_completes hb, o.ext x2⟩
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
+    | exit => trivial
+  | later_atom hrb hc =>
+    unfold mCases at hw
+    obtain ⟨rb', st1', hrb', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hrb hrb')
+    obtain ⟨r', st2, hr', hw⟩ := MoveM.bind_ok hw
+    cases hw
+    obtain ⟨x1, _⟩ := mBranch_made w inv.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) hrb
+    obtain ⟨g, o⟩ := cases_ok hc hr' x1.wf (inv.ext x1) hF
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => obtain ⟨a, ha, hc', ia⟩ := o; exact ⟨a, .tail _ ha, hc', ia⟩
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | exit => trivial
+  | later_term hrb hc =>
+    unfold mCases at hw
+    dsimp only at hw
+    obtain ⟨rb', st1', hrb', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hrb hrb')
+    obtain ⟨r', st2, hr', hw⟩ := MoveM.bind_ok hw
+    cases hw
+    obtain ⟨x1, _⟩ := mBranch_made w inv.toMade
+      (fun σb st1 r st2 w m h => (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w m h) hrb
+    obtain ⟨g, o⟩ := cases_ok hc hr' x1.wf (inv.ext x1) hF
+    refine ⟨g, ?_⟩
+    cases out with
+    | norm _ => obtain ⟨a, ha, hc', ia⟩ := o; exact ⟨a, .tail _ ha, hc', ia⟩
+    | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
+    | exit => trivial
+termination_by (n, 0)
+
+end
 
 end
 

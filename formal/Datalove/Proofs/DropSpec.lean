@@ -132,9 +132,9 @@ theorem dropsAt_none (F : DSt) : F.dropsAt none = [] := rfl
 says, is right on the path: if it is a way out of the function, recorded
 always, of bindings each made before its statement, or if what it leaves
 was all made inside the innermost loop the path is in. -/
-theorem recEv_good {kind : String} {id : Nat} {vs : MSt} {πs : List Bool} {always : Bool}
+theorem recEv_good {kind : String} {id : Nat} {arm : Option Nat} {vs : MSt} {πs : List Bool} {always : Bool}
     {st0 st1 st2 F : DSt} {H : Nat → Prop}
-    (hr : (record kind id none (ownedOf st1.held vs) always).run st1 = .ok ((), st2))
+    (hr : (record kind id arm (ownedOf st1.held vs) always).run st1 = .ok ((), st2))
     (x : SchedExt st2 F) (w1 : st1.WF) (rel : Rel F st0 H vs πs) (hheld : ∀ u, u ∈ st0.held → u ∈ st1.held)
     (cover : (always = true ∧ exitKind kind = true ∧ ∀ v, v ∈ vs → v.owns = true → F.made v.uid ≤ id) ∨
       (∀ v, v ∈ vs → v.owns = true → ¬ H v.uid)) :
@@ -150,7 +150,7 @@ theorem recEv_good {kind : String} {id : Nat} {vs : MSt} {πs : List Bool} {alwa
     have hk : st1.out.length < st2.out.length := by omega
     obtain ⟨e', he', ext⟩ := x.at st1.out.length hk
     have he : st2.out.reverse[st1.out.length]'(by simpa using hk) =
-        (kind, id, none, (ownedOf st1.held vs).map (·, none)) := by
+        (kind, id, arm, (ownedOf st1.held vs).map (·, none)) := by
       simp only [ho, List.reverse_cons]
       rw [List.getElem_append_right (by simp)]
       simp
