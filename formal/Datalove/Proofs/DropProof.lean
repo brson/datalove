@@ -75,16 +75,17 @@ inductive PStmt : Nat → Ctx → MSt → Nat → Stmt → DSt → List Bool →
       (exprLeaves e || (steps.any fun | .index k _ => exprLeaves k | _ => false) || op.any BinOp.exits) = true →
       Between (delta σ σ1 π) π πk →
       PStmt (n + 1) Γ σ base (.set_ x steps op e) st π .exit [tryEv st1b st2 σ πk]
-  | set_target {n Γ σ base x steps op e st π id st1 st1a st1b σ1 st2 σ2 st3 ds st4} :
+  | set_target {n Γ σ base x steps op e st π id st1 st1a st1b σ1 st2 σ2 st3 st3n ds st4} :
       stmtId.run st = .ok (id, st1) →
       (unwalkedM σ x).run st1 = .ok ((), st1a) → (writableM σ x).run st1a = .ok ((), st1b) →
       (leavingIf id σ (exprLeaves e || (steps.any fun | .index k _ => exprLeaves k | _ => false) ||
         op.any BinOp.exits) (mSetParts sigs Γ σ steps op e)).run st1b = .ok (σ1, st2) →
       (mTarget σ1 x steps op).run st2 = .ok (σ2, st3) →
+      (noteOverMoved id σ2 x steps).run st3 = .ok ((), st3n) →
       stepsExit steps = true →
-      (ownedIn σ2).run st3 = .ok (ds, st3) →
-      (record "before_set_target_early_return" id none ds (always := true)).run st3 = .ok ((), st4) →
-      PStmt (n + 1) Γ σ base (.set_ x steps op e) st π .exit [recEv st3 st4 σ2 (delta σ σ2 π)]
+      (ownedIn σ2).run st3n = .ok (ds, st3n) →
+      (record "before_set_target_early_return" id none ds (always := true)).run st3n = .ok ((), st4) →
+      PStmt (n + 1) Γ σ base (.set_ x steps op e) st π .exit [recEv st3n st4 σ2 (delta σ σ2 π)]
   | ret_try {n Γ σ base e st π id st1 σ1 st2 πk} :
       stmtId.run st = .ok (id, st1) →
       (exitM σ).run st1 = .ok (σ, st1) →
@@ -492,20 +493,22 @@ theorem MoveM.det {α} {m : MoveM α} {st : DSt} {a b : α × DSt} (h1 : m.run s
 theorem mSet_decomp {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String}
     {steps : List Step} {op : Option BinOp} {e : Expr} {st st' : DSt}
     (h : (mSet sigs Γ id σ x steps op e).run st = .ok (σ', st')) :
-    ∃ sta stb σ1 st2 σ2 st3,
+    ∃ sta stb σ1 st2 σ2 st3 st3n,
       (unwalkedM σ x).run st = .ok ((), sta) ∧ (writableM σ x).run sta = .ok ((), stb) ∧
       (leavingIf id σ (exprLeaves e || (steps.any fun | .index k _ => exprLeaves k | _ => false) ||
         op.any BinOp.exits) (mSetParts sigs Γ σ steps op e)).run stb = .ok (σ1, st2) ∧
       (mTarget σ1 x steps op).run st2 = .ok (σ2, st3) ∧
+      (noteOverMoved id σ2 x steps).run st3 = .ok ((), st3n) ∧
       ((if stepsExit steps then do
           record "before_set_target_early_return" id none (← ownedIn σ2) (always := true)
-        else pure ()) : MoveM Unit).run st3 = .ok ((), st') ∧
+        else pure ()) : MoveM Unit).run st3n = .ok ((), st') ∧
       σ' = (if steps.isEmpty then σ2.give x else σ2) := by
   unfold mSet at h
   obtain ⟨_, sta, ha, h⟩ := MoveM.bind_ok h
   obtain ⟨_, stb, hb, h⟩ := MoveM.bind_ok h
   obtain ⟨σ1, st2, h1, h⟩ := MoveM.bind_ok h
   obtain ⟨σ2, st3, h2, h⟩ := MoveM.bind_ok h
+  obtain ⟨_, st3n, hn, h⟩ := MoveM.bind_ok h
   obtain ⟨_, st4, h3, h⟩ := MoveM.bind_ok h
   obtain ⟨σ4, st5, h4, h⟩ := MoveM.bind_ok h
   have e4 : σ4 = σ2 ∧ st5 = st4 := by
@@ -515,7 +518,7 @@ theorem mSet_decomp {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' 
   simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at h
   obtain ⟨rfl, rfl⟩ := h
   obtain ⟨rfl, rfl⟩ := e4
-  exact ⟨sta, stb, σ1, st2, σ4, st3, ha, hb, h1, h2, h3, rfl⟩
+  exact ⟨sta, stb, σ1, st2, σ4, st3, st3n, ha, hb, h1, h2, hn, h3, rfl⟩
 
 section
 variable (sigs : List (String × Sig)) (env : InferEnv)
@@ -793,7 +796,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨σ', st2', hs, hw⟩ := MoveM.bind_ok hw
     simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
     obtain ⟨rfl, rfl⟩ := hw
-    obtain ⟨sta, stb, σ1', st2'', σ2', st3', ha', hb', h1', h2', h3', rfl⟩ := mSet_decomp hs
+    obtain ⟨sta, stb, σ1', st2'', σ2', st3', st3n, ha', hb', h1', h2', hn', h3', rfl⟩ := mSet_decomp hs
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det ha ha')
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hb hb')
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h1 h1')
@@ -804,13 +807,14 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     have b1 := leavingIf_below (mSetParts_shr sigs Γ σ _ _ _) h1
     have x3 := SchedGrows.shr (mTarget_shr _ _ _ _) _ _ _ x2.wf h2'
     have b2 := ((mTarget_shr _ _ _ _) _ _ _ h2').1
-    have x4 : SchedExt st3' st2' := by
+    have xn := SchedGrows.keepsSched (KeepsSched.noteOverMoved _ _ _ _) _ _ _ x3.wf hn'
+    have x4 : SchedExt st3n st2' := by
       by_cases hse' : stepsExit steps = true
       · simp only [hse', ite_true] at h3'
-        exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) _ _ _ x3.wf h3'
+        exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) _ _ _ xn.wf h3'
       · simp only [Bool.not_eq_true] at hse'
         simp only [hse', Bool.false_eq_true, ite_false] at h3'
-        cases h3'; exact SchedExt.refl x3.wf
+        cases h3'; exact SchedExt.refl xn.wf
     have x1b := x1.trans (xa.trans xb)
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
     refine ⟨(fun _ h => by cases h), ?_⟩
@@ -820,7 +824,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
       · exact (MSt.Same.update (f := fun v => { v with init := true, live := true })
           (fun _ => ⟨rfl, rfl⟩) _ σ2).trans s2
       · exact s2
-    exact inv.same (x1b.trans (x2.trans (x3.trans x4))) sm
+    exact inv.same (x1b.trans (x2.trans (x3.trans (xn.trans x4)))) sm
   | @set_try _ _ _ _ x steps op e _ _ id st1 st1a st1b σ1 st2 πk hid ha hb h1 hl hbt =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
@@ -829,7 +833,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨σ', st2', hs, hw⟩ := MoveM.bind_ok hw
     simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
     obtain ⟨rfl, rfl⟩ := hw
-    obtain ⟨sta, stb, σ1', st2'', σ2', st3', ha', hb', h1', h2', h3', rfl⟩ := mSet_decomp hs
+    obtain ⟨sta, stb, σ1', st2'', σ2', st3', st3n, ha', hb', h1', h2', hn', h3', rfl⟩ := mSet_decomp hs
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det ha ha')
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hb hb')
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h1 h1')
@@ -840,23 +844,24 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     have b1 := leavingIf_below (mSetParts_shr sigs Γ σ _ _ _) h1
     have x3 := SchedGrows.shr (mTarget_shr _ _ _ _) _ _ _ x2.wf h2'
     have b2 := ((mTarget_shr _ _ _ _) _ _ _ h2').1
-    have x4 : SchedExt st3' st2' := by
+    have xn := SchedGrows.keepsSched (KeepsSched.noteOverMoved _ _ _ _) _ _ _ x3.wf hn'
+    have x4 : SchedExt st3n st2' := by
       by_cases hse' : stepsExit steps = true
       · simp only [hse', ite_true] at h3'
-        exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) _ _ _ x3.wf h3'
+        exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) _ _ _ xn.wf h3'
       · simp only [Bool.not_eq_true] at hse'
         simp only [hse', Bool.false_eq_true, ite_false] at h3'
-        cases h3'; exact SchedExt.refl x3.wf
+        cases h3'; exact SchedExt.refl xn.wf
     have x1b := x1.trans (xa.trans xb)
     obtain ⟨rfl, _⟩ := stmtId_eq hid
     refine ⟨fun ev hev => ?_, trivial⟩
     simp only [List.mem_singleton] at hev
     subst hev
     rw [hl] at h1
-    have xF := x3.trans (x4.trans hF)
+    have xF := x3.trans (xn.trans (x4.trans hF))
     exact tryEv_good (mSetParts_shr sigs Γ σ _ _ _) h1 xF xb.wf inv.rel
       (inv.madeBefore (x1b.trans (x2.trans xF))) hbt
-  | @set_target _ _ _ _ x steps op e _ _ id st1 st1a st1b σ1 st2 σ2 st3 ds st4 hid ha hb h1 h2 hse ho hr =>
+  | @set_target _ _ _ _ x steps op e _ _ id st1 st1a st1b σ1 st2 σ2 st3 st3n0 ds st4 hid ha hb h1 h2 hn hse ho hr =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
@@ -864,7 +869,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨σ', st2', hs, hw⟩ := MoveM.bind_ok hw
     simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
     obtain ⟨rfl, rfl⟩ := hw
-    obtain ⟨sta, stb, σ1', st2'', σ2', st3', ha', hb', h1', h2', h3', rfl⟩ := mSet_decomp hs
+    obtain ⟨sta, stb, σ1', st2'', σ2', st3', st3n, ha', hb', h1', h2', hn', h3', rfl⟩ := mSet_decomp hs
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det ha ha')
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hb hb')
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h1 h1')
@@ -875,15 +880,17 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     have b1 := leavingIf_below (mSetParts_shr sigs Γ σ _ _ _) h1
     have x3 := SchedGrows.shr (mTarget_shr _ _ _ _) _ _ _ x2.wf h2'
     have b2 := ((mTarget_shr _ _ _ _) _ _ _ h2').1
-    have x4 : SchedExt st3' st2' := by
+    have xn := SchedGrows.keepsSched (KeepsSched.noteOverMoved _ _ _ _) _ _ _ x3.wf hn'
+    have x4 : SchedExt st3n st2' := by
       by_cases hse' : stepsExit steps = true
       · simp only [hse', ite_true] at h3'
-        exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) _ _ _ x3.wf h3'
+        exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) _ _ _ xn.wf h3'
       · simp only [Bool.not_eq_true] at hse'
         simp only [hse', Bool.false_eq_true, ite_false] at h3'
-        cases h3'; exact SchedExt.refl x3.wf
+        cases h3'; exact SchedExt.refl xn.wf
     have x1b := x1.trans (xa.trans xb)
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hn hn')
     obtain ⟨rfl, _⟩ := stmtId_eq hid
     simp only [hse, ite_true] at h3'
     obtain ⟨ds', st4', ho', hr'⟩ := MoveM.bind_ok h3'
@@ -894,11 +901,11 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     obtain ⟨-, rfl⟩ := ownedIn_run ho
     have s2 : σ2.Same σ := (MSt.Same.of_below b2).trans (MSt.Same.of_below b1)
-    have inv3 := inv.same (x1b.trans (x2.trans x3)) s2
-    refine recEv_good hr hF x3.wf inv3.rel (.inl ⟨rfl, rfl, fun v hv ho => ?_⟩)
+    have inv3 := inv.same (x1b.trans (x2.trans (x3.trans xn))) s2
+    refine recEv_good hr hF xn.wf inv3.rel (.inl ⟨rfl, rfl, fun v hv ho => ?_⟩)
     obtain ⟨w', hw', u', o'⟩ := s2.mem hv
     rw [u']
-    exact inv.madeBefore (x1b.trans (x2.trans (x3.trans (x4.trans hF)))) w' hw' (o' ▸ ho)
+    exact inv.madeBefore (x1b.trans (x2.trans (x3.trans (xn.trans (x4.trans hF))))) w' hw' (o' ▸ ho)
   | ret_try hid hex h2 hl hb =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw

@@ -1580,9 +1580,9 @@ leak, a second drop, a store over a value and a way out that leaves anything
 owed, on every module function and script unit; see
 [The drop check](ir.md#user-content-the-drop-check).
 
-`before_set_target_early_return` is computed before RHS moves are analyzed, so
-it includes the RHS binding, which is still live when a set-index bounds check
-fails.
+`before_set_target_early_return` is what is live once the value and the keys
+have run, which is when a set-index bounds check can fail: what they moved is
+not among it.
 
 `before_try_return` is what is live once the statement's expression has been
 evaluated, a `set`'s value and keys both, so it leaves out what they move. But a `?` can return

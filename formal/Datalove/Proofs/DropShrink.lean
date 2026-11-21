@@ -164,6 +164,15 @@ theorem KeepsSched.unwalkedM (σ : MSt) (x : String) : KeepsSched (Fun.unwalkedM
   · exact KeepsSched.throw _
   · exact KeepsSched.pure _
 
+theorem KeepsSched.noteOverMoved (id : Nat) (σ : MSt) (x : String) (steps : List Step) :
+    KeepsSched (Fun.noteOverMoved id σ x steps) := by
+  unfold Fun.noteOverMoved
+  split
+  · intro st a st' h
+    simp only [modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, StateT.run] at h
+    cases h; rfl
+  · exact KeepsSched.pure _
+
 theorem KeepsSched.writableM (σ : MSt) (x : String) : KeepsSched (Fun.writableM σ x) := by
   unfold Fun.writableM
   split

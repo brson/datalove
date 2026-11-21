@@ -2439,6 +2439,7 @@ fn drops_agree() {
     let mut points = 0;
     let mut moved_at = 0;
     let mut tracked = 0;
+    let mut over_moved = 0;
     for ((what, text, _, rust), oracle) in cases.iter().zip(&answers) {
         assert!(oracle.get("unsupported").is_none(), "the model does not take:\n{text}\n{oracle}");
         for f in oracle["funs"].as_array().X() {
@@ -2461,6 +2462,13 @@ fn drops_agree() {
                 .collect();
             rust_tracked.sort();
             rust_lines.insert(fmt!("tracked: {}", rust_tracked.join(" ")));
+            // The plain `set`s that write over a moved target, which lowering
+            // does not destroy first.
+            let rust_over: Vec<&str> = lines.iter()
+                .filter_map(|l| l.strip_prefix("set_over_moved:"))
+                .flat_map(|stmts| stmts.split_whitespace())
+                .collect();
+            rust_lines.insert(fmt!("set_over_moved: {}", rust_over.join(" ")));
             let model_lines: BTreeSet<String> = model_points.iter()
                 .filter_map(|p| {
                     let kind = p["kind"].as_str().X();
@@ -2477,8 +2485,15 @@ fn drops_agree() {
                     tracked.sort();
                     fmt!("tracked: {}", tracked.join(" "))
                 }))
+                .chain(std::iter::once({
+                    let mut over: Vec<u64> = f["over_moved"].as_array().X().iter().map(|n| n.as_u64().X()).collect();
+                    over.sort();
+                    let over: Vec<String> = over.iter().map(|o| o.to_string()).collect();
+                    fmt!("set_over_moved: {}", over.join(" "))
+                }))
                 .collect();
-            points += rust_lines.len() - 1;
+            points += rust_lines.len() - 2;
+            over_moved += rust_over.len();
             moved_at += rust_lines.iter().filter(|l| l.starts_with("try_return_not_yet_moved")).count();
             tracked += rust_tracked.len();
             if model_lines != rust_lines {
@@ -2489,7 +2504,7 @@ fn drops_agree() {
         }
     }
     println!(
-        "{} scripts, {functions} functions, {points} points ({moved_at} naming where a binding is moved), {tracked} tracked vars, over seeds {}..{}: {} differ; {refused} refused",
+        "{} scripts, {functions} functions, {points} points ({moved_at} naming where a binding is moved), {tracked} tracked vars, {over_moved} sets over a moved var, over seeds {}..{}: {} differ; {refused} refused",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(5) {

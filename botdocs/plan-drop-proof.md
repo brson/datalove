@@ -100,9 +100,20 @@ holds what was live after it plus what it had not yet moved, which is the
   move-soundness proof `formal.md` lists first.
 - **That an expression returns early only where `exprLeaves` says.** It is
   the Rust's own `early_return_in`, and the schedule has a point only there.
-- **That lowering carries the schedule out.** The IR's drop check
-  (`ir.md`, "The drop check") holds lowering to its own consistency in a
-  debug build; nothing compares it with the schedule.
+- **That lowering carries the schedule out**, past what is checked.
+  Lowering emits each point's drops from the schedule's own lists, and a
+  debug build panics on a scheduled binding lowering has not bound. Two
+  drops of a binding are lowering's to decide. A `set`'s store destroys what
+  a precise target holds unless the analysis found the `set` writing over a
+  moved value (`set_over_moved`): the model notes those too
+  (`noteOverMoved`), `drops_agree` holds the two to each other, and
+  `set_store_ok` shows that a precise owned binding holds a value on the
+  path just where the walk has it live, so just where the `set` is not
+  noted. And a `?` drops a binding whose place has been lowered but not yet
+  taken as one of the call's pending arguments, the half of
+  `try_return_not_yet_moved` lowering keeps itself (`compiler-guide.md`).
+  The IR's drop check (`ir.md`, "The drop check") holds the result to its
+  own consistency in a debug build.
 - **A `set` to a binding that is not a `var`.** The move analysis refuses
   one now (`writableM`, O011), so the proof needs nothing of typechecking
   here.
@@ -154,4 +165,4 @@ Under `formal/Datalove/Proofs/`:
   every pass.
 - **The theorem for a function** (`DropFun.lean`: `fun_ok`), from the
   parameters' bindings, where the path holds everything and nothing
-  diverges.
+  diverges; and what a `set`'s store finds (`set_store_ok`).

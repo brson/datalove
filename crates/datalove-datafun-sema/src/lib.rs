@@ -900,8 +900,8 @@ pub struct DropSchedule {
 
     /// Drops to emit on early return from a set-index bounds check.
     ///
-    /// Computed before RHS moves are analyzed, so includes the RHS binding
-    /// (which is still live when the bounds check fails).
+    /// What is live once the value and the keys have run, which is when the
+    /// bounds check can fail.
     pub before_set_target_early_return: BTreeMap<usize, Vec<BindingId>>,
 
     /// Drops to emit at end of loop body before looping back.

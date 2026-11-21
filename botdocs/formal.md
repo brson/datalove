@@ -921,7 +921,12 @@ Four things are proved of it:
   though the outer loop's next pass may return holding it before the inner
   loop: it leaked (engine fixture
   `1049_a_var_an_inner_loop_gives_is_dropped_before_it_on_the_next_pass`),
-  which the generator meets once in 4000 seeds with the fix undone. A place a hint was folded into,
+  which the generator meets once in 4000 seeds with the fix undone. The
+  model also notes the plain `set`s whose target holds nothing once the
+  value has run (`noteOverMoved`, the Rust's `set_over_moved`), whose store
+  lowering does not destroy first: `drops_agree` compares them, 330 over
+  four thousand seeds, and looking at the target before the value runs
+  makes 256 functions differ. A place a hint was folded into,
   `(: T / p).a`, the model takes as steps on what is hinted, each an
   expression, where the parser files one place; no generator writes one.
 - **Passing by pointer is copying in and out where nothing written is

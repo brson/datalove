@@ -148,10 +148,13 @@ def answer (q : Json) : Except String Json := do
         Json.mkObj [("funs", Json.arr ((Fun.scriptFunKinds ss).toArray.map fun (n, ks) =>
           Json.mkObj [("name", Json.str n), ("stmts", Json.arr (ks.toArray.map Json.str)),
             ("points", match drops.lookup n with
-              | some (some (ps, _)) => Json.arr (ps.toArray.map point)
+              | some (some (ps, _, _)) => Json.arr (ps.toArray.map point)
               | _ => Json.null),
             ("tracked", match drops.lookup n with
-              | some (some (_, ts)) => Json.arr (ts.toArray.map Json.str)
+              | some (some (_, ts, _)) => Json.arr (ts.toArray.map Json.str)
+              | _ => Json.null),
+            ("over_moved", match drops.lookup n with
+              | some (some (_, _, os)) => Json.arr (os.toArray.map fun (o : Nat) => (o : Json))
               | _ => Json.null)]))]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok script := q.getObjVal? "run" then

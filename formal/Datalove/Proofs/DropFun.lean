@@ -140,4 +140,59 @@ theorem fun_ok {sigs : List (String × Sig)} {env : InferEnv} {aliases : Aliases
   rw [hl]
   exact recEv_good hrun3 (SchedExt.refl xr.wf) x1.wf (o.rel.take _) (.inr ⟨fun _ h => h, fun _ _ _ h => h⟩)
 
+/-! ## A `set`'s store
+
+Lowering destroys what a `set`'s target holds before the store writes over
+it. A tracked target asks its byte; a precise one is destroyed unless the
+analysis found the `set` writing over a moved value (`noteOverMoved`, the
+Rust's `set_over_moved`). That is right just when, on every path, a precise
+owned binding holds a value where the walk has it live. -/
+
+/-- An owned binding with no tracking byte holds a value on the path just
+where the walk has it live. -/
+theorem Rel.precise {F st : DSt} {H : Nat → Prop} : ∀ {σ : MSt} {π : List Bool}, Rel F st H σ π →
+    ∀ {v : MVar} {p : Bool}, (v, p) ∈ σ.zip π → v.owns = true → v.uid ∉ F.tracked → p = v.live := by
+  intro σ π h v p hv ho ht
+  obtain ⟨a, b⟩ := h.mem_zip hv
+  cases hp : p
+  · cases hl : v.live
+    · rfl
+    · exact absurd (a hl) (by simp [hp])
+  · rcases b hp ho with hl | d
+    · exact hl.symm
+    · exact absurd d.2.2.1 ht
+
+theorem noteOverMoved_spec {id : Nat} {σ : MSt} {x : String} {steps : List Step} {st st' : DSt}
+    (h : (noteOverMoved id σ x steps).run st = .ok ((), st')) :
+    st'.overMoved = if steps.isEmpty && (σ.find x).any (!·.live) then id :: st.overMoved else st.overMoved := by
+  unfold noteOverMoved at h
+  split at h
+  · next c =>
+    simp only [modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, StateT.run] at h
+    cases h; simp [c]
+  · next c =>
+    cases h; simp [c]
+
+/-- Where a `set`'s store writes, the path's state is related to the walk's
+there, `σ2`, from which the walk notes the `set` as over moved: so each owned
+binding without a tracking byte, the target among them, holds a value on the
+path just where the walk has it live, and a precise target holds nothing just
+where the walk notes the `set`. -/
+theorem set_store_ok {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String}
+    {steps : List Step} {op : Option BinOp} {e : Expr} {st st' F : DSt} {U base : Nat} {H : Nat → Prop}
+    {π : List Bool} (inv : Inv F st U H base σ π) (w : st.WF)
+    (hs : (mSet sigs Γ id σ x steps op e).run st = .ok (σ', st')) :
+    ∃ σ2 st3 st3n, (noteOverMoved id σ2 x steps).run st3 = .ok ((), st3n) ∧
+      Rel F st3 H σ2 (delta σ σ2 π) ∧
+      ∀ v p, (v, p) ∈ σ2.zip (delta σ σ2 π) → v.owns = true → v.uid ∉ F.tracked → p = v.live := by
+  obtain ⟨sta, stb, σ1, st2, σ2, st3, st3n, ha, hb, h1, h2, hn, h3, _⟩ := mSet_decomp hs
+  have xa := SchedGrows.keepsSched (KeepsSched.unwalkedM σ _) _ _ _ w ha
+  have xb := SchedGrows.keepsSched (KeepsSched.writableM σ _) _ _ _ xa.wf hb
+  have x2 := SchedGrows.leavingIf _ σ _ (SchedGrows.shr (mSetParts_shr sigs Γ σ _ _ _)) _ _ _ xb.wf h1
+  have b1 := leavingIf_below (mSetParts_shr sigs Γ σ _ _ _) h1
+  have x3 := SchedGrows.shr (mTarget_shr _ _ _ _) _ _ _ x2.wf h2
+  have b2 := ((mTarget_shr _ _ _ _) _ _ _ h2).1
+  have inv3 := inv.same (xa.trans (xb.trans (x2.trans x3))) ((MSt.Same.of_below b2).trans (MSt.Same.of_below b1))
+  exact ⟨σ2, st3, st3n, hn, inv3.rel, fun v p hv ho ht => inv3.rel.precise hv ho ht⟩
+
 end Datalove.Fun

@@ -156,6 +156,7 @@ theorem mSet_len {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' : M
   have l1 := leavingIf_len (mSetParts_shr sigs Γ σ steps op e) h1
   obtain ⟨σ2, st3, h2, h⟩ := MoveM.bind_ok h
   have l2 := ((mTarget_shr σ1 x steps op) _ _ _ h2).1.length
+  obtain ⟨_, _, _, h⟩ := MoveM.bind_ok h
   obtain ⟨_, st4, _, h⟩ := MoveM.bind_ok h
   obtain ⟨σ4, st5, h4, h⟩ := MoveM.bind_ok h
   have e4 : σ4 = σ2 := by
@@ -659,6 +660,7 @@ theorem mSet_ids {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' : M
   have b1 := leavingIf_below0 (mSetParts_shr sigs Γ σ steps op e) h1
   obtain ⟨σ2, st3, h2, h⟩ := MoveM.bind_ok h
   have b2 := ((mTarget_shr σ1 x steps op) _ _ _ h2).1
+  obtain ⟨_, _, _, h⟩ := MoveM.bind_ok h
   obtain ⟨_, st4, _, h⟩ := MoveM.bind_ok h
   obtain ⟨σ4, st5, h4, h⟩ := MoveM.bind_ok h
   have e4 : σ4 = σ2 := by

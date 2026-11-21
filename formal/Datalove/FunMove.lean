@@ -155,6 +155,10 @@ structure DSt where
   has them: a `var` declared with no value, and one perhaps held. A drop of
   one reads the byte, and drops nothing where it holds nothing. -/
   tracked : List Nat := []
+  /-- The plain `set`s, by statement, whose target holds nothing once the
+  value has run: what lowering's store drops first is what the target holds,
+  and here nothing (the Rust's `set_over_moved`). -/
+  overMoved : List Nat := []
 
 /-- The move analysis, keeping the drop schedule as it goes. -/
 abbrev MoveM := StateT DSt (Except Lit.Code)
@@ -431,6 +435,12 @@ def mSetParts (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (steps : List 
   exprFrom next
   pure σ
 
+/-- A plain `set` of statement `id` whose target `σ` has moved, the value
+having run: the store writes over nothing. -/
+def noteOverMoved (id : Nat) (σ : MSt) (x : String) (steps : List Step) : MoveM Unit :=
+  if steps.isEmpty && (σ.find x).any (!·.live) then modify fun s => { s with overMoved := id :: s.overMoved }
+  else pure ()
+
 /-- `set x … = e` or `set x … ⊕= e` of statement `id`: not to what a `for`
 walks (O015), to what may be changed (O004, O011, which typechecking
 refuses first), then the value, then the keys, then the place. A return from
@@ -447,6 +457,7 @@ def mSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : Str
   let keysLeave := steps.any fun | .index k _ => exprLeaves k | _ => false
   let σ ← leavingIf id σ (exprLeaves e || keysLeave || op.any BinOp.exits) (mSetParts sigs Γ σ steps op e)
   let σ ← mTarget σ x steps op
+  noteOverMoved id σ x steps
   (if stepsExit steps then do
       record "before_set_target_early_return" id none (← ownedIn σ) (always := true)
     else pure ())
@@ -739,10 +750,11 @@ def moveScript (ss : List Stmt) : Option Lit.Code :=
 /-- A script's top-level functions' drop schedules, by name, each as
 `mTop` reaches the function: in the context the statements before it leave;
 each with the names of the bindings that keep a tracking byte. None for a
-function the move analysis refuses. -/
-def scriptDrops (ss : List Stmt) : List (String × Option (List DropPoint × List String)) :=
+function the move analysis refuses. Each also has the plain `set`s, by
+statement, that write over a moved target. -/
+def scriptDrops (ss : List Stmt) : List (String × Option (List DropPoint × List String × List Nat)) :=
   let sigs := (resolveNames ss).1
-  let rec go (Γ : Ctx) : List Stmt → List (String × Option (List DropPoint × List String))
+  let rec go (Γ : Ctx) : List Stmt → List (String × Option (List DropPoint × List String × List Nat))
     | [] => []
     | .fun_ f :: rest =>
       let name := match f with | .mk n .. => n
@@ -753,7 +765,7 @@ def scriptDrops (ss : List Stmt) : List (String × Option (List DropPoint × Lis
           some (s.out.reverse.map (fun (k, st, a, ds) =>
             (k, st, a, ds.map fun
               | (u, some e) => s!"{nameOf u}@{e}"
-              | (u, none) => nameOf u)), s.tracked.map nameOf)
+              | (u, none) => nameOf u)), s.tracked.map nameOf, s.overMoved.reverse)
         | .error _ => none
       (name, points) :: go Γ rest
     | s :: rest => go ((checkStmt Γ s).run #[]).1 rest

@@ -1032,12 +1032,15 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit a drop for a binding, using DropTracked if tracked, Drop if precise.
     fn emit_binding_drop(&mut self, id: BindingId) {
-        if let Some(&operand) = self.body.binding_to_operand.get(&id) {
-            if self.is_binding_tracked(id) {
-                self.emit(Instruction::DropTracked { operand });
-            } else {
-                self.emit(Instruction::Drop { operand });
-            }
+        // Every point that drops a binding is inside its scope, after
+        // lowering has bound it.
+        let Some(&operand) = self.body.binding_to_operand.get(&id) else {
+            panic!("a scheduled drop of binding {id:?}, which lowering has not bound");
+        };
+        if self.is_binding_tracked(id) {
+            self.emit(Instruction::DropTracked { operand });
+        } else {
+            self.emit(Instruction::Drop { operand });
         }
     }
 

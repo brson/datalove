@@ -72,11 +72,15 @@ theorem mSet_made {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String} {steps : Lis
   obtain ⟨σ1, st2, h2, h⟩ := MoveM.bind_ok h
   obtain ⟨m2, x2⟩ := leavingIf_made (mSetParts_shr sigs Γ σ steps op e) x1.wf h2 (md.ext x1)
   obtain ⟨σ2, st3, h3, h⟩ := MoveM.bind_ok h
-  obtain ⟨m3, x3⟩ := shr_made (mTarget_shr σ1 x steps op) x2.wf h3 m2
+  obtain ⟨m3', x3'⟩ := shr_made (mTarget_shr σ1 x steps op) x2.wf h3 m2
+  obtain ⟨_, st3n, h3n, h⟩ := MoveM.bind_ok h
+  have x3n := SchedGrows.keepsSched (KeepsSched.noteOverMoved _ _ _ _) _ _ _ x3'.wf h3n
+  have x3 := x3'.trans x3n
+  have m3 := m3'.ext x3n
   obtain ⟨_, st4, h4, h⟩ := MoveM.bind_ok h
-  have x4 : SchedExt st3 st4 := by
+  have x4 : SchedExt st3n st4 := by
     split at h4
-    · exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) st3 _ st4 x3.wf h4
+    · exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) st3n _ st4 x3.wf h4
     · cases h4; exact SchedExt.refl x3.wf
   obtain ⟨σ4, st5, h5, h⟩ := MoveM.bind_ok h
   have e5 : σ4 = σ2 ∧ st5 = st4 := by

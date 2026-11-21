@@ -57,5 +57,9 @@ pub fn render(name: &str, schedule: &DropSchedule, bindings: &[BindingInfo], tra
     if !tracked.is_empty() {
         out.push_str(&fmt!("  tracked: {}\n", names(&tracked)));
     }
+    if !schedule.set_over_moved.is_empty() {
+        let stmts: Vec<String> = schedule.set_over_moved.iter().map(|s| s.to_string()).collect();
+        out.push_str(&fmt!("  set_over_moved: {}\n", stmts.join(" ")));
+    }
     out
 }
