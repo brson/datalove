@@ -18,14 +18,19 @@
 //!
 //! The generated strings must reach every rule, alternative, option and
 //! repetition of the grammar: see `datalove_doc_fixtures::ebnf::Coverage`.
+//!
+//! The grammar's `no X: CODE` notes must hold: see
+//! `datalove_doc_fixtures::deletion`, on strings from the seeds of
+//! `DATALOVE_DELETION_SEED` and `DATALOVE_DELETION_COUNT`.
 
 use rmx::prelude::*;
 
 use bct::random::{SeededRng, env_seeds, seed_of};
 use datalove_doc_fixtures::datalit_grammar::{DOC, START, doc_text, grammar, parse_codes, parse_diags, recognizers, sample};
+use datalove_doc_fixtures::deletion::Deletions;
 use datalove_doc_fixtures::ebnf::{Coverage, Generator};
 use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, files, mutate, outside_codes, workspace_dir};
-use datalove_doc_fixtures::token_grammar::{Recognizers, join_tokens};
+use datalove_doc_fixtures::token_grammar::{Recognizers, join_spaced, join_tokens};
 
 fn recognizer() -> Recognizers {
     recognizers(&grammar())
@@ -104,4 +109,28 @@ fn generated_agree() {
     findings.finish("generated strings and their mutants");
     println!("{}", coverage.summary());
     coverage.assert_full("the generated strings");
+}
+
+/// The grammar's notes of what a missing part is refused with hold.
+#[test]
+fn deletion_notes_hold() {
+    let g = grammar();
+    let sampler = |text: &str, rng: &mut SeededRng| sample(&g, text, rng);
+    let generator = Generator::new(&g.typed, &sampler).max_depth(0).lean();
+    let recs = Recognizers::types_written_out(&g, &[START], false);
+    let parse = |_: &str, text: &str| parse_diags(text);
+    let mut deletions = Deletions::new(&g, &recs, &parse);
+    for ex in examples(&doc_text(), DOC).iter().filter(|ex| ex.codes.is_empty()) {
+        deletions.check(START, &ex.text);
+    }
+    for seed in env_seeds("DATALOVE_DELETION", 0, 600).iter() {
+        // Each seed draws until the parser takes one whole.
+        let mut rng = SeededRng::new(seed);
+        for _ in 0..20 {
+            if deletions.check(START, &join_spaced(&generator.generate(START, &mut rng))) {
+                break;
+            }
+        }
+    }
+    deletions.finish("generated strings");
 }

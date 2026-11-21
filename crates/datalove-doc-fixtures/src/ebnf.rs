@@ -36,6 +36,8 @@ pub struct Grammar {
 pub struct Rule {
     pub name: String,
     pub body: Expr,
+    /// The comments written in the rule and after it, before the next.
+    pub notes: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,11 +69,13 @@ impl Grammar {
 
     /// Parses EBNF text.
     pub fn parse(text: &str) -> Grammar {
-        let tokens = tokenize(text);
+        let (tokens, comments) = tokenize_with_comments(text);
         let mut p = Reader { tokens, pos: 0 };
         let mut rules = vec![];
         let mut templates = vec![];
+        let mut starts = vec![];
         while p.pos < p.tokens.len() {
+            starts.push(p.pos);
             let name = match p.next() {
                 Tok::Ident(name) => name,
                 t => panic!("expected a rule name, found {t:?}"),
@@ -95,9 +99,29 @@ impl Grammar {
             let body = p.alt();
             p.expect(Tok::Punct(';'));
             if params.is_empty() {
-                rules.push(Rule { name, body });
+                rules.push(Rule { name, body, notes: vec![] });
             } else {
-                templates.push(Template { name, params, body });
+                templates.push(Template { name, params, body, notes: vec![] });
+            }
+        }
+        // A comment is a rule's from just past its name to the next rule's.
+        let ends: Vec<usize> = starts.iter().skip(1).copied().chain([usize::MAX]).collect();
+        let notes = |k: usize| -> Vec<String> {
+            comments.iter().filter(|(at, _)| *at > starts[k] && *at <= ends[k]).map(|(_, c)| c.C()).collect()
+        };
+        let (mut r, mut t) = (0, 0);
+        for k in 0..starts.len() {
+            // Rules and templates were read in order, each from one start.
+            let name = match &p.tokens[starts[k]] {
+                Tok::Ident(name) => name,
+                _ => bug!("a rule starts with its name"),
+            };
+            if rules.get(r).is_some_and(|rule: &Rule| &rule.name == name) {
+                rules[r].notes = notes(k);
+                r += 1;
+            } else {
+                templates[t].notes = notes(k);
+                t += 1;
             }
         }
         let mut g = Grammar { rules };
@@ -183,7 +207,7 @@ impl Grammar {
             };
             assert_eq!(args.len(), template.params.len(), "{call} takes {} arguments", template.params.len());
             let body = substitute(&template.body, &template.params, &args);
-            self.rules.push(Rule { name: call, body });
+            self.rules.push(Rule { name: call, body, notes: template.notes.C() });
         }
     }
 
@@ -204,6 +228,7 @@ struct Template {
     name: String,
     params: Vec<String>,
     body: Expr,
+    notes: Vec<String>,
 }
 
 fn substitute(e: &Expr, params: &[String], args: &[Expr]) -> Expr {
@@ -224,6 +249,14 @@ fn substitute(e: &Expr, params: &[String], args: &[Expr]) -> Expr {
 }
 
 impl Expr {
+    /// Reads an expression written in EBNF.
+    pub fn parse(text: &str) -> Expr {
+        let mut reader = Reader { tokens: tokenize(text), pos: 0 };
+        let e = reader.alt();
+        assert_eq!(reader.pos, reader.tokens.len(), "`{text}` is more than one expression");
+        e
+    }
+
     /// The expression as EBNF.
     pub fn show(&self) -> String {
         // Inside a sequence or an exception, an alternative needs brackets.
@@ -297,14 +330,22 @@ enum Tok {
 }
 
 fn tokenize(text: &str) -> Vec<Tok> {
+    tokenize_with_comments(text).0
+}
+
+/// The tokens of EBNF text, and its comments, each with the index of the
+/// token after it.
+fn tokenize_with_comments(text: &str) -> (Vec<Tok>, Vec<(usize, String)>) {
     let cs: Vec<char> = text.chars().collect();
     let mut i = 0;
     let mut out = vec![];
+    let mut comments = vec![];
     while i < cs.len() {
         let c = cs[i];
         if c.is_whitespace() {
             i += 1;
         } else if c == '(' && cs.get(i + 1) == Some(&'*') {
+            let start = i;
             let mut depth = 0;
             loop {
                 if cs[i] == '(' && cs.get(i + 1) == Some(&'*') {
@@ -321,6 +362,8 @@ fn tokenize(text: &str) -> Vec<Tok> {
                 }
                 assert!(i < cs.len(), "unclosed comment");
             }
+            let comment: String = cs[start + 2..i - 2].iter().collect();
+            comments.push((out.len(), comment.split_whitespace().collect::<Vec<_>>().join(" ")));
         } else if c == '"' || c == '\'' {
             let end = i + 1 + cs[i + 1..].iter().position(|&d| d == c).expect("unclosed terminal");
             let lit: String = cs[i + 1..end].iter().collect();
@@ -360,7 +403,7 @@ fn tokenize(text: &str) -> Vec<Tok> {
             panic!("unexpected {c:?} in ebnf");
         }
     }
-    out
+    (out, comments)
 }
 
 struct Reader {
@@ -1041,6 +1084,10 @@ pub struct Generator<'g> {
     cost: LookupMap<&'g str, u32>,
     sample: &'g dyn Fn(&str, &mut SeededRng) -> String,
     max_depth: u32,
+    /// How often an option is taken, how often a repetition goes on, and
+    /// whether one with something never written beneath it is always taken
+    /// the first time.
+    take: (f64, f64, bool),
     points: Points<'g>,
     rules: LookupMap<&'g str, &'g Rule>,
     /// How many times each point has been gone through, over every string
@@ -1243,13 +1290,19 @@ impl<'g> Generator<'g> {
         let rules = grammar.rules.iter().map(|r| (r.name.as_str(), r)).collect();
         let points = Points::new(grammar);
         let hits = std::cell::RefCell::new(vec![0; points.all.len()]);
-        Generator { grammar, cost, sample, max_depth: 3, points, rules, hits }
+        Generator { grammar, cost, sample, max_depth: 3, take: (0.5, 0.5, true), points, rules, hits }
     }
 
     /// The same generator, choosing freely only below `max_depth` levels of
     /// recursion.
     pub fn max_depth(self, max_depth: u32) -> Generator<'g> {
         Generator { max_depth, ..self }
+    }
+
+    /// The same generator, writing short strings: a repetition goes on a
+    /// fifth of the time, and nothing is taken for what is beneath it.
+    pub fn lean(self) -> Generator<'g> {
+        Generator { take: (0.5, 0.2, false), ..self }
     }
 
     pub fn generate(&self, start: &str, rng: &mut SeededRng) -> Vec<Piece> {
@@ -1282,7 +1335,9 @@ impl<'g> Generator<'g> {
     /// Whether to take an option or repetition: always the first time where
     /// something beneath it never has been, else half the time.
     fn take(&self, e: &Expr, first: bool, rng: &mut SeededRng) -> bool {
-        (first && self.least_beneath(e) == 0) || rng.random_bool(0.5)
+        let (opt, rep, force) = self.take;
+        let chance = if matches!(e, Expr::Rep(_)) { rep } else { opt };
+        (force && first && self.least_beneath(e) == 0) || rng.random_bool(chance)
     }
 
     fn emit(&self, e: &Expr, depth: u32, rng: &mut SeededRng, out: &mut Vec<Piece>, trace: &mut Vec<u32>, stack: &mut Vec<&'g str>) {

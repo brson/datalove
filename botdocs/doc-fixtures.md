@@ -41,8 +41,8 @@ checked against the lexer and parsers, by `tests/lexical_grammar_tests.rs`,
 the recognizer and generator in `src/ebnf.rs`, the checking in
 `src/grammar_check.rs`, and the grammars made executable in `src/lexical.rs`,
 `src/token_grammar.rs`, `src/datalit_grammar.rs` and `src/datafun_grammar.rs`,
-and how an expression groups by the grammar's parse tree in
-`src/grouping.rs` (see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
+how an expression groups by the grammar's parse tree in `src/grouping.rs`,
+and the grammars' `no X: CODE` notes in `src/deletion.rs` (see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
 `tests/recovery_tests.rs` uses the same grammars to measure how the parsers
 recover from errors (see [Plan: Parse Error Recovery](plan-parse-recovery.md)).
 

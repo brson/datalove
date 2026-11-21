@@ -25,6 +25,10 @@
 //!
 //! The generated strings must reach every rule, alternative, option and
 //! repetition of the grammar: see `datalove_doc_fixtures::ebnf::Coverage`.
+//!
+//! The grammar's `no X: CODE` notes must hold: see
+//! `datalove_doc_fixtures::deletion`, on strings from the seeds of
+//! `DATALOVE_DF_DELETION_SEED` and `DATALOVE_DF_DELETION_COUNT`.
 
 use rmx::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,6 +37,7 @@ use bct::random::{SeededRng, env_seeds, seed_of};
 use datalove_doc_fixtures::datafun_grammar::{
     DOC, Start, corpus, doc_text, grammar, parse_codes, parse_diags, parse_expr_spans, recognizers, sample,
 };
+use datalove_doc_fixtures::deletion::Deletions;
 use datalove_doc_fixtures::ebnf::{Coverage, Generator, Parse};
 use datalove_doc_fixtures::grouping::{expression_rules, grammar_grouping, parser_grouping, render};
 use datalove_doc_fixtures::token_grammar::{Recognizers, TokenGrammar, join_spaced, join_tokens};
@@ -229,4 +234,35 @@ fn generated_group_alike() {
     assert!(compared > n / 2, "only {compared} of {n} generated expressions were compared");
     let report: Vec<String> = differ.iter().take(30).map(|(what, from)| fmt!("{what}\n    from {from:?}")).collect();
     assert!(differ.is_empty(), "the grammar and the parser differ on {} expressions:\n\n{}", differ.len(), report.join("\n\n"));
+}
+
+/// The grammar's notes of what a missing part is refused with hold.
+#[test]
+fn deletion_notes_hold() {
+    let g = grammar();
+    let sampler = |text: &str, rng: &mut SeededRng| sample(&g, text, rng);
+    // Short strings, which the parser takes whole more often: a long one
+    // nearly always breaks a rule outside the grammar somewhere.
+    let generator = Generator::new(&g.typed, &sampler).max_depth(0).lean();
+    let starts = [Start::Script, Start::Module, Start::Interface];
+    let recs = Recognizers::types_written_out(&g, &starts.map(Start::rule), true);
+    let parse = |start: &str, text: &str| {
+        let start = [Start::Script, Start::Module, Start::Interface].into_iter().find(|s| s.rule() == start).X();
+        parse_diags(start, text)
+    };
+    let mut deletions = Deletions::new(&g, &recs, &parse);
+    for ex in examples(&doc_text(), DOC).iter().filter(|ex| ex.codes.is_empty()) {
+        deletions.check(&ex.context, &ex.text);
+    }
+    for seed in env_seeds("DATALOVE_DF_DELETION", 0, 600).iter() {
+        let start = starts[(seed % 3) as usize];
+        // Each seed draws until the parser takes one whole.
+        let mut rng = SeededRng::new(seed);
+        for _ in 0..20 {
+            if deletions.check(start.rule(), &join_spaced(&generator.generate(start.rule(), &mut rng))) {
+                break;
+            }
+        }
+    }
+    deletions.finish("generated strings");
 }

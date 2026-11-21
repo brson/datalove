@@ -32,6 +32,10 @@ optional, `{ x }` repeats zero or more times, `( x )` groups, `a - b` is what
 `"\n"` is a newline character), `"a" .. "z"` is a range of characters,
 `? x ?` is a special sequence described in English, and `(* x *)` is a
 comment. Comments in the grammar name the diagnostic a violation produces.
+One form of them is checked: `no X: CODE`, on a rule, says that a node of
+the rule written without `X` is refused with `CODE`, where `X` is a
+terminal, a rule, or a sequence of them written directly in the rule, as
+`no "/": D049`. The rest are read by people.
 
 The grammar is over the tokens of [Lexical Grammar](lexical-grammar.md): a
 terminal matches a token by its text, and the whitespace and comments
@@ -84,7 +88,7 @@ term_type      = "term", NAME, type ;              (* D052 *)
 enum_type      = "enum", "{", [ enum_variant_list ], "}" ;  (* D032 *)
 enum_variant_list = enum_variant, { ",", enum_variant }, [ "," ] ;
 enum_variant   = atom_type | term_type ;           (* else D053; names unique: D038 *)
-rec_type       = "rec", NAME, type ;               (* no name: D056; a type word: D057 *)
+rec_type       = "rec", NAME, type ;               (* no NAME: D056; a type word: D057 *)
 type_name      = NAME - ( scalar_type | "atom" | "term" | "enum" | "rec" ) ;
                  (* a rec's name in its body, else T059 *)
 
@@ -149,7 +153,7 @@ number         = float_lit | hex_lit | int_lit ;   (* malformed: D019; suffixed:
 int_lit        = [ "-" ], digit_run ;
 float_lit      = [ "-" ], digit_run, ( ".", digit_run, [ exponent ] | exponent ) ;
 exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
-hex_lit        = "0", ( "x" | "X" ), hex_run ;     (* no sign: D061 *)
+hex_lit        = "0", ( "x" | "X" ), hex_run ;     (* signed: D061 *)
 rank           = digit, { digit } ;                (* 1 to 2^32-1, no "_": D045; 0: D042 *)
 digit_run      = digit, [ { digit | "_" }, digit ] ;
 hex_run        = hex_digit, [ { hex_digit | "_" }, hex_digit ] ;
@@ -315,6 +319,16 @@ reaches: every rule, every alternative of every `|`, and every option and
 repetition taken, or the test fails, naming what was never written. The
 generator favours what it has written least, so a rare corner is reached
 without many more strings. The rules written in characters are not yet counted.
+
+Each `no X: CODE` note is checked on short generated inputs the parser
+takes, and on the `ok` examples. Where a node of the note's rule holds `X`,
+`X` is taken out; where the grammar then stops at the gap, the parser's first
+error must be `CODE`, inside the node or on the token after the gap. Where
+the grammar reads on, what is left means something else, and the note does
+not apply: taking the name from `for x in ref xs` leaves `for in ref xs`,
+which names its element `in`. So does an error the parser reads past, as
+the notes mark with `read anyway`. Every note must be checked at least once.
+The check is in `crates/datalove-doc-fixtures/src/deletion.rs`.
 
 The recognizer reads the tokens the real lexer makes, which
 [Lexical Grammar](lexical-grammar.md) holds to its own grammar, with a

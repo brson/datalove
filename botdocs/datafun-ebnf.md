@@ -93,11 +93,13 @@ end_line(k)   = "end", k ;         (* a line of its own; extra tokens: P033; mis
                                       another keyword, or none: P093 *)
 
 (* ===== Bindings  (statement.rs: parse_let, parse_var, parse_const, parse_binding) ===== *)
-let_stmt      = "let", binding, [ ":", type ], "=", expr ;   (* P007; no "=": P083 *)
+let_stmt      = "let", binding, [ ":", type ], "=", expr ;   (* no binding: P007; no "=": P083 *)
 var_stmt      = "var", binding, [ ":", type ], "=", expr
               | "var", value_name, ":", type ;
-                (* P008; pattern without value: P068; no type: P026 *)
-const_stmt    = "const", value_name, [ ":", type ], "=", expr ; (* P024, P025 *)
+                (* no binding: P008; pattern without value: P068;
+                   no ( ":", type ): P026 *)
+const_stmt    = "const", value_name, [ ":", type ], "=", expr ;
+                (* no value_name: P024; no "=": P025 *)
 binding       = value_name
               | "(", [ value_name, ",", [ value_name, { ",", value_name }, [ "," ] ] ], ")"
                                                  (* (a): P070 *)
@@ -107,7 +109,8 @@ binding       = value_name
 field_pat     = NAME, "=", value_name | value_name ;   (* names unique: D038 *)
 
 (* ===== Assignment  (statement.rs: parse_set, parse_place_steps) ===== *)
-set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* P009; no op: P089 *)
+set_stmt      = "set", NAME, { place_step }, assign_op, expr ;
+                (* no NAME: P009; no assign_op: P089 *)
 place_step    = ~".", field_sel
               | ~"[", expr, "]", [ ~"?" | ~"!" ] ;   (* spaced: P090, read anyway *)
 assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
@@ -117,38 +120,39 @@ assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
 fun_def       = "fun", value_name, [ type_params ], param_list, [ ":", type ],
                 [ where_clause ], EOLS,
                 [ "inline", EOLS ],            (* elsewhere: P076 *)
-                block, end_line("fun") ;     (* no name: P010; no "(": P002 *)
+                block, end_line("fun") ;     (* no value_name: P010; no param_list: P002 *)
 native_fun    = [ "intrinsic" ], "native", "fun", value_name, [ type_params ], param_list,
-                [ ":", type ], [ where_clause ] ;   (* P028, P029, P030;
-                                                       an intrinsic the compiler
-                                                       does not know: P085 *)
-type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;  (* no name: P092 *)
+                [ ":", type ], [ where_clause ] ;
+                (* no "fun": P028; no value_name: P029; no param_list: P030;
+                   an intrinsic the compiler does not know: P085 *)
+type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;  (* no type_name: P092 *)
 param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;
 param         = [ "const" | "ref" | "mut" | "out" ], param_name, ":", type ;
-                (* const with a mode: P082; no name: P011; no ":": P012 *)
+                (* const with a mode: P082; no param_name: P011; no ":": P012 *)
 where_clause  = "where", "{", [ bound, { ",", bound }, [ "," ] ], "}" ;  (* P061, P062 *)
 bound         = NAME, "is", ( "ord" | "float" | "fixedint" ) ;
-                (* P063, P060; a parameter bounded twice: P078 *)
-type_alias    = "type", type_name, "=", type ;  (* P022, P023 *)
+                (* no "is": P063; P060; a parameter bounded twice: P078 *)
+type_alias    = "type", type_name, "=", type ;  (* no type_name: P022; no "=": P023 *)
 
 (* ===== Modules  (statement.rs: parse_require, parse_import) ===== *)
 require_stmt  = "require", ( "module", lib_path
                            | "data", lib_path, [ ":", type ]
-                           | "rider", value_name ) ;    (* P027; else P005 *)
-lib_path      = NAME, "/", NAME, "/", value_name ;  (* P003, P004, P013-P016 *)
+                           | "rider", value_name ) ;    (* no value_name: P027; else P005 *)
+lib_path      = NAME, "/", NAME, "/", value_name ;  (* no "/": P003; P004, P013-P016 *)
                 (* the last segment is the alias or const the require binds *)
-import_stmt   = "import", NAME, ".", NAME ;     (* P006, P017, P018 *)
+import_stmt   = "import", NAME, ".", NAME ;     (* no NAME: P017; no ".": P006; P018 *)
 
 (* ===== Control flow  (statement.rs: parse_if, parse_loop, parse_for, parse_match) ===== *)
 if_stmt       = "if", if_arm, end_line("if") ;
 if_arm        = expr, [ pipe_binding ], EOLS, block,
                 [ "else", [ pipe_binding ],
                   ( "if", if_arm | EOLS, block ) ] ;   (* else-if shares one "end if" *)
-pipe_binding  = "|", value_name, "|" ;          (* P019, P020 *)
+pipe_binding  = "|", value_name, "|" ;          (* no value_name: P019; P020 *)
 loop_stmt     = "loop", [ "while", expr ], EOLS, block, end_line("loop") ;
 for_stmt      = "for", value_name, [ ",", value_name ], "in", "ref", expr,
                 EOLS, block, end_line("for") ;
-                (* no name, or a third: P086; no "in": P087; no "ref": P088 *)
+                (* no value_name: P086; a third name: P086; no "in": P087;
+                   no "ref": P088 *)
 break_stmt    = "break" ;
 continue_stmt = "continue" ;
 match_stmt    = "match", expr, EOLS, { case_arm }, end_line("match") ;  (* P048 *)
@@ -312,6 +316,7 @@ P077       let x = 1
 
 ```examples interface
 ok         native fun f(x: u8): u8
+ok         native fun max<T>(a: T, b: T): T where { T is ord }
 P084       const x = 1
 ```
 
@@ -551,8 +556,8 @@ parsed as a script, module or rider interface, and the `examples` blocks
 above, fenced as ```` ```examples script ````, `module` or `interface` and
 written as [datalit's are](datalit-ebnf.md#user-content-checking-the-grammar):
 the parser must refuse each with exactly the codes given. The generated
-strings must reach the whole grammar, as
-[datalit's must](datalit-ebnf.md#user-content-checking-the-grammar).
+strings must reach the whole grammar, and the `no X: CODE` notes hold, as
+[datalit's do](datalit-ebnf.md#user-content-checking-the-grammar).
 
 The same test holds the parser to the grammar's grouping. It generates
 expressions, with a space wherever one may go, and for each the parser takes,

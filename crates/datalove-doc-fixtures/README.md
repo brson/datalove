@@ -16,7 +16,8 @@ The fixtures behind the documentation, and the tests that keep it true.
 and generator in `src/ebnf.rs`, the checking in `src/grammar_check.rs`, and
 the grammars made executable in `src/lexical.rs`, `src/token_grammar.rs`,
 `src/datalit_grammar.rs` and `src/datafun_grammar.rs`, and how an expression
-groups by the grammar's parse tree in `src/grouping.rs`. `tests/recovery_tests.rs` measures how the parsers
+groups by the grammar's parse tree in `src/grouping.rs`, and the grammars'
+`no X: CODE` notes in `src/deletion.rs`. `tests/recovery_tests.rs` measures how the parsers
 recover from errors, and holds their diagnostics to a well-formed shape.
 
 ```bash

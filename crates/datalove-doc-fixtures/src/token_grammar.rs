@@ -133,7 +133,9 @@ impl Tokens {
         self.toks.is_empty()
     }
 
-    fn token_text(&self, i: usize) -> Option<&str> {
+    /// The text of token `i`, if it is a token and not a newline the
+    /// grammar reads.
+    pub fn token_text(&self, i: usize) -> Option<&str> {
         let t = self.toks.get(i)?;
         (t.kind == Kind::Token).then(|| &self.text[t.start..t.end])
     }
@@ -226,7 +228,7 @@ impl TokenGrammar {
             });
         }
         for name in &islands {
-            token_rules.push(crate::ebnf::Rule { name: name.C(), body: Expr::Special(fmt!("{ISLAND}{name}")) });
+            token_rules.push(crate::ebnf::Rule { name: name.C(), body: Expr::Special(fmt!("{ISLAND}{name}")), notes: vec![] });
         }
         let typed = Grammar { rules: token_rules };
         let mut tokens = typed.C();
@@ -265,6 +267,17 @@ pub struct Recognizers {
 impl Recognizers {
     /// Recognizers for `starts`, over tokens with `EOL`s if `eols`.
     pub fn new(g: &TokenGrammar, starts: &[&str], eols: bool) -> Recognizers {
+        Recognizers::of(g, &g.tokens, starts, eols)
+    }
+
+    /// Recognizers that read a type by its rules, as any other part, not
+    /// whole: their parse trees show its parts. A table type written over
+    /// lines is not read, its newlines being a table's.
+    pub fn types_written_out(g: &TokenGrammar, starts: &[&str], eols: bool) -> Recognizers {
+        Recognizers::of(g, &g.typed, starts, eols)
+    }
+
+    fn of(g: &TokenGrammar, rules: &Grammar, starts: &[&str], eols: bool) -> Recognizers {
         let chars: Rc<Vec<_>> = Rc::new(
             g.islands.iter().map(|name| Recognizer::new(&g.chars, name, &|e: &Expr| crate::ebnf::char_term(e, g.special))).collect(),
         );
@@ -272,7 +285,7 @@ impl Recognizers {
         let inner = Rc::new(Islands { chars: chars.C(), ty: None });
         let ty = g.typed.get(TYPE).map(|_| Rc::new(Recognizer::new(&g.typed, TYPE, &|e: &Expr| token_term(g, &inner, e))));
         let islands = Rc::new(Islands { chars, ty });
-        let recs = starts.iter().map(|s| (s.S(), Recognizer::new(&g.tokens, s, &|e: &Expr| token_term(g, &islands, e)))).collect();
+        let recs = starts.iter().map(|s| (s.S(), Recognizer::new(rules, s, &|e: &Expr| token_term(g, &islands, e)))).collect();
         Recognizers { recs, islands, eols }
     }
 
@@ -287,6 +300,11 @@ impl Recognizers {
     /// The parse tree of `tokens` as `start`.
     pub fn parse(&self, start: &str, tokens: &Tokens) -> Parse {
         self.rec(start).parse(tokens, tokens.len())
+    }
+
+    /// Whether a rule of the grammar is read whole, as an island.
+    pub fn is_island(g: &TokenGrammar, name: &str) -> bool {
+        g.tokens.get(name).is_some_and(|r| matches!(&r.body, Expr::Special(t) if t.starts_with(ISLAND)))
     }
 
     pub fn derives(&self, start: &str, text: &str) -> bool {
