@@ -400,12 +400,11 @@ def mTarget (σ : MSt) (x : String) (steps : List Step) : Option BinOp → MoveM
       | some v => if !v.init then throw "O009" else if !v.live then throw "O001" else pure σ
       | none => pure σ
 
-/-- An expression of statement `id` that the Rust's `analyze_leaving_expr`
-reads: where it can return early, what is owned once it has run is dropped
-there, and what it moved on the way, which a return before the move still
-owns, is scheduled apart. -/
-def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt :=
-  if exprLeaves e then do
+/-- A step of statement `id` that may return early where `leaves` says:
+then what is owned once it has run is dropped there, and what it moved on
+the way, which a return before the move still owns, is scheduled apart. -/
+def leavingIf (id : Nat) (σ : MSt) (leaves : Bool) (m : MoveM MSt) : MoveM MSt :=
+  if leaves then do
     let before ← ownedIn σ
     let σ' ← m
     let drops ← ownedIn σ'
@@ -413,6 +412,24 @@ def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt :=
     record "before_try_return" id none drops (always := true)
     pure σ'
   else m
+
+/-- An expression of statement `id` that the Rust's `analyze_leaving_expr`
+reads, which may return early where `exprLeaves` says. -/
+def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt :=
+  leavingIf id σ (exprLeaves e) m
+
+/-- What a `set` runs before it reaches its place: the value, then the
+keys, which are filed in the expression arena before the value. -/
+def mSetParts (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (steps : List Step) (op : Option BinOp)
+    (e : Expr) : MoveM MSt := do
+  let keys ← exprAt
+  exprFrom (keys + Expr.nodes.keyNodes steps)
+  let σ ← mE sigs Γ op.isSome σ e
+  let next ← exprAt
+  exprFrom keys
+  let σ ← mKeys sigs Γ σ steps
+  exprFrom next
+  pure σ
 
 /-- `set x … = e` or `set x … ⊕= e` of statement `id`: not to what a `for`
 walks (O015), to what may be changed (O004, O011, which typechecking
@@ -427,21 +444,8 @@ def mSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : Str
   -- What typechecking lets a `set` write, a `var` or a `mut` or `out`
   -- parameter, which the analysis needs to know of what it gives a value.
   writableM σ x
-  let before ← ownedIn σ
-  -- The keys are filed before the value, which runs first.
-  let keys ← exprAt
-  exprFrom (keys + Expr.nodes.keyNodes steps)
-  let σ ← mE sigs Γ op.isSome σ e
-  let next ← exprAt
-  exprFrom keys
-  let σ ← mKeys sigs Γ σ steps
-  exprFrom next
   let keysLeave := steps.any fun | .index k _ => exprLeaves k | _ => false
-  (if exprLeaves e || keysLeave || op.any BinOp.exits then do
-      let drops ← ownedIn σ
-      recordNotYetMoved id (before.filter (!drops.contains ·))
-      record "before_try_return" id none drops (always := true)
-    else pure ())
+  let σ ← leavingIf id σ (exprLeaves e || keysLeave || op.any BinOp.exits) (mSetParts sigs Γ σ steps op e)
   let σ ← mTarget σ x steps op
   (if stepsExit steps then do
       record "before_set_target_early_return" id none (← ownedIn σ) (always := true)

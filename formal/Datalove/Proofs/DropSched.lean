@@ -412,14 +412,17 @@ theorem loopHeld_ext {σc : MSt} {body : List Stmt} {r : MOut} {st st' : DSt} (w
     exact SchedExt.holdFrom w (p c.1.2)
   · cases e; exact SchedExt.refl w
 
-theorem SchedGrows.leaving (id : Nat) (σ : MSt) (e : Expr) {m : MoveM MSt} (hm : SchedGrows m) :
-    SchedGrows (Fun.leaving id σ e m) := by
-  unfold Fun.leaving
+theorem SchedGrows.leavingIf (id : Nat) (σ : MSt) (leaves : Bool) {m : MoveM MSt} (hm : SchedGrows m) :
+    SchedGrows (Fun.leavingIf id σ leaves m) := by
+  unfold Fun.leavingIf
   split
   · exact SchedGrows.bind (SchedGrows.ownedIn σ) fun _ => SchedGrows.bind hm fun _ =>
       SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.bind (SchedGrows.recordNotYetMoved _ _) fun _ =>
       SchedGrows.bind (SchedGrows.record _ _ _ _ _) fun _ => SchedGrows.pure _
   · exact hm
+
+theorem SchedGrows.leaving (id : Nat) (σ : MSt) (e : Expr) {m : MoveM MSt} (hm : SchedGrows m) :
+    SchedGrows (Fun.leaving id σ e m) := SchedGrows.leavingIf id σ _ hm
 
 
 /-! ## What the walk's states keep of the bindings -/

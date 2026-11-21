@@ -9,14 +9,14 @@ theorem OutMade.simple {σ : MSt} {st : DSt} (h : Made σ st) : OutMade (σ, [],
   unfold OutMade
   refine ⟨h, ?_, ?_⟩ <;> intro _ hx <;> cases hx
 
-/-- A statement's expression, through `leaving`: the schedule kept as
-`SchedExt` says, and its state's bindings as they were. -/
-theorem leaving_made {id : Nat} {σ σ' : MSt} {e : Expr} {m : MoveM MSt} (hm : Shr σ m) {st st' : DSt}
-    (w : st.WF) (h : (leaving id σ e m).run st = .ok (σ', st')) (md : Made σ st) :
+/-- A step through `leavingIf`: the schedule kept as `SchedExt` says, and
+its state's bindings as they were. -/
+theorem leavingIf_made {id : Nat} {σ σ' : MSt} {c : Bool} {m : MoveM MSt} (hm : Shr σ m) {st st' : DSt}
+    (w : st.WF) (h : (leavingIf id σ c m).run st = .ok (σ', st')) (md : Made σ st) :
     Made σ' st' ∧ SchedExt st st' := by
-  have x := SchedGrows.leaving id σ e (SchedGrows.shr hm) st σ' st' w h
+  have x := SchedGrows.leavingIf id σ c (SchedGrows.shr hm) st σ' st' w h
   refine ⟨Made.ext ?_ x, x⟩
-  unfold leaving at h
+  unfold leavingIf at h
   split at h
   · obtain ⟨_, st1, h1, h2⟩ := MoveM.bind_ok h
     obtain ⟨σ1, st2, h3, h4⟩ := MoveM.bind_ok h2
@@ -27,6 +27,10 @@ theorem leaving_made {id : Nat} {σ σ' : MSt} {e : Expr} {m : MoveM MSt} (hm : 
     cases h7
     exact md.of_same (SameIds.below b)
   · exact md.of_same (SameIds.below (hm st σ' st' h).1)
+
+theorem leaving_made {id : Nat} {σ σ' : MSt} {e : Expr} {m : MoveM MSt} (hm : Shr σ m) {st st' : DSt}
+    (w : st.WF) (h : (leaving id σ e m).run st = .ok (σ', st')) (md : Made σ st) :
+    Made σ' st' ∧ SchedExt st st' := leavingIf_made hm w h md
 
 theorem exitM_eq {σ τ : MSt} {st st' : DSt} (h : (exitM σ).run st = .ok (τ, st')) : τ = σ ∧ st' = st := by
   unfold exitM at h
@@ -48,6 +52,14 @@ theorem shr_made {σ τ : MSt} {m : MoveM MSt} (hm : Shr σ m) {st st' : DSt} (w
   have x := SchedGrows.shr hm st τ st' w h
   exact ⟨(md.of_same (SameIds.below (hm st τ st' h).1)).ext x, x⟩
 
+theorem mSetParts_shr (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (steps : List Step) (op : Option BinOp)
+    (e : Expr) : Shr σ (mSetParts sigs Γ σ steps op e) := by
+  unfold mSetParts
+  exact Shr.calm_bind KeepsSched.exprAt fun _ => Shr.calm_bind (KeepsSched.exprFrom _) fun _ =>
+    Shr.bind (mE_shr sigs Γ _ σ e) fun σ1 h1 => Shr.calm_bind KeepsSched.exprAt fun _ =>
+    Shr.calm_bind (KeepsSched.exprFrom _) fun _ => Shr.bind ((mKeys_shr sigs Γ σ1 steps).trans h1) fun σ2 h2 =>
+    Shr.calm_bind (KeepsSched.exprFrom _) fun _ => Shr.pure' h2
+
 theorem mSet_made {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String} {steps : List Step} {op : Option BinOp}
     {e : Expr} {st st' : DSt} (sigs : List (String × Sig)) (w : st.WF)
     (h : (mSet sigs Γ id σ x steps op e).run st = .ok (σ', st')) (md : Made σ st) :
@@ -57,54 +69,29 @@ theorem mSet_made {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String} {steps : Lis
   have x0 := SchedGrows.keepsSched (KeepsSched.unwalkedM σ x) st _ st0 w h0
   obtain ⟨_, st1, h1, h⟩ := MoveM.bind_ok h
   have x1 := x0.trans (SchedGrows.keepsSched (KeepsSched.writableM σ x) st0 _ st1 x0.wf h1)
-  obtain ⟨_, st2, h2, h⟩ := MoveM.bind_ok h
-  have x2 := SchedGrows.ownedIn σ st1 _ st2 x1.wf h2
-  obtain ⟨_, st3, h3, h⟩ := MoveM.bind_ok h
-  have x3 := SchedGrows.keepsSched KeepsSched.exprAt st2 _ st3 x2.wf h3
+  obtain ⟨σ1, st2, h2, h⟩ := MoveM.bind_ok h
+  obtain ⟨m2, x2⟩ := leavingIf_made (mSetParts_shr sigs Γ σ steps op e) x1.wf h2 (md.ext x1)
+  obtain ⟨σ2, st3, h3, h⟩ := MoveM.bind_ok h
+  obtain ⟨m3, x3⟩ := shr_made (mTarget_shr σ1 x steps op) x2.wf h3 m2
   obtain ⟨_, st4, h4, h⟩ := MoveM.bind_ok h
-  have x4 := SchedGrows.keepsSched (KeepsSched.exprFrom _) st3 _ st4 x3.wf h4
-  obtain ⟨σ1, st5, h5, h⟩ := MoveM.bind_ok h
-  obtain ⟨m5, x5⟩ := shr_made (mE_shr sigs Γ _ σ e) x4.wf h5 (((md.ext x1).ext x2 |>.ext x3).ext x4)
-  obtain ⟨_, st6, h6, h⟩ := MoveM.bind_ok h
-  have x6 := SchedGrows.keepsSched KeepsSched.exprAt st5 _ st6 x5.wf h6
-  obtain ⟨_, st7, h7, h⟩ := MoveM.bind_ok h
-  have x7 := SchedGrows.keepsSched (KeepsSched.exprFrom _) st6 _ st7 x6.wf h7
-  obtain ⟨σ2, st8, h8, h⟩ := MoveM.bind_ok h
-  obtain ⟨m8, x8⟩ := shr_made (mKeys_shr sigs Γ σ1 steps) x7.wf h8 ((m5.ext x6).ext x7)
-  obtain ⟨_, st9, h9, h⟩ := MoveM.bind_ok h
-  have x9 := SchedGrows.keepsSched (KeepsSched.exprFrom _) st8 _ st9 x8.wf h9
-  obtain ⟨_, st10, h10, h⟩ := MoveM.bind_ok h
-  have x10 : SchedExt st9 st10 := by
-    split at h10
-    · exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.bind (SchedGrows.recordNotYetMoved _ _) fun _ =>
-        SchedGrows.record _ _ _ _ _) st9 _ st10 x9.wf h10
-    · cases h10; exact SchedExt.refl x9.wf
-  obtain ⟨σ3, st11, h11, h⟩ := MoveM.bind_ok h
-  obtain ⟨m11, x11⟩ := shr_made (mTarget_shr σ2 x steps op) x10.wf h11 ((m8.ext x9).ext x10)
-  obtain ⟨_, st12, h12, h⟩ := MoveM.bind_ok h
-  have x12 : SchedExt st11 st12 := by
-    split at h12
-    · exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) st11 _ st12 x11.wf h12
-    · cases h12; exact SchedExt.refl x11.wf
-  obtain ⟨σ4, st13, h13, h⟩ := MoveM.bind_ok h
-  have e13 : σ4 = σ3 ∧ st13 = st12 := by
-    split at h13
-    · unfold exitM at h13
-      split at h13
-      · cases h13; exact ⟨rfl, rfl⟩
-      · cases h13
-    · cases h13; exact ⟨rfl, rfl⟩
+  have x4 : SchedExt st3 st4 := by
+    split at h4
+    · exact (SchedGrows.bind (SchedGrows.ownedIn _) fun _ => SchedGrows.record _ _ _ _ _) st3 _ st4 x3.wf h4
+    · cases h4; exact SchedExt.refl x3.wf
+  obtain ⟨σ4, st5, h5, h⟩ := MoveM.bind_ok h
+  have e5 : σ4 = σ2 ∧ st5 = st4 := by
+    split at h5
+    · exact exitM_eq h5
+    · cases h5; exact ⟨rfl, rfl⟩
   simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at h
   obtain ⟨rfl, rfl⟩ := h
-  obtain ⟨rfl, rfl⟩ := e13
-  have xall := x1.trans (x2.trans (x3.trans (x4.trans (x5.trans (x6.trans (x7.trans (x8.trans
-    (x9.trans (x10.trans (x11.trans x12))))))))))
-  refine ⟨?_, xall⟩
-  have m12 := m11.ext x12
+  obtain ⟨rfl, rfl⟩ := e5
+  refine ⟨?_, x1.trans (x2.trans (x3.trans x4))⟩
+  have m4 := m3.ext x4
   split
-  · exact m12.of_same (SameIds.update (f := fun v => { v with init := true, live := true })
+  · exact m4.of_same (SameIds.update (f := fun v => { v with init := true, live := true })
       (fun _ => ⟨rfl, rfl⟩) x σ4)
-  · exact m12
+  · exact m4
 
 theorem bindFor_made {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MSt} {st st' : DSt}, st.WF →
     (xs.foldlM (fun σ (x, r) => bindOne Γf false true true false r σ x) σ).run st = .ok (σ', st') →
