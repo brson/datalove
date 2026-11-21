@@ -39,7 +39,7 @@ impl<'db> Parser<'db> {
 
         // Check for postfix try operators (? and !).
         // These have highest precedence and are parsed before binary operators.
-        lhs = self.parse_postfix_try_operators(lhs);
+        lhs = self.parse_postfix_try_operators(lhs, start_pos);
 
         // Whether `lhs` is a comparison built by this loop. One in parentheses
         // came from `parse_expr_primary` and may be compared again.
@@ -104,13 +104,11 @@ impl<'db> Parser<'db> {
     /// When an index `[expr]` is followed by `?` or `!` and the base expression
     /// can be decomposed into a root name + field steps, produces
     /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
-    pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprId) -> ast::ExprId {
-        // Where the whole chain begins. `?`, `!` and `@` are spanned from the
-        // operator, which is what a diagnostic about them points at: the `!`
-        // that returned early. A place, projection, index or call is all of
-        // what it reads or calls, from the start of the chain: all of `t.0`,
-        // `l[0]!` or `u8.max_value()`.
-        let chain_start = self.expr_span_start(expr);
+    /// `start` is where the chain begins: where `expr` was written, its
+    /// parentheses included. Each postfix expression is spanned from there,
+    /// as all of `t.0`, `o?`, `l[0]!` or `u8.max_value()`.
+    pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprId, start: usize) -> ast::ExprId {
+        let chain_start = start;
         loop {
             // A postfix operator is written against what it operates on, so
             // one with a space before it is not attached to this expression.
@@ -119,12 +117,12 @@ impl<'db> Parser<'db> {
             }
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
-                    let TextSpan { source: text, span: op_span } = self.extract_text_span(&TreeToken::Token(token.C()));
+                    let TextSpan { source: text, .. } = self.extract_text_span(&TreeToken::Token(token.C()));
                     match token.kind {
                         TokenKind::Sigil(Sigil::Question) => {
                             self.next(); // consume ?
                             let end_pos = self.last_byte_end();
-                            let span = op_span.start..end_pos;
+                            let span = chain_start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::TryOption(ast::ExprTryOption { operand: expr }),
                                 TextSpan::new(text, span),
@@ -133,7 +131,7 @@ impl<'db> Parser<'db> {
                         TokenKind::Sigil(Sigil::Exclamation) => {
                             self.next(); // consume !
                             let end_pos = self.last_byte_end();
-                            let span = op_span.start..end_pos;
+                            let span = chain_start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::TryResult(ast::ExprTryResult { operand: expr }),
                                 TextSpan::new(text, span),
@@ -142,7 +140,7 @@ impl<'db> Parser<'db> {
                         TokenKind::Sigil(Sigil::At) => {
                             self.next(); // consume @
                             let end_pos = self.last_byte_end();
-                            let span = op_span.start..end_pos;
+                            let span = chain_start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::CloneCoerce(ast::ExprCloneCoerce { operand: expr }),
                                 TextSpan::new(text, span),
@@ -493,8 +491,9 @@ impl<'db> Parser<'db> {
     /// or that the payload reaches further than it does; either way what was
     /// meant needs parentheses to say.
     pub(super) fn parse_payload(&mut self) -> ast::ExprId {
+        let start = self.current_byte_pos();
         let payload = self.parse_expr_primary();
-        let payload = self.parse_postfix_try_operators(payload);
+        let payload = self.parse_postfix_try_operators(payload, start);
         if self.peek_binop().is_some() {
             use datalove_datalit::parser_util::EmitTo;
             let ts = self.peek_text_span();
@@ -531,8 +530,9 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 let text = self.source_text();
                 self.next(); // Consume the operator.
                 // Postfix binds tighter than prefix: `not s.a` is `not (s.a)`.
+                let operand_start = self.current_byte_pos();
                 let operand = self.parse_expr_primary();
-                let operand = self.parse_postfix_try_operators(operand);
+                let operand = self.parse_postfix_try_operators(operand, operand_start);
                 let span = start..self.last_byte_end();
                 return self.create_expr(
                     ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp { op, operand }),
@@ -706,6 +706,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         }
                                     };
 
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(
                                         ast::ExprFunKind::IntrinsicCall(ast::ExprIntrinsicCall {
                                             name: intrinsic_name,
@@ -716,9 +717,10 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     )
                                 }
                                 num if Self::is_number_word(num) => {
-                                    // Capture span before parsing for diagnostic reporting.
+                                    // A number may be several tokens glued, `1.5e3`.
                                     let ts = self.peek_text_span();
                                     let expr_kind = self.parse_lit_expr();
+                                    let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
                                     self.create_expr(expr_kind, ts)
                                 }
                                 _ => {

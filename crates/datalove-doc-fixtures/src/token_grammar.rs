@@ -25,13 +25,31 @@ use std::rc::Rc;
 use bct::lexer::{Sigil, TokenKind};
 use bct::lookup::LookupMap;
 
-use crate::ebnf::{Expr, Generator, Grammar, Piece, Recognizer, Term, join_chars};
+use crate::ebnf::{Expr, Generator, Grammar, Parse, Piece, Recognizer, Term, join_chars};
 
 /// The special sequences over tokens.
 pub const EOL: &str = "a newline outside brackets";
 pub const ROW_NEWLINE: &str = "a newline in a table, outside brackets nested in it";
 pub const NAME: &str = "an ASCII word not beginning with a digit";
-pub const NUMBER_END: &str = r#"no "." or word glued after it"#;
+/// How a special sequence that ends a rule is written: `? no "." or word
+/// glued after it ?` says the next token is neither a `.` nor a word glued
+/// to the one before it, matching nothing.
+const ENDS: (&str, &str) = ("no ", " glued after it");
+
+/// What an end says may not follow: tokens by their text, and whether a word.
+fn ends(text: &str) -> Option<(Vec<String>, bool)> {
+    let list = text.strip_prefix(ENDS.0)?.strip_suffix(ENDS.1)?;
+    let mut texts = vec![];
+    let mut word = false;
+    for part in list.split(" or ") {
+        match part {
+            "word" => word = true,
+            p if p.len() > 2 && p.starts_with('"') && p.ends_with('"') => texts.push(p[1..p.len() - 1].S()),
+            p => panic!("`{p}` in `? {text} ?` is neither a quoted token nor `word`"),
+        }
+    }
+    Some((texts, word))
+}
 
 /// The comment that heads the rules written in characters.
 pub const CHARS_MARKER: &str = "(* Written in characters";
@@ -266,6 +284,13 @@ impl Recognizers {
         Tokens::new(text, self.eols)
     }
 
+    /// The tokens of `text`, and its parse tree as `start`.
+    pub fn parse(&self, start: &str, text: &str) -> (Tokens, Parse) {
+        let tokens = self.tokens(text);
+        let parse = self.rec(start).parse(&tokens, tokens.len());
+        (tokens, parse)
+    }
+
     pub fn derives(&self, start: &str, text: &str) -> bool {
         let tokens = self.tokens(text);
         self.rec(start).accepts(&tokens, tokens.len())
@@ -348,9 +373,10 @@ fn token_term(g: &TokenGrammar, islands: &Rc<Islands>, e: &Expr) -> Term<Tokens>
                 out.push(1);
             }
         }),
-        Expr::Special(text) if text == NUMBER_END => Rc::new(|input: &Tokens, i, out: &mut Vec<usize>| {
-            let continues = input.glued(i) && (input.toks[i].word || input.token_text(i) == Some("."));
-            if !continues {
+        Expr::Special(text) if let Some((texts, word)) = ends(text) => Rc::new(move |input: &Tokens, i, out: &mut Vec<usize>| {
+            let follows = input.glued(i)
+                && ((word && input.toks[i].word) || input.token_text(i).is_some_and(|t| texts.iter().any(|x| x == t)));
+            if !follows {
                 out.push(0);
             }
         }),
@@ -460,7 +486,7 @@ pub fn sample(g: &TokenGrammar, char_sample: &dyn Fn(&str, &mut SeededRng) -> St
         EOL => "\n".S(),
         ROW_NEWLINE => "\n".S(),
         NAME => NAMES[rng.random_range(0..NAMES.len())].S(),
-        NUMBER_END => String::new(),
+        t if ends(t).is_some() => String::new(),
         t if t.starts_with(ISLAND) => {
             let generator = Generator::new(&g.chars, char_sample);
             join_chars(&generator.generate(&t[ISLAND.len()..], rng), &|name, _, _| {
@@ -475,6 +501,16 @@ pub fn sample(g: &TokenGrammar, char_sample: &dyn Fn(&str, &mut SeededRng) -> St
 /// would lex as something else written together, and elsewhere a space or
 /// not, at random. A newline is a token on its own.
 pub fn join_tokens(pieces: &[Piece], rng: &mut SeededRng) -> String {
+    join(pieces, &mut || rng.random_bool(0.5))
+}
+
+/// Generated tokens as text, as [`join_tokens`] puts them, but with a space
+/// wherever one may go.
+pub fn join_spaced(pieces: &[Piece]) -> String {
+    join(pieces, &mut || true)
+}
+
+fn join(pieces: &[Piece], space: &mut dyn FnMut() -> bool) -> String {
     let db = datalove_datalit::Database::default();
     let lex = |t: &str| -> Vec<(usize, usize)> {
         let source = bct::input::Source::new(&db, t.S());
@@ -495,7 +531,7 @@ pub fn join_tokens(pieces: &[Piece], rng: &mut SeededRng) -> String {
             Piece::Text(t) if t.is_empty() => {}
             Piece::Text(t) => {
                 let newline = t == "\n" || text.ends_with('\n') || text.is_empty();
-                if !glue && !newline && (merges(&last, t) || rng.random_bool(0.5)) {
+                if !glue && !newline && (merges(&last, t) || space()) {
                     text.push(' ');
                 }
                 text.push_str(t);

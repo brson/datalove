@@ -40,8 +40,9 @@ checked against the lexer and parsers, by `tests/lexical_grammar_tests.rs`,
 `tests/datalit_grammar_tests.rs` and `tests/datafun_grammar_tests.rs`, with
 the recognizer and generator in `src/ebnf.rs`, the checking in
 `src/grammar_check.rs`, and the grammars made executable in `src/lexical.rs`,
-`src/token_grammar.rs`, `src/datalit_grammar.rs` and `src/datafun_grammar.rs`
-(see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
+`src/token_grammar.rs`, `src/datalit_grammar.rs` and `src/datafun_grammar.rs`,
+and how an expression groups by the grammar's parse tree in
+`src/grouping.rs` (see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
 `tests/recovery_tests.rs` uses the same grammars to measure how the parsers
 recover from errors (see [Plan: Parse Error Recovery](plan-parse-recovery.md)).
 

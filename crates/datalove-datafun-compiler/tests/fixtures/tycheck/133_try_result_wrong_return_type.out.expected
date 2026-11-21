@@ -20,10 +20,10 @@
         {
           "message": "this can return early",
           "span": [
-            87,
+            71,
             88
           ],
-          "text": "!"
+          "text": "returns_result()!"
         }
       ],
       "message": "`!` can return early, so the function has to return a result `!T`, and it returns `u32`"

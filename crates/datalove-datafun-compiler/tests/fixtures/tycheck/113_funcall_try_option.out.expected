@@ -20,10 +20,10 @@
         {
           "message": "type mismatch",
           "span": [
-            147,
+            135,
             148
           ],
-          "text": "?"
+          "text": "get_option()?"
         }
       ],
       "message": "mismatched types: expected `?u32`, found `u32`"

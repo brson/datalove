@@ -19,6 +19,7 @@ use rmx::prelude::*;
 use bct::lookup::{LookupMap, LookupSet};
 use bct::random::SeededRng;
 use std::collections::BTreeSet;
+use std::ops::Range;
 use std::rc::Rc;
 
 /// A terminal: pushes the length of each match of it at a position in an
@@ -297,7 +298,20 @@ fn tokenize(text: &str) -> Vec<Tok> {
             out.push(Tok::Lit(if lit == "\\n" { "\n".S() } else { lit }));
             i = end + 1;
         } else if c == '?' {
-            let end = i + 1 + cs[i + 1..].iter().position(|&d| d == '?').expect("unclosed special sequence");
+            // A `?` quoted in the text, as in `? no "?" after it ?`, does
+            // not end it.
+            let mut quote = None;
+            let end = i + 1 + cs[i + 1..]
+                .iter()
+                .position(|&d| {
+                    match quote {
+                        Some(q) if d == q => quote = None,
+                        None if d == '"' || d == '\'' => quote = Some(d),
+                        _ => {}
+                    }
+                    quote.is_none() && d == '?'
+                })
+                .expect("unclosed special sequence");
             let text: String = cs[i + 1..end].iter().collect();
             out.push(Tok::Special(text.split_whitespace().collect::<Vec<_>>().join(" ")));
             i = end + 1;
@@ -467,6 +481,17 @@ pub struct Recognizer<I: ?Sized> {
     start: u32,
     /// The grammar's rule names, by nonterminal.
     names: Vec<String>,
+    /// What each nonterminal past the rules stands for.
+    helpers: Vec<Helper>,
+}
+
+/// What a nonterminal the compiler made stands for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Helper {
+    Alt,
+    Opt,
+    /// `n = | n, x`: its derivations are the iterations of `x`.
+    Rep,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -537,13 +562,15 @@ struct Compiler<'a, I: ?Sized> {
     names: LookupMap<&'a str, u32>,
     prods: Vec<(u32, Vec<Sym<I>>)>,
     next_nt: u32,
+    helpers: Vec<Helper>,
     term: &'a dyn Fn(&Expr) -> Term<I>,
 }
 
 impl<'a, I: ?Sized> Compiler<'a, I> {
-    fn fresh(&mut self) -> u32 {
+    fn fresh(&mut self, helper: Helper) -> u32 {
         let n = self.next_nt;
         self.next_nt += 1;
+        self.helpers.push(helper);
         n
     }
 
@@ -565,7 +592,7 @@ impl<'a, I: ?Sized> Compiler<'a, I> {
             }
             Expr::Ref(name) => vec![Sym::Nt(*self.names.get(name.as_str()).unwrap_or_else(|| panic!("no rule {name}")))],
             Expr::Alt(xs) => {
-                let n = self.fresh();
+                let n = self.fresh(Helper::Alt);
                 for x in xs {
                     let rhs = self.syms(x);
                     self.prods.push((n, rhs));
@@ -573,14 +600,14 @@ impl<'a, I: ?Sized> Compiler<'a, I> {
                 vec![Sym::Nt(n)]
             }
             Expr::Opt(x) => {
-                let n = self.fresh();
+                let n = self.fresh(Helper::Opt);
                 self.prods.push((n, vec![]));
                 let rhs = self.syms(x);
                 self.prods.push((n, rhs));
                 vec![Sym::Nt(n)]
             }
             Expr::Rep(x) => {
-                let n = self.fresh();
+                let n = self.fresh(Helper::Rep);
                 self.prods.push((n, vec![]));
                 let mut rhs = vec![Sym::Nt(n)];
                 rhs.extend(self.syms(x));
@@ -598,7 +625,7 @@ impl<I: ?Sized> Recognizer<I> {
     pub fn new(g: &Grammar, start: &str, term: &dyn Fn(&Expr) -> Term<I>) -> Recognizer<I> {
         let names: LookupMap<&str, u32> =
             g.rules.iter().enumerate().map(|(i, r)| (r.name.as_str(), i as u32)).collect();
-        let mut c = Compiler { names, prods: vec![], next_nt: g.rules.len() as u32, term };
+        let mut c = Compiler { names, prods: vec![], next_nt: g.rules.len() as u32, helpers: vec![], term };
         for (i, rule) in g.rules.iter().enumerate() {
             let alts: Vec<&Expr> = match &rule.body {
                 Expr::Alt(xs) => xs.iter().collect(),
@@ -614,7 +641,7 @@ impl<I: ?Sized> Recognizer<I> {
             by_lhs[*lhs as usize].push(i as u32);
         }
         let start = *c.names.get(start).unwrap_or_else(|| panic!("no rule {start}"));
-        Recognizer { prods: c.prods, by_lhs, start, names: g.rules.iter().map(|r| r.name.C()).collect() }
+        Recognizer { prods: c.prods, by_lhs, start, names: g.rules.iter().map(|r| r.name.C()).collect(), helpers: c.helpers }
     }
 
     /// Whether the whole of `input`, `n` long, is the start rule.
@@ -729,6 +756,231 @@ impl<I: ?Sized> Recognizer<I> {
 }
 
 // ============================================================================
+// Parse trees
+// ============================================================================
+
+/// What a node of a parse tree is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Node {
+    /// A rule of the grammar, by name.
+    Rule(String),
+    /// A terminal, special sequence or assertion.
+    Term,
+    /// An alternative or an option written inside a rule.
+    Group,
+    /// A repetition: its children are its iterations, in order.
+    Rep,
+    /// One iteration of a repetition.
+    Iter,
+}
+
+/// A parse tree, its spans in input positions.
+#[derive(Clone, Debug)]
+pub struct Tree {
+    pub node: Node,
+    pub span: Range<usize>,
+    pub children: Vec<Tree>,
+}
+
+/// What parsing an input found.
+#[derive(Debug)]
+pub enum Parse {
+    /// The input is not the start rule.
+    Rejected,
+    /// The input is the start rule in more ways than one: the rule nearest
+    /// the top that derives a span in two ways, and the span.
+    Ambiguous(String, Range<usize>),
+    Tree(Tree),
+}
+
+impl<I: ?Sized> Recognizer<I> {
+    /// The parse tree of the whole of `input`, `n` long, if it has one and
+    /// only one.
+    ///
+    /// The tree is read back out of the recognizer's item sets: what each
+    /// nonterminal derives over each span is counted, to two, and where the
+    /// count is one, the one derivation is the tree.
+    pub fn parse(&self, input: &I, n: usize) -> Parse {
+        let sets = self.sets(input, n);
+        if sets.len() <= n {
+            return Parse::Rejected;
+        }
+        let mut b = TreeBuilder { rec: self, sets: &sets, input, nts: LookupMap::new(), prefixes: LookupMap::new() };
+        match b.nt_count(self.start, 0, n) {
+            0 => Parse::Rejected,
+            1 => Parse::Tree(b.build_nt(self.start, 0, n)),
+            _ => b.ambiguity(self.start, &self.names[self.start as usize], 0, n),
+        }
+    }
+
+    fn rule_name(&self, m: u32) -> Option<&str> {
+        self.names.get(m as usize).map(|s| s.as_str())
+    }
+}
+
+/// Counts and builds the derivations an item set records.
+struct TreeBuilder<'r, I: ?Sized> {
+    rec: &'r Recognizer<I>,
+    sets: &'r [ItemSet],
+    input: &'r I,
+    /// How many ways a nonterminal derives a span, two meaning two or more,
+    /// and [`COUNTING`] while it is being counted.
+    nts: LookupMap<(u32, usize, usize), u8>,
+    /// How many ways the first symbols of a production derive a span.
+    prefixes: LookupMap<(u32, u32, usize, usize), u8>,
+}
+
+const COUNTING: u8 = u8::MAX;
+
+impl<I: ?Sized> TreeBuilder<'_, I> {
+    /// Whether the first `dot` symbols of production `p` were matched from
+    /// `i` to `j`, as far as the item sets say.
+    fn has(&self, p: u32, dot: u32, i: usize, j: usize) -> bool {
+        if dot == 0 {
+            return i == j;
+        }
+        j < self.sets.len() && self.sets[j].seen.contains(&Item { prod: p, dot, origin: i as u32 })
+    }
+
+    fn nt_count(&mut self, m: u32, i: usize, j: usize) -> u8 {
+        if let Some(&c) = self.nts.get(&(m, i, j)) {
+            assert!(c != COUNTING, "nonterminal {m} derives itself over {i}..{j}");
+            return c;
+        }
+        self.nts.insert((m, i, j), COUNTING);
+        let mut c = 0;
+        for &p in &self.rec.by_lhs[m as usize] {
+            let len = self.rec.prods[p as usize].1.len() as u32;
+            if self.has(p, len, i, j) {
+                c = (c + self.prefix_count(p, len, i, j)).min(2);
+            }
+        }
+        self.nts.insert((m, i, j), c);
+        c
+    }
+
+    /// How many ways symbol `dot - 1` of production `p` derives `t..j`.
+    fn sym_count(&mut self, p: u32, dot: u32, t: usize, j: usize) -> u8 {
+        match &self.rec.prods[p as usize].1[dot as usize - 1] {
+            Sym::T(term) => {
+                let mut lens = vec![];
+                term(self.input, t, &mut lens);
+                u8::from(lens.contains(&(j - t)))
+            }
+            Sym::Nt(m) => {
+                let m = *m;
+                self.nt_count(m, t, j)
+            }
+        }
+    }
+
+    /// The places the last of the first `dot` symbols of `p` may begin, in
+    /// a derivation of `i..j`, with how many ways each.
+    fn splits(&mut self, p: u32, dot: u32, i: usize, j: usize) -> Vec<(usize, u8, u8)> {
+        let mut out = vec![];
+        for t in i..=j {
+            if !self.has(p, dot - 1, i, t) {
+                continue;
+            }
+            let right = self.sym_count(p, dot, t, j);
+            if right == 0 {
+                continue;
+            }
+            let left = if dot == 1 { 1 } else { self.prefix_count(p, dot - 1, i, t) };
+            if left > 0 {
+                out.push((t, left, right));
+            }
+        }
+        out
+    }
+
+    fn prefix_count(&mut self, p: u32, dot: u32, i: usize, j: usize) -> u8 {
+        if dot == 0 {
+            return u8::from(i == j);
+        }
+        if let Some(&c) = self.prefixes.get(&(p, dot, i, j)) {
+            return c;
+        }
+        let c = self.splits(p, dot, i, j).iter().fold(0u8, |c, (_, l, r)| (c + l * r).min(2));
+        self.prefixes.insert((p, dot, i, j), c);
+        c
+    }
+
+    /// The productions of `m` that derive `i..j`, with how many ways each.
+    fn live(&mut self, m: u32, i: usize, j: usize) -> Vec<(u32, u8)> {
+        let mut out = vec![];
+        for &p in &self.rec.by_lhs[m as usize] {
+            let len = self.rec.prods[p as usize].1.len() as u32;
+            if self.has(p, len, i, j) {
+                let c = self.prefix_count(p, len, i, j);
+                if c > 0 {
+                    out.push((p, c));
+                }
+            }
+        }
+        out
+    }
+
+    fn build_nt(&mut self, m: u32, i: usize, j: usize) -> Tree {
+        let [(p, 1)] = self.live(m, i, j)[..] else { bug!("built where there is not one derivation") };
+        let mut children = vec![];
+        self.build_prefix(p, self.rec.prods[p as usize].1.len() as u32, i, j, &mut children);
+        let node = match self.rec.rule_name(m) {
+            Some(name) => Node::Rule(name.S()),
+            None => match self.rec.helpers[m as usize - self.rec.names.len()] {
+                Helper::Alt | Helper::Opt => Node::Group,
+                Helper::Rep => Node::Rep,
+            },
+        };
+        if node == Node::Rep && !children.is_empty() {
+            // `n = n, x`: the iterations so far, then this one.
+            let before = children.remove(0);
+            let at = before.span.end;
+            let mut iterations = before.children;
+            iterations.push(Tree { node: Node::Iter, span: at..j, children });
+            children = iterations;
+        }
+        Tree { node, span: i..j, children }
+    }
+
+    fn build_prefix(&mut self, p: u32, dot: u32, i: usize, j: usize, out: &mut Vec<Tree>) {
+        if dot == 0 {
+            return;
+        }
+        let [(t, 1, 1)] = self.splits(p, dot, i, j)[..] else { bug!("built where there is not one derivation") };
+        self.build_prefix(p, dot - 1, i, t, out);
+        out.push(match &self.rec.prods[p as usize].1[dot as usize - 1] {
+            Sym::T(_) => Tree { node: Node::Term, span: t..j, children: vec![] },
+            Sym::Nt(m) => {
+                let m = *m;
+                self.build_nt(m, t, j)
+            }
+        });
+    }
+
+    /// Where a derivation of `m` over `i..j`, known to be ambiguous, is so:
+    /// `rule` is the rule it is in.
+    fn ambiguity(&mut self, m: u32, rule: &str, i: usize, j: usize) -> Parse {
+        let rule = self.rec.rule_name(m).unwrap_or(rule).S();
+        let live = self.live(m, i, j);
+        let [(p, _)] = live[..] else { return Parse::Ambiguous(rule, i..j) };
+        let (mut dot, mut j2) = (self.rec.prods[p as usize].1.len() as u32, j);
+        while dot > 0 {
+            let splits = self.splits(p, dot, i, j2);
+            let [(t, left, right)] = splits[..] else { return Parse::Ambiguous(rule, i..j) };
+            if right > 1 {
+                let Sym::Nt(m2) = self.rec.prods[p as usize].1[dot as usize - 1] else { bug!("a terminal matches once") };
+                return self.ambiguity(m2, &rule, t, j2);
+            }
+            assert!(left > 1, "an ambiguous derivation has an ambiguous part");
+            dot -= 1;
+            j2 = t;
+        }
+        bug!("an ambiguous derivation has an ambiguous part")
+    }
+}
+
+// ============================================================================
 // Generating
 // ============================================================================
 
@@ -780,6 +1032,12 @@ impl<'g> Generator<'g> {
             assert!(*c < INF, "rule {name} never finishes");
         }
         Generator { grammar, cost, sample, max_depth: 12 }
+    }
+
+    /// The same generator, choosing freely only below `max_depth` rule
+    /// references.
+    pub fn max_depth(self, max_depth: u32) -> Generator<'g> {
+        Generator { max_depth, ..self }
     }
 
     pub fn generate(&self, start: &str, rng: &mut SeededRng) -> Vec<Piece> {

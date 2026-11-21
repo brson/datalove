@@ -16,17 +16,27 @@
 //!
 //! The document's `examples` blocks are inputs too, each of which must also
 //! get exactly the codes the block gives it.
+//!
+//! The parser must group an expression as the grammar does: the spans of the
+//! expressions it builds must be those of the grammar's one parse tree, read
+//! by `datalove_doc_fixtures::grouping`, for generated expressions drawn
+//! from the seeds of `DATALOVE_DF_GROUPING_SEED` and
+//! `DATALOVE_DF_GROUPING_COUNT`.
 
 use rmx::prelude::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bct::random::{SeededRng, env_seeds, seed_of};
 use datalove_doc_fixtures::datafun_grammar::{
-    DOC, Start, corpus, doc_text, grammar, parse_codes, parse_diags, recognizers, sample,
+    DOC, Start, corpus, doc_text, grammar, parse_codes, parse_diags, parse_expr_spans, recognizers, sample,
 };
-use datalove_doc_fixtures::ebnf::Generator;
-use datalove_doc_fixtures::token_grammar::{Recognizers, TokenGrammar, join_tokens};
-use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, mutate, outside_codes};
+use datalove_doc_fixtures::ebnf::{Generator, Parse};
+use datalove_doc_fixtures::grouping::{expression_rules, grammar_grouping, parser_grouping, render};
+use datalove_doc_fixtures::token_grammar::{Recognizers, TokenGrammar, join_spaced, join_tokens};
+use datalove_doc_fixtures::grammar_check::{Findings, Judge, example_wrong, examples, mutate, outside_codes, shrink};
+
+/// The rule an expression is.
+const EXPR: &str = "expr";
 
 struct Checker {
     recs: Recognizers,
@@ -116,4 +126,89 @@ fn generated_agree() {
     assert!(dropped < n / 2, "{dropped} of {n} generated strings were not derived");
     println!("{dropped} of {n} generated strings were not derived");
     findings.finish("generated strings and their mutants");
+}
+
+/// How the grammar and the parser group `text` as one expression, if both
+/// take it and they differ; `Err` says why they were not compared.
+fn grouping_differs(recs: &Recognizers, exprs: &BTreeSet<String>, text: &str) -> Result<Option<String>, Skip> {
+    let (diags, spans) = parse_expr_spans(text).map_err(Skip::Panicked)?;
+    if !diags.is_empty() {
+        return Err(Skip::Refused);
+    }
+    let (tokens, parse) = recs.parse(EXPR, text);
+    let tree = match parse {
+        Parse::Tree(tree) => tree,
+        Parse::Rejected => return Err(Skip::Underived),
+        Parse::Ambiguous(rule, _) => return Err(Skip::Ambiguous(rule)),
+    };
+    let ours = grammar_grouping(&tree, &tokens, exprs);
+    let theirs = parser_grouping(&spans, &tokens);
+    Ok((ours != theirs).then(|| fmt!("the grammar groups it {}, the parser {}", render(text, &ours), render(text, &theirs))))
+}
+
+/// Why an expression was not compared.
+enum Skip {
+    Panicked(String),
+    /// The parser refuses it, by a rule outside the grammar.
+    Refused,
+    /// The grammar does not derive it, which a generated string can miss
+    /// where its spacing decides what is glued.
+    Underived,
+    /// The grammar derives it in two ways, which an expression must not.
+    Ambiguous(String),
+}
+
+#[test]
+fn generated_group_alike() {
+    let g = grammar();
+    let sampler = |text: &str, rng: &mut SeededRng| sample(&g, text, rng);
+    // Grouping shows as well in a small expression, which the parser is
+    // likelier to take whole: a long one nearly always has a payload with
+    // an operator after it (P065) or a call on something not a name (P072).
+    let generator = Generator::new(&g.typed, &sampler).max_depth(6);
+    let recs = Recognizers::new(&g, &[EXPR], false);
+    let exprs = expression_rules(&g.typed, EXPR);
+    let mut differ: BTreeMap<String, String> = BTreeMap::new();
+    let (mut compared, mut refused, mut underived) = (0, 0, 0);
+    let seeds = env_seeds("DATALOVE_DF_GROUPING", 0, 600);
+    for seed in seeds.iter() {
+        // Each seed draws until the parser takes one.
+        let mut rng = SeededRng::new(seed);
+        let found = (0..20).find_map(|_| {
+            let text = join_spaced(&generator.generate(EXPR, &mut rng));
+            match grouping_differs(&recs, &exprs, &text) {
+                Err(Skip::Refused) => None,
+                found => Some((text, found)),
+            }
+        });
+        let Some((text, found)) = found else {
+            refused += 1;
+            continue;
+        };
+        let what = match found {
+            Ok(None) => {
+                compared += 1;
+                continue;
+            }
+            Err(Skip::Underived) => {
+                underived += 1;
+                continue;
+            }
+            Err(Skip::Refused) => bug!("a refused expression is drawn again"),
+            Err(Skip::Panicked(e)) => fmt!("the parser panicked: {e}"),
+            Err(Skip::Ambiguous(rule)) => fmt!("the grammar derives it two ways, in `{rule}`"),
+            Ok(Some(_)) => {
+                compared += 1;
+                let small = shrink(&text, &|t| matches!(grouping_differs(&recs, &exprs, t), Ok(Some(_))));
+                let Ok(Some(what)) = grouping_differs(&recs, &exprs, &small) else { bug!("a shrunk case differs") };
+                what
+            }
+        };
+        differ.entry(what).or_insert(text);
+    }
+    let n = seeds.count;
+    println!("{compared} of {n} generated expressions compared; {refused} refused 20 times, {underived} not derived");
+    assert!(compared > n / 2, "only {compared} of {n} generated expressions were compared");
+    let report: Vec<String> = differ.iter().take(30).map(|(what, from)| fmt!("{what}\n    from {from:?}")).collect();
+    assert!(differ.is_empty(), "the grammar and the parser differ on {} expressions:\n\n{}", differ.len(), report.join("\n\n"));
 }

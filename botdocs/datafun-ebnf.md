@@ -50,6 +50,19 @@ alone cannot:
   rules that are `? as in the datalit grammar ?` are those rules of it, with
   the rules they use, and a rule both grammars write is written the same in
   both.
+- `? no "(" glued after it ?` matches nothing, and says the next token is not
+  one of those listed, glued to the one before it; `word` lists any word.
+  Written after a choice, it makes the choice take what it can: a name's
+  call takes a glued `(`, an index a glued `?` or `!`, and a number a glued
+  `.` or word.
+- **Grouping.** The grammar derives an expression in one way only, and its
+  tree is how the expression groups. A node of an expression rule is one
+  expression: of `expr`, and of every rule it can be by itself, `or_expr`,
+  `and_expr` and on down through `unary`, `wrapped` and `postfix_expr` to
+  `primary` and what that can be. A repetition after an operand groups to
+  the left: in `a, { op, b }` each `op, b` takes all before it in the rule as
+  its left operand, so `a - b - c` is `(a - b) - c` and `x.f[0]?` is
+  `((x.f)[0])?`. A `paren` of one element and no comma is its element.
 
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
 parsing (D054, D055). `<` and `>` are always brackets, never operators.
@@ -155,25 +168,26 @@ cmp_op        = "==" | "!=" | ".<" | ".>" | "<=" | ">=" ;
 add_op        = "+" | "-" | "+!" | "-!" | "+?" | "-?" ;
 mul_op        = "*" | "/" | "*!" | "/!" | "*?" | "/?" ;
 
-unary         = prefix_op, unary | postfix_expr ;
+unary         = prefix_op, unary | wrapped | postfix_expr ;
 postfix_expr  = primary, { postfix } ;          (* postfix binds tighter than prefix *)
 prefix_op     = "-" | "-?" | "-!" | "not" ;
 postfix       = ~"?" | ~"!" | ~"@"
               | ~".", field_sel
-              | ~"[", expr, "]", [ ~"?" | ~"!" ]
+              | ~"[", expr, "]", ( ~"?" | ~"!" | ? no "?" or "!" glued after it ? )
               | ~"(", [ arg_list ], ")" ;       (* only after a single named field step: P072 *)
 field_sel     = NAME | field_index ;           (* nothing: P079 *)
+wrapped       = hinted                          (* each ends in a unary, which *)
+              | ( "some" | "ok" | "er" | "data" | "error" ), payload   (* takes *)
+              | "term", NAME, payload ;         (* the postfixes after it; D036 *)
 
-primary       = hinted
-              | "true" | "false" | "none"
-              | ( "some" | "ok" | "er" | "data" | "error" ), payload
+primary       = "true" | "false" | "none"
               | "atom", NAME                          (* D035 *)
-              | "term", NAME, payload                 (* D036 *)
               | "enum", "{", expr, [ "," ], "}"       (* D037 *)
               | "icall", NAME, ~"(", [ arg_list ], ")"  (* P040, P041; spaced "(": P090 *)
               | number                                (* no sign: "-" is prefix_op *)
               | string_lit                            (* D039 *)
-              | value_name, [ ~"(", [ arg_list ], ")" ]   (* a call only when glued *)
+              | value_name, ( ~"(", [ arg_list ], ")" | ? no "(" glued after it ? )
+                                                      (* a call only when glued *)
               | paren | collection ;
                 (* any other bracket, or nothing: P081; another token: P080 *)
 payload       = unary ;                         (* a binary operator after it: P065 *)
@@ -532,6 +546,17 @@ parsed as a script, module or rider interface, and the `examples` blocks
 above, fenced as ```` ```examples script ````, `module` or `interface` and
 written as [datalit's are](datalit-ebnf.md#user-content-checking-the-grammar):
 the parser must refuse each with exactly the codes given.
+
+The same test holds the parser to the grammar's grouping. It generates
+expressions, with a space wherever one may go, and for each the parser takes,
+the recognizer's item sets give the parse tree, which must be the only one.
+The tree's expressions, as [Grouping](#user-content-notation) reads them,
+must have the spans of the expressions the parser builds, each of two tokens
+or more; one token is one expression however it is read. So a parser that
+read `a - b - c` as `a - (b - c)`, or bound `not` tighter than `.`, fails it,
+as does one that spans an expression wrongly, which is what its diagnostics
+point at. The tree and the spans are in
+`crates/datalove-doc-fixtures/src/grouping.rs`.
 
 ## Productions and their typing rules
 

@@ -996,7 +996,7 @@ fn a_unit_s_failed_const_renders_as_a_diagnostic() {
     run(&mut engine, &format!("let a = 1\n---\n{ratio}const R: u32 = ratio(1, 0)!"));
 
     let failed = engine.unit_diagnostics(2, "unit 2", TextStyle::Plain);
-    assert!(failed.contains("[C001]") && failed.contains("unit 2:4:27") && failed.contains("division by zero"), "{failed}");
+    assert!(failed.contains("[C001]") && failed.contains("unit 2:4:16") && failed.contains("division by zero"), "{failed}");
 
     engine.edit_unit(2, &format!("{ratio}const R: u32 = ratio(1, 1)!"));
     assert_eq!(engine.unit_diagnostics(2, "unit 2", TextStyle::Plain), "");

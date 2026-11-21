@@ -1297,8 +1297,9 @@ fn synthesize_try_option<'db>(
     let inner_ty = match operand_ty.exposed().as_ref() {
         Type::Datalit(datalit::tycheck::Type::Option(opt)) => opt.inner_type.C(),
         _ => {
+            // What is not an option or result is the operand.
             return Err(ctx.error_try_type_mismatch(
-                expr,
+                ctx.expr(try_op.operand),
                 "?",
                 Wrapper::Option,
                 &type_to_string(db, &operand_ty)
@@ -1334,8 +1335,9 @@ fn synthesize_try_result<'db>(
     let inner_ty = match operand_ty.exposed().as_ref() {
         Type::Datalit(datalit::tycheck::Type::Result(res)) => res.inner_type.C(),
         _ => {
+            // What is not an option or result is the operand.
             return Err(ctx.error_try_type_mismatch(
-                expr,
+                ctx.expr(try_op.operand),
                 "!",
                 Wrapper::Result,
                 &type_to_string(db, &operand_ty)

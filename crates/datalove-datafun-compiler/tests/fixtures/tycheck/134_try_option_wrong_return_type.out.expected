@@ -20,10 +20,10 @@
         {
           "message": "this can return early",
           "span": [
-            87,
+            71,
             88
           ],
-          "text": "?"
+          "text": "returns_option()?"
         }
       ],
       "message": "`?` can return early, so the function has to return an option `?T`, and it returns `u32`"

@@ -20,10 +20,10 @@
         {
           "message": "this can return early",
           "span": [
-            26,
+            25,
             27
           ],
-          "text": "?"
+          "text": "a?"
         }
       ],
       "message": "`?` can return early, so the function has to return an option `?T`, and it returns `!()`"

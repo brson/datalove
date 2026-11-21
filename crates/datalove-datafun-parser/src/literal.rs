@@ -65,11 +65,12 @@ impl<'db> Parser<'db> {
                 "parenthesize the inner hint"
             )
         } else {
+            let start = self.current_byte_pos();
             let inner = self.parse_expr_primary();
             if matches!(self.expr_kind(inner), ast::ExprFunKind::ParseError(_)) {
                 inner
             } else {
-                self.parse_postfix_try_operators(inner)
+                self.parse_postfix_try_operators(inner, start)
             }
         };
         let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());

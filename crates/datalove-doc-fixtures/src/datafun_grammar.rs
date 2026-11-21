@@ -112,6 +112,23 @@ pub fn parse_expr_diags(text: &str) -> Result<Vec<Diag>, String> {
     })
 }
 
+/// What the parser reports of `text` as one expression, and the byte spans
+/// of the expressions it builds, or its panic.
+pub fn parse_expr_spans(text: &str) -> Result<(Vec<Diag>, Vec<std::ops::Range<usize>>), String> {
+    use datalove_diagnostic::ParseDiagnostic;
+    catch_panic(|| {
+        let db = datalove_datalit::Database::default();
+        let source = bct::input::Source::new(&db, text.S());
+        let found = datalove_datafun_parser::parse_expr::accumulated::<ParseDiagnostic>(&db, source);
+        let spans = datalove_datafun_parser::parse_expr(&db, source)
+            .expr_spans
+            .iter()
+            .map(|e| e.span.start as usize..e.span.end as usize)
+            .collect();
+        (diags(&db, &found), spans)
+    })
+}
+
 /// The codes the parser refuses `text` with as a `start`, or its panic.
 pub fn parse_codes(start: Start, text: &str) -> Result<Vec<String>, String> {
     parse_diags(start, text).map(|ds| ds.into_iter().map(|d| d.code).collect())
