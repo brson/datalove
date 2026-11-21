@@ -424,4 +424,90 @@ theorem Inv.madeBefore {F st : DSt} {U base : Nat} {σ : MSt} {π : List Bool} (
   simp only [DSt.made, x.made _ m hm, Option.getD_some]
   exact hle
 
+
+theorem stmtId_eq {st st1 : DSt} {id : Nat} (h : stmtId.run st = .ok (id, st1)) :
+    id = st.next ∧ st1 = { st with next := st.next + 1 } := by
+  simp only [stmtId, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, StateT.run] at h
+  cases h; exact ⟨rfl, rfl⟩
+
+/-- What `bindM` makes: new bindings before the old, each live, numbered
+from where the walk was, and made at the statement it is in. -/
+theorem bindM_spec {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
+    ∀ {σ σ' : MSt} {st st' : DSt}, st.WF → (bindM Γ' σ xs init writable konst).run st = .ok (σ', st') →
+      ∃ new, σ' = new ++ σ ∧
+        (∀ v, v ∈ new → v.live = true ∧ st.uid ≤ v.uid ∧ v.uid < st'.uid ∧
+          st'.madeAt.lookup v.uid = some st.next) ∧
+        st'.next = st.next ∧ st'.out = st.out ∧ st'.held = st.held ∧ st'.tracked = st.tracked ∧
+        st.uid ≤ st'.uid := by
+  induction xs with
+  | nil =>
+    intro σ σ' st st' _ h
+    cases h
+    refine ⟨[], rfl, ?_, rfl, rfl, rfl, rfl, Nat.le_refl _⟩
+    intro v hv; cases hv
+  | cons x xs ih =>
+    intro σ σ' st st' w h
+    unfold bindM at h
+    simp only [List.foldlM] at h
+    obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok h
+    have x1 := SchedGrows.bindOne Γ' konst init false writable false σ x st σ1 st1 w h1
+    have x2 := SchedGrows.bindM Γ' σ1 xs init writable konst st1 σ' st' x1.wf h2
+    have e1 : ∃ v, σ1 = v :: σ ∧ v.live = true ∧ v.uid = st.uid ∧ st1.uid = st.uid + 1 ∧
+        st1.next = st.next ∧ st1.madeAt.lookup st.uid = some st.next ∧ st1.out = st.out ∧
+        st1.held = st.held ∧ st1.tracked = st.tracked := by
+      simp only [bindOne, MoveM.run_bind] at h1
+      cases h1
+      exact ⟨_, rfl, rfl, rfl, rfl, rfl, by simp [List.lookup], rfl, rfl, rfl⟩
+    obtain ⟨v0, e0, l0, u0, su, sn, sm, so, sh, stk⟩ := e1
+    obtain ⟨new, e, hn, nx, no, nh, nt, nu⟩ := ih x1.wf h2
+    refine ⟨new ++ [v0], by rw [e, e0]; simp, fun v hv => ?_, nx.trans sn, no.trans so, nh.trans sh,
+      nt.trans stk, by omega⟩
+    rcases List.mem_append.mp hv with hv | hv
+    · obtain ⟨l, u1, u2, mm⟩ := hn v hv
+      exact ⟨l, by omega, u2, sn ▸ mm⟩
+    · simp only [List.mem_singleton] at hv
+      subst hv
+      exact ⟨l0, u0 ▸ Nat.le_refl _, by omega, u0 ▸ x2.made _ _ sm⟩
+
+/-- Bindings made: the path holds each, and keeps what it carries. -/
+theorem Inv.bind {F st st' : DSt} {U base : Nat} {σ σ' : MSt} {π : List Bool} {Γ' : Ctx}
+    {xs : List String} {init writable konst : Bool} (h : Inv F st U base σ π) (w : st.WF)
+    (hb : (bindM Γ' σ xs init writable konst).run st = .ok (σ', st')) :
+    Inv F st' U base σ' (newFlags σ σ' ++ π) := by
+  obtain ⟨new, e, hn, nx, _, nh, _, nu⟩ := bindM_spec w hb
+  have x := SchedGrows.bindM Γ' σ xs init writable konst st σ' st' w hb
+  have h' := h.ext x
+  subst e
+  have flags : newFlags σ (new ++ σ) = new.map (·.live) := by
+    simp [newFlags, scopeOwn]
+  rw [flags]
+  have relNew : ∀ (l : MSt), (∀ v, v ∈ l → v.live = true) → Rel F st' U l (l.map (·.live)) := by
+    intro l hl
+    induction l with
+    | nil => exact .nil
+    | cons v l ih' =>
+      exact .cons (fun hv => hv) (fun hp => .inl hp) (ih' (fun u hu => hl u (.tail _ hu)))
+  refine ⟨Rel.append (relNew new (fun v hv => (hn v hv).1)) h'.rel, fun v hv ho => ?_,
+    fun v hv ho => ?_, fun v hv ho => ?_, h'.ule, by simp; exact Nat.le_trans h.base (Nat.le_add_left _ _)⟩
+  · rcases List.mem_append.mp hv with hv | hv
+    · exact ⟨st.next, (hn v hv).2.2.2, nx ▸ Nat.le_refl _⟩
+    · exact h'.made v hv ho
+  · have hl : (new ++ σ).length - base = new.length + (σ.length - base) := by
+      simp; have := h.base; omega
+    rw [hl, List.take_length_add_append] at hv
+    rcases List.mem_append.mp hv with hv | hv
+    · exact Nat.le_trans h.ule (hn v hv).2.1
+    · exact h.scope v hv ho
+  · rcases List.mem_append.mp hv with hv | hv
+    · exact (hn v hv).2.2.1
+    · exact h'.lt v hv ho
+
+
+theorem leavingIf_below {id : Nat} {σ σ' : MSt} {c : Bool} {m : MoveM MSt} (hm : Shr σ m) {st st' : DSt}
+    (h : (leavingIf id σ c m).run st = .ok (σ', st')) : σ'.Below σ := by
+  cases c
+  · exact (hm st σ' st' h).1
+  · obtain ⟨stm, hmr, _⟩ := leavingIf_spec hm h
+    exact (hm st σ' stm hmr).1
+
 end Datalove.Fun
