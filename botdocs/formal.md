@@ -134,7 +134,12 @@ Under `formal/Datalove/Proofs/`:
   there, drops each owned binding of the scopes it leaves that holds a
   value on the path, and nothing else but a binding with a tracking byte.
   The path moves what the walk says each statement moves; that the run
-  moves the same is `moves_agree`, tested.
+  moves the same is `moves_agree`, tested. The theorem takes only the move
+  analysis's acceptance, and a path through a call may hold a `mut` or
+  `out` argument that a later argument moved before a `?` between them
+  returned; that no argument does is O017 and O010, which the Rust refuses
+  and the model decides apart (`FunHeld.lean`, `FunAlias.lean`), so the
+  result is of functions the Rust accepts.
   [plan-drop-proof.md](plan-drop-proof.md) has the argument and what it
   leaves out.
 - **A recursive type meets its one-step unfolding** (`Ty.meet_unfold`), on

@@ -87,11 +87,15 @@ scope or loop they leave. A perhaps-held binding was made before the loop
 that gave it a value, so those points never need it, except where they
 are scheduled after that loop, where the walk already counts it.
 
-Within an expression nothing gives a value to what holds none: an `out`
-argument has to be live (O001), a `mut` one live and given a value. So
-what is live only shrinks along an expression, and a return from inside one
-holds what was live after it plus what it had not yet moved, which is the
-`?` point's drops.
+Within an expression nothing gives a value to what holds none, so what is
+live only shrinks along an expression (`mE_shr`), and a return from inside
+one holds what was live after it plus what it had not yet moved, which is
+the `?` point's drops. One thing is given back: a binding passed `mut` or
+`out` is the call's to write once every argument has run, so the walk has
+it live after the call as before it, whatever the arguments between did.
+Were a later argument to move it, the state at a `?` between the two would
+be one the run never has. That no argument does is O017 and O010, which the
+Rust refuses and this proof assumes; see what it leaves out.
 
 ## What it leaves out
 
@@ -100,6 +104,18 @@ holds what was live after it plus what it had not yet moved, which is the
   move-soundness proof `formal.md` lists first.
 - **That an expression returns early only where `exprLeaves` says.** It is
   the Rust's own `early_return_in`, and the schedule has a point only there.
+- **That no later argument moves what an earlier one passes `mut` or
+  `out`.** The walk has such a binding live after the call as before it,
+  so a path returning at a `?` between the two may hold it where the run
+  has moved it: in `two(mut x, both(x, maybe(c)?))` the schedule drops `x`
+  at the `?`, and the run has already moved it into `both`'s pending
+  argument. The move analysis alone lets the call through, so the theorem
+  covers it. The Rust refuses it, O017 where a later operand moves or takes
+  `mut` or `out` what an earlier one holds by reference, O010 for
+  `two(mut x, x)`; the model decides both (`FunHeld.lean`, `FunAlias.lean`),
+  but `fun_ok` assumes only that the move analysis accepts, so of a program
+  the Rust accepts it says what it says, and of one the model's move
+  analysis alone accepts it may not.
 - **That lowering carries the schedule out**, past what is checked.
   Lowering emits each point's drops from the schedule's own lists, and a
   debug build panics on a scheduled binding lowering has not bound. Two
