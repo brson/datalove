@@ -52,5 +52,6 @@ import Datalove.Proofs.DropWalk
 import Datalove.Proofs.DropLen
 import Datalove.Proofs.DropPath
 import Datalove.Proofs.DropSpec
+import Datalove.Proofs.DropLoop
 import Datalove.Proofs.DropProof
 import Datalove.Proofs.ConstSound

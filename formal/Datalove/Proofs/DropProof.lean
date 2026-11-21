@@ -1,4 +1,4 @@
-import Datalove.Proofs.DropSpec
+import Datalove.Proofs.DropLoop
 
 /-!
 # Every path through a function drops what it owns exactly once
@@ -180,6 +180,19 @@ inductive PStmt : Nat → Ctx → MSt → Nat → Stmt → DSt → List Bool →
       (mCases sigs env n Γ (matchVariants env n Γ e) σc base id 0 cases).run st2 = .ok (r, st3) →
       PBranch n Γ σc [] base db id "match_arm_exit" (some cases.length) st3 (delta σ σc π) out evs →
       PStmt (n + 1) Γ σ base (.match_ e cases (some db)) st π out evs
+  | loop_ {n Γ σ base c body st π id st1 σc st2 r st3 st4 st5 k out evs} :
+      stmtId.run st = .ok (id, st1) →
+      ((match c with
+        | some c => leaving id σ c (mE sigs Γ false σ c)
+        | none => pure σ) : MoveM MSt).run st1 = .ok (σc, st2) →
+      (mBlock sigs env n { Γ with inLoop := true } σc σc.length body).run st2 = .ok (r, st3) →
+      (loopHeld σc body r).run st3 = .ok ((), st4) →
+      (record "loop_body_end" id none (ownedOf st4.held (scopeOwn σc r.1))).run st4 = .ok ((), st5) →
+      PIter k (fun π evs => ∃ ce πk, c = some ce ∧ exprLeaves ce = true ∧ Between (delta σ σc π) π πk ∧
+          evs = [tryEv st1 st2 σ πk])
+        (fun π πn => c.isSome = true ∧ πn = delta σ σc π) (fun π πb => πb = delta σ σc π)
+        n { Γ with inLoop := true } σc σc body st2 r st4 st5 π out evs →
+      PStmt (n + 1) Γ σ base (.loop c body) st π out evs
 
 /-- The paths through a block: its statements in order, until one does not
 go on. -/
@@ -232,6 +245,34 @@ inductive PCases : Nat → Ctx → List (String × Option Ty) → MSt → Nat �
       PCases n Γ vs σ base id (i + 1) cs st1 π out evs →
       PCases (n + 1) Γ vs σ base id i (.term a x b :: cs) st π out evs
 
+/-- The paths through a loop's passes, `k` of them: from the loop's start,
+holding `π`, its head (`HX` a way out of the function there, `HN` out of
+the loop, `HB` into the body); then the body, from `σb`, and the end of the
+body's scope, back to the start, or a `break` out of the loop, a `continue`
+back to the start, or a way out of the function. -/
+inductive PIter : Nat → (List Bool → List Ev → Prop) → (List Bool → List Bool → Prop) →
+    (List Bool → List Bool → Prop) → Nat → Ctx → MSt → MSt → List Stmt → DSt → MOut → DSt → DSt →
+    List Bool → POut → List Ev → Prop where
+  | head_exit {k HX HN HB n Γb σc σb body st2 r st4 st5 π evs} :
+      HX π evs → PIter k HX HN HB n Γb σc σb body st2 r st4 st5 π .exit evs
+  | natural {k HX HN HB n Γb σc σb body st2 r st4 st5 π πn} :
+      HN π πn → PIter k HX HN HB n Γb σc σb body st2 r st4 st5 π (.norm πn) []
+  | body_norm {k HX HN HB n Γb σc σb body st2 r st4 st5 π πb πe evs1 out evs2} :
+      HB π πb → PBlock n Γb σb σc.length body st2 πb (.norm πe) evs1 →
+      PIter k HX HN HB n Γb σc σb body st2 r st4 st5 (πe.drop (πe.length - σc.length)) out evs2 →
+      PIter (k + 1) HX HN HB n Γb σc σb body st2 r st4 st5 π out
+        (evs1 ++ recEv st4 st5 (scopeOwn σc r.1) (πe.take (πe.length - σc.length)) :: evs2)
+  | body_brk {k HX HN HB n Γb σc σb body st2 r st4 st5 π πb πx evs} :
+      HB π πb → PBlock n Γb σb σc.length body st2 πb (.brk πx) evs →
+      PIter k HX HN HB n Γb σc σb body st2 r st4 st5 π (.norm (πx.drop (πx.length - σc.length))) evs
+  | body_cont {k HX HN HB n Γb σc σb body st2 r st4 st5 π πb πx evs1 out evs2} :
+      HB π πb → PBlock n Γb σb σc.length body st2 πb (.cont πx) evs1 →
+      PIter k HX HN HB n Γb σc σb body st2 r st4 st5 (πx.drop (πx.length - σc.length)) out evs2 →
+      PIter (k + 1) HX HN HB n Γb σc σb body st2 r st4 st5 π out (evs1 ++ evs2)
+  | body_exit {k HX HN HB n Γb σc σb body st2 r st4 st5 π πb evs} :
+      HB π πb → PBlock n Γb σb σc.length body st2 πb .exit evs →
+      PIter k HX HN HB n Γb σc σb body st2 r st4 st5 π .exit evs
+
 end
 
 end
@@ -239,6 +280,86 @@ end
 section
 variable {sigs : List (String × Sig)} {env : InferEnv}
 set_option maxHeartbeats 2000000
+
+/-- A loop's passes leave it going on or out of the function, never by a
+`break` or a `continue` of a loop around it. -/
+theorem piter_out {HX HN HB n Γb σc σb body st2 r st4 st5} : ∀ (k : Nat) {π out evs},
+    PIter sigs env k HX HN HB n Γb σc σb body st2 r st4 st5 π out evs →
+    out = .exit ∨ ∃ π', out = .norm π' := by
+  intro k
+  induction k with
+  | zero =>
+    intro π out evs hp
+    cases hp with
+    | head_exit => exact .inl rfl
+    | natural => exact .inr ⟨_, rfl⟩
+    | body_brk => exact .inr ⟨_, rfl⟩
+    | body_exit => exact .inl rfl
+  | succ k ih =>
+    intro π out evs hp
+    cases hp with
+    | head_exit => exact .inl rfl
+    | natural => exact .inr ⟨_, rfl⟩
+    | body_norm _ _ hn => exact ih hn
+    | body_brk => exact .inr ⟨_, rfl⟩
+    | body_cont _ _ hn => exact ih hn
+    | body_exit => exact .inl rfl
+
+mutual
+
+/-- A path that leaves a statement by a `break`: the statement holds one
+belonging to the loop it is in (`hasBreakS`). -/
+theorem pstmt_breaks {n Γ σ base s st π π' evs} (hp : PStmt sigs env n Γ σ base s st π (.brk π') evs) :
+    hasBreakS s = true := by
+  cases hp with
+  | brk => rfl
+  | if_then _ _ hb => simp [hasBreakS, pbranch_breaks hb]
+  | if_else _ _ _ hb => simp [hasBreakS, hasBreakElse, pbranch_breaks hb]
+  | match_arm _ _ hc => simp [hasBreakS, pcases_breaks hc]
+  | match_dflt _ _ _ hb => simp [hasBreakS, hasBreakElse, pbranch_breaks hb]
+  | loop_ _ _ _ _ _ hi =>
+    rcases piter_out _ hi with h | ⟨_, h⟩ <;> cases h
+
+theorem pblock_breaks {n Γ σ base ss st π π' evs} (hp : PBlock sigs env n Γ σ base ss st π (.brk π') evs) :
+    hasBreak ss = true := by
+  cases hp with
+  | cons_norm _ _ h2 => simp [hasBreak, pblock_breaks h2]
+  | cons_stop h1 _ => simp [hasBreak, pstmt_breaks h1]
+
+theorem pbranch_breaks {n Γb σc binds base body id kind arm st π π' evs}
+    (hp : PBranch sigs env n Γb σc binds base body id kind arm st π (.brk π') evs) : hasBreak body = true := by
+  cases hp with
+  | other _ hb _ => exact pblock_breaks hb
+
+theorem pcases_breaks {n Γ vs σ base id i cs st π π' evs}
+    (hp : PCases sigs env n Γ vs σ base id i cs st π (.brk π') evs) : casesBreak cs = true := by
+  cases hp with
+  | here_atom hb => simp [casesBreak, pbranch_breaks hb]
+  | here_term hb => simp [casesBreak, pbranch_breaks hb]
+  | later_atom _ hc => simp [casesBreak, pcases_breaks hc]
+  | later_term _ hc => simp [casesBreak, pcases_breaks hc]
+
+end
+
+/-- A path that goes on past a loop: it left by the loop's head, or by a
+`break` its body holds. -/
+theorem piter_norm {HX HN HB n Γb σc σb body st2 r st4 st5} : ∀ (k : Nat) {π π' evs},
+    PIter sigs env k HX HN HB n Γb σc σb body st2 r st4 st5 π (.norm π') evs →
+    (∃ π πn, HN π πn) ∨ hasBreak body = true := by
+  intro k
+  induction k with
+  | zero =>
+    intro π π' evs hp
+    cases hp with
+    | natural h => exact .inl ⟨_, _, h⟩
+    | body_brk _ hb => exact .inr (pblock_breaks hb)
+  | succ k ih =>
+    intro π π' evs hp
+    cases hp with
+    | natural h => exact .inl ⟨_, _, h⟩
+    | body_norm _ _ hn => exact ih hn
+    | body_brk _ hb => exact .inr (pblock_breaks hb)
+    | body_cont _ _ hn => exact ih hn
 
 mutual
 
@@ -266,6 +387,14 @@ theorem pstmt_completes {n Γ σ base s st π π' evs} (hp : PStmt sigs env n Γ
   | debuglog_fin => simp [completesS]
   | call_fin => simp [completesS]
   | const_fin => simp [completesS]
+  | @loop_ _ _ _ _ c body _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hi =>
+    rcases piter_norm _ hi with ⟨_, _, h, _⟩ | h
+    · cases c with
+      | some _ => rfl
+      | none => cases h
+    · cases c with
+      | some _ => rfl
+      | none => simpa [completesS] using h
 
 theorem pblock_completes {n Γ σ base ss st π π' evs} (hp : PBlock sigs env n Γ σ base ss st π (.norm π') evs) :
     completes ss = true := by
@@ -368,6 +497,7 @@ theorem mSet_decomp {sigs : List (String × Sig)} {Γ : Ctx} {id : Nat} {σ σ' 
 
 section
 variable (sigs : List (String × Sig)) (env : InferEnv)
+set_option maxHeartbeats 4000000
 
 mutual
 
@@ -412,7 +542,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     unfold leaving at h2
     rw [hl] at h2
-    exact tryEv_good (mE_shr sigs Γ false σ _) h2 (x3.trans hF) x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ false σ _) h2 (x3.trans hF) x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans (x3.trans hF)))) hb
   | var_fin hid h2 h3 =>
     unfold mStmt at hw
@@ -450,7 +580,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     unfold leaving at h2
     rw [hl] at h2
-    exact tryEv_good (mE_shr sigs Γ false σ _) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ false σ _) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | debuglog_fin hid h2 =>
     unfold mStmt at hw
@@ -484,7 +614,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     unfold leaving at h2
     rw [hl] at h2
-    exact tryEv_good (mE_shr sigs Γ true σ _) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ true σ _) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | call_fin hid h2 =>
     unfold mStmt at hw
@@ -518,7 +648,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     unfold leaving at h2
     rw [hl] at h2
-    exact tryEv_good (mE_shr sigs Γ false σ _) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ false σ _) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | const_fin hid h2 h3 =>
     unfold mStmt at hw
@@ -556,7 +686,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     unfold leaving at h2
     rw [hl] at h2
-    exact tryEv_good (mE_shr sigs _ false σ _) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs _ false σ _) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | var_bare hid h2 =>
     unfold mStmt at hw
@@ -612,8 +742,8 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     refine ⟨fun ev hev => ?_, ⟨_, .head _, (inv.ext x1).ext x3⟩⟩
     simp only [List.mem_singleton] at hev
     subst hev
-    exact recEv_good h3 hF x1.wf (inv.rel.take _) x1.held
-      (.inr fun v hv ho hH => absurd (inv.hU _ hH) (Nat.not_lt.mpr (inv.scope v hv ho)))
+    exact recEv_good h3 hF x1.wf (inv.rel.take _)
+      (.inr ⟨x1.held, fun v hv ho hH => absurd (inv.hU _ hH) (Nat.not_lt.mpr (inv.scope v hv ho))⟩)
   | cont hid h2 h3 =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
@@ -631,8 +761,8 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     refine ⟨fun ev hev => ?_, ⟨_, .head _, (inv.ext x1).ext x3⟩⟩
     simp only [List.mem_singleton] at hev
     subst hev
-    exact recEv_good h3 hF x1.wf (inv.rel.take _) x1.held
-      (.inr fun v hv ho hH => absurd (inv.hU _ hH) (Nat.not_lt.mpr (inv.scope v hv ho)))
+    exact recEv_good h3 hF x1.wf (inv.rel.take _)
+      (.inr ⟨x1.held, fun v hv ho hH => absurd (inv.hU _ hH) (Nat.not_lt.mpr (inv.scope v hv ho))⟩)
   | @set_fin _ _ _ _ x steps op e _ _ id st1 st1a st1b σ1 st2 σ2 st3 hid ha hb h1 h2 =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
@@ -702,7 +832,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     rw [hl] at h1
     have xF := x3.trans (x4.trans hF)
-    exact tryEv_good (mSetParts_shr sigs Γ σ _ _ _) h1 xF xb.wf inv.rel (fun u h => xb.held u (xa.held u (x1.held u h)))
+    exact tryEv_good (mSetParts_shr sigs Γ σ _ _ _) h1 xF xb.wf inv.rel
       (inv.madeBefore (x1b.trans (x2.trans xF))) hbt
   | @set_target _ _ _ _ x steps op e _ _ id st1 st1a st1b σ1 st2 σ2 st3 ds st4 hid ha hb h1 h2 hse ho hr =>
     unfold mStmt at hw
@@ -743,7 +873,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨-, rfl⟩ := ownedIn_run ho
     have s2 : σ2.Same σ := (MSt.Same.of_below b2).trans (MSt.Same.of_below b1)
     have inv3 := inv.same (x1b.trans (x2.trans x3)) s2
-    refine recEv_good hr hF x3.wf inv3.rel (fun _ h => h) (.inl ⟨rfl, rfl, fun v hv ho => ?_⟩)
+    refine recEv_good hr hF x3.wf inv3.rel (.inl ⟨rfl, rfl, fun v hv ho => ?_⟩)
     obtain ⟨w', hw', u', o'⟩ := s2.mem hv
     rw [u']
     exact inv.madeBefore (x1b.trans (x2.trans (x3.trans (x4.trans hF)))) w' hw' (o' ▸ ho)
@@ -771,7 +901,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     unfold leaving at h2
     rw [hl] at h2
-    exact tryEv_good (mE_shr sigs Γ false σ _) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ false σ _) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | @ret_fin _ _ _ _ e _ _ _ st1 σ1 st2 _ _ hid hex h2 ho hr =>
     unfold mStmt at hw
@@ -802,11 +932,58 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     subst hev
     obtain ⟨-, rfl⟩ := ownedIn_run ho
     have inv2 := inv.same (x1.trans x2) s1
-    refine recEv_good hr hF x2.wf inv2.rel (fun _ h => h) (.inl ⟨rfl, rfl, fun v hv ho => ?_⟩)
+    refine recEv_good hr hF x2.wf inv2.rel (.inl ⟨rfl, rfl, fun v hv ho => ?_⟩)
     obtain ⟨w', hw', u', o'⟩ := s1.mem hv
     rw [u']
     exact inv.madeBefore (x1.trans (x2.trans ((SchedGrows.record _ _ _ _ _ _ _ _ x2.wf hr).trans hF))) w' hw'
       (o' ▸ ho)
+  | @loop_ _ _ _ _ c body _ _ id st1 σc st2 r st3 st4 st5 k _ _ hid h2 hb hl hrec hi =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    obtain ⟨r', st3', hb', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hb hb')
+    obtain ⟨_, st4', hl', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hl hl')
+    obtain ⟨ds, st4'', ho, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := ownedIn_run ho
+    obtain ⟨_, st5', hrec', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hrec hrec')
+    obtain ⟨σ', st6, hend, hw⟩ := MoveM.bind_ok hw
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have rs : σc.Below σ ∧ SchedExt st1 st2 := by
+      cases c with
+      | some ce =>
+        exact ⟨leavingIf_below (mE_shr sigs Γ false σ ce) h2,
+          SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ ce)) _ _ _ x1.wf h2⟩
+      | none => cases h2; exact ⟨MSt.Below.refl _, SchedExt.refl x1.wf⟩
+    obtain ⟨bc, x2⟩ := rs
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below bc)
+    obtain ⟨x3, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x2.wf invc.toMade hb
+    have x4 := loopHeld_ext x3.wf (invc.toMade.ext x3) hl
+    have x5 := SchedGrows.record _ _ _ _ _ _ _ _ x4.wf hrec
+    obtain ⟨rfl, -⟩ := loopEnd_eq hend
+    have xs4 := x1.trans (x2.trans (x3.trans x4))
+    obtain ⟨rfl, _⟩ := stmtId_eq hid
+    refine iter_ok (Ub := st2.uid) hi hb hl hrec hend x2.wf hF invc.toMade invc.toMade (Nat.le_refl _)
+      (by rw [sfx_self]; exact MSt.Ids.refl _) inv (xs4.trans x5) bc (fun _ _ h => h.1) ?_
+      (fun π πn hr h => h.2 ▸ Rel.step (fun _ h => h) hr bc) ?_ (inv.rel.mono xs4.held (fun _ h => h))
+    · rintro π evs hr ⟨ce, πk, rfl, hle, hbw, rfl⟩ ev hev
+      simp only [List.mem_singleton] at hev
+      subst hev
+      dsimp only at h2
+      unfold leaving at h2
+      rw [hle] at h2
+      exact tryEv_good (mE_shr sigs Γ false σ ce) h2 (x3.trans (x4.trans (x5.trans hF))) x1.wf hr
+        (inv.madeBefore (x1.trans (x2.trans (x3.trans (x4.trans (x5.trans hF)))))) hbw
+    · rintro π πb hr rfl
+      refine ⟨(Rel.step (fun _ h => h) hr bc).conv (fun v hv ho hd => .inr ⟨invc.lt v hv ho, hd⟩),
+        fun u h => h.1, invc.made, fun v hv _ => by simp at hv, invc.lt, Nat.le_refl _, Nat.le_refl _⟩
   | @if_exit _ _ _ _ c tB eB t e _ _ id st1 σc st2 πk hid h2 hl hb =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
@@ -852,7 +1029,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     unfold leaving at h2
     rw [hl] at h2
     have xF := x3.trans (x4.trans hF)
-    exact tryEv_good (mE_shr sigs Γ false σ c) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ false σ c) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | @if_then _ _ _ _ c tB eB t e _ _ id st1 σc st2 out evs hid h2 hb =>
     unfold mStmt at hw
@@ -1032,7 +1209,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     unfold leaving at h2
     rw [hl] at h2
     have xF := x3.trans (x4.trans hF)
-    exact tryEv_good (mE_shr sigs Γ false σ e) h2 xF x1.wf inv.rel x1.held
+    exact tryEv_good (mE_shr sigs Γ false σ e) h2 xF x1.wf inv.rel
       (inv.madeBefore (x1.trans (x2.trans xF))) hb
   | @match_arm _ _ _ _ e cases dflt _ _ id st1 σc st2 out evs hid h2 hc =>
     unfold mStmt at hw
@@ -1145,7 +1322,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
     | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
     | exit => trivial
-termination_by (n, 0)
+termination_by (n, 0, 0)
 
 theorem block_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {ss : List Stmt} {st : DSt} {π : List Bool}
     {out : POut} {evs : List Ev} (hp : PBlock sigs env n Γ σ base ss st π out evs) {r : MOut} {st' F : DSt}
@@ -1189,7 +1366,7 @@ theorem block_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {ss : List Stmt} {
     | brk _ => obtain ⟨τ, hτ, iτ⟩ := i1; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
     | cont _ => obtain ⟨τ, hτ, iτ⟩ := i1; exact ⟨τ, List.mem_append_left _ hτ, iτ.ext x2⟩
     | exit => trivial
-termination_by (n, 0)
+termination_by (n, 0, 0)
 
 theorem branch_ok {n : Nat} {Γb : Ctx} {σc : MSt} {binds : List String} {base : Nat} {body : List Stmt}
     {id : Nat} {kind : String} {arm : Option Nat} {st : DSt} {π : List Bool} {out : POut} {evs : List Ev}
@@ -1229,7 +1406,7 @@ theorem branch_ok {n : Nat} {Γb : Ctx} {σc : MSt} {binds : List String} {base 
       · simp only [List.mem_singleton] at h
         subst h
         rw [hl]
-        refine recEv_good hb4 hF xb.wf (ib.rel.take _) (fun _ h => h) (.inr fun v hv ho hH => ?_)
+        refine recEv_good hb4 hF xb.wf (ib.rel.take _) (.inr ⟨fun _ h => h, fun v hv ho hH => ?_⟩)
         have hv' := mem_take_mono hv (show rb.1.length - σc.length ≤ rb.1.length - base by have := inv.base; omega)
         exact absurd (ib.hU _ hH) (Nat.not_lt.mpr (ib.scope v hv' ho))
     · show Inv F _ U H base (rb.1.drop (rb.1.length - σc.length)) (πe.drop (πe.length - σc.length))
@@ -1255,7 +1432,114 @@ theorem branch_ok {n : Nat} {Γb : Ctx} {σc : MSt} {binds : List String} {base 
     | brk _ => obtain ⟨τ, hτ, iτ⟩ := ib; exact ⟨τ, hτ, iτ.ext (x3.trans x4)⟩
     | cont _ => obtain ⟨τ, hτ, iτ⟩ := ib; exact ⟨τ, hτ, iτ.ext (x3.trans x4)⟩
     | exit => trivial
-termination_by (n, 1)
+termination_by (n, 1, 0)
+
+theorem iter_ok {k n : Nat} {HX : List Bool → List Ev → Prop} {HN HB : List Bool → List Bool → Prop}
+    {Γb : Ctx} {σc σb : MSt} {body : List Stmt} {st2 : DSt} {r : MOut} {st4 st5 : DSt} {π : List Bool}
+    {out : POut} {evs : List Ev}
+    (hp : PIter sigs env k HX HN HB n Γb σc σb body st2 r st4 st5 π out evs)
+    {σh σ' : MSt} {id : Nat} {nat : Bool} {st0 st3 st6 F : DSt} {U Ub : Nat} {H : Nat → Prop} {base : Nat}
+    {π0 : List Bool}
+    (hb : (mBlock sigs env n Γb σb σc.length body).run st2 = .ok (r, st3))
+    (hl : (loopHeld σc body r).run st3 = .ok ((), st4))
+    (hrec : (record "loop_body_end" id none (ownedOf st4.held (scopeOwn σc r.1))).run st4 = .ok ((), st5))
+    (hend : (loopEnd σh σc nat body r).run st5 = .ok (σ', st6))
+    (w : st2.WF) (hF : SchedExt st6 F) (hmb : Made σb st2) (hmc : Made σc st2)
+    (hlen : σc.length ≤ σb.length) (hsb : MSt.Ids (sfx σc.length σb) σc)
+    (inv0 : Inv F st0 U H base σh π0) (x0 : SchedExt st0 st6) (sc : σc.Below σh)
+    (hnat : ∀ π πn, HN π πn → nat = true)
+    (hX : ∀ π evs, Rel F st4 H σh π → HX π evs → ∀ ev, ev ∈ evs → ev.Good F)
+    (hN : ∀ π πn, Rel F st4 H σh π → HN π πn → Rel F st4 H σc πn)
+    (hB : ∀ π πb, Rel F st4 H σh π → HB π πb →
+      Inv F st2 Ub (fun u => u < Ub ∧ (u ∈ st4.held ∨ H u)) σc.length σb πb)
+    (hr : Rel F st4 H σh π) :
+    (∀ ev, ev ∈ evs → ev.Good F) ∧ OutOk F st6 U H base (σ', [], []) out := by
+  obtain ⟨x3, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ w hmb hb
+  have x4 := loopHeld_ext x3.wf (hmc.ext x3) hl
+  have x5 := SchedGrows.record _ _ _ _ _ _ _ _ x4.wf hrec
+  obtain ⟨e6, -⟩ := loopEnd_eq hend
+  have hF6 := hF
+  have x06 := x0
+  rw [e6] at hF x0 ⊢
+  have xF4 : SchedExt st4 F := x5.trans hF
+  have shp := (walk_shape sigs env n).2.1 _ _ _ _ _ _ _ hlen hb
+  have lenk := (walk_len sigs env n).2.1 _ _ _ _ _ _ _ hlen hb
+  have brkIds : ∀ τ, τ ∈ r.2.1 → MSt.Ids (σc.back τ) σc := fun τ hτ => by
+    rw [back_eq_sfx]; exact (shp.2.1 τ hτ).trans hsb
+  have contIds : ∀ τ, τ ∈ r.2.2 → MSt.Ids (σc.back τ) σc := fun τ hτ => by
+    rw [back_eq_sfx]; exact (shp.2.2 τ hτ).trans hsb
+  have normIds : MSt.Ids (σc.back r.1) σc := by
+    rw [back_eq_sfx, ← sfx_sfx hlen lenk.1]
+    exact (shp.1.sfx σc.length).trans hsb
+  have spec := loopEnd_spec hend (fun τ hτ => MSt.Same.of_ids (brkIds τ hτ))
+  have held := loopHeld_holds hl
+  have hK : ∀ u, u ∈ st4.held → u ∈ F.held ∧ u ∈ F.tracked ∧ (u ∈ st4.held ∨ H u) := fun u h =>
+    ⟨xF4.held u h, xF4.tracked u (x4.wf.heldTracked u h), .inl h⟩
+  have hc : ∀ u, (u ∈ st3.held ∨ (u < Ub ∧ (u ∈ st4.held ∨ H u))) → u ∈ st4.held ∨ H u := fun u h =>
+    h.elim (fun h => .inl (x4.held u h)) (fun h => h.2)
+  have sameH : σc.Same σh := MSt.Same.of_below sc
+  have toOut : ∀ {X : MSt} {πx : List Bool}, Rel F st3 (fun u => u < Ub ∧ (u ∈ st4.held ∨ H u)) X πx →
+      Rel F st5 H X πx := fun rel => rel.conv fun v _ _ h =>
+    h.elim (fun h => .inl (x5.held _ (x4.held _ h))) (fun h => h.2.imp (x5.held _) (fun h => h))
+  cases hp with
+  | head_exit hx => exact ⟨hX _ _ hr hx, trivial⟩
+  | natural hn =>
+    refine ⟨(fun _ h => by cases h), ?_⟩
+    have sl := spec.2.2.1 (hnat _ _ hn)
+    exact inv0.reframe x0 (sl.same.trans sameH) (((hN _ _ hr hn).mono x5.held (fun _ h => h)).sameLive sl)
+  | @body_norm _ _ _ _ _ _ _ _ _ _ _ _ _ _ πb πe evs1 _ evs2 hbb hblk hnext =>
+    have invb := hB _ _ hr hbb
+    obtain ⟨g1, ib⟩ := block_ok hblk hb w invb (x4.trans xF4)
+    have hlE : πe.length = r.1.length := ib.rel.length
+    have hcomp := pblock_completes hblk
+    have ev : (recEv st4 st5 (scopeOwn σc r.1) (πe.take (πe.length - σc.length))).Good F := by
+      rw [hlE]
+      refine recEv_good hrec hF x4.wf (ib.rel.take _) (.inr ⟨held.1, fun v hv ho hH => ?_⟩)
+      exact absurd (ib.hU _ hH) (Nat.not_lt.mpr (ib.scope v hv ho))
+    have rb : Rel F st3 (fun u => u < Ub ∧ (u ∈ st4.held ∨ H u)) (σc.back r.1)
+        (πe.drop (πe.length - σc.length)) := by
+      rw [hlE]; exact ib.rel.drop _
+    have hr' : Rel F st4 H σh (πe.drop (πe.length - σc.length)) :=
+      Rel.back hK hc rb (normIds.trans (MSt.Ids.of_below sc)) sc (spec.1 hcomp)
+        (fun i v w h1 h2 hv ho hw => held.2 i v h1 hv ho (by simp [hcomp, h2, hw]))
+    obtain ⟨g2, o2⟩ := iter_ok hnext hb hl hrec hend w hF6 hmb hmc hlen hsb inv0 x06 sc hnat hX hN hB hr'
+    rw [e6] at o2
+    refine ⟨fun e he => ?_, o2⟩
+    simp only [List.mem_append, List.mem_cons] at he
+    rcases he with he | rfl | he
+    · exact g1 e he
+    · exact ev
+    · exact g2 e he
+  | @body_brk _ _ _ _ _ _ _ _ _ _ _ _ _ _ πb πx _ hbb hblk =>
+    obtain ⟨g1, τ, hτ, iτ⟩ := block_ok hblk hb w (hB _ _ hr hbb) (x4.trans xF4)
+    refine ⟨g1, ?_⟩
+    have hlx : πx.length = τ.length := iτ.rel.length
+    have rb : Rel F st3 (fun u => u < Ub ∧ (u ∈ st4.held ∨ H u)) (σc.back τ)
+        (πx.drop (πx.length - σc.length)) := by
+      rw [hlx]; exact iτ.rel.drop _
+    have sl := spec.2.2.2 τ hτ
+    exact inv0.reframe x0 (sl.same.trans ((MSt.Same.of_ids (brkIds τ hτ)).trans sameH)) ((toOut rb).sameLive sl)
+  | @body_cont _ _ _ _ _ _ _ _ _ _ _ _ _ _ πb πx evs1 _ evs2 hbb hblk hnext =>
+    obtain ⟨g1, τ, hτ, iτ⟩ := block_ok hblk hb w (hB _ _ hr hbb) (x4.trans xF4)
+    have hlx : πx.length = τ.length := iτ.rel.length
+    have rb : Rel F st3 (fun u => u < Ub ∧ (u ∈ st4.held ∨ H u)) (σc.back τ)
+        (πx.drop (πx.length - σc.length)) := by
+      rw [hlx]; exact iτ.rel.drop _
+    have hr' : Rel F st4 H σh (πx.drop (πx.length - σc.length)) :=
+      Rel.back hK hc rb ((contIds τ hτ).trans (MSt.Ids.of_below sc)) sc (spec.2.1 τ hτ)
+        (fun i v w h1 h2 hv ho hw => held.2 i v h1 hv ho (by
+          simp only [Bool.or_eq_true, List.any_eq_true]
+          exact .inr ⟨τ, hτ, by simp [h2, hw]⟩))
+    obtain ⟨g2, o2⟩ := iter_ok hnext hb hl hrec hend w hF6 hmb hmc hlen hsb inv0 x06 sc hnat hX hN hB hr'
+    rw [e6] at o2
+    refine ⟨fun e he => ?_, o2⟩
+    rcases List.mem_append.mp he with he | he
+    · exact g1 e he
+    · exact g2 e he
+  | body_exit hbb hblk =>
+    obtain ⟨g1, -⟩ := block_ok hblk hb w (hB _ _ hr hbb) (x4.trans xF4)
+    exact ⟨g1, trivial⟩
+termination_by (n, 2, k)
 
 theorem cases_ok {n : Nat} {Γ : Ctx} {vs : List (String × Option Ty)} {σ : MSt} {base id i : Nat}
     {cs : List Case} {st : DSt} {π : List Bool} {out : POut} {evs : List Ev}
@@ -1327,7 +1611,7 @@ theorem cases_ok {n : Nat} {Γ : Ctx} {vs : List (String × Option Ty)} {σ : MS
     | brk _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
     | cont _ => obtain ⟨τ, hτ, iτ⟩ := o; exact ⟨τ, List.mem_append_right _ hτ, iτ⟩
     | exit => trivial
-termination_by (n, 0)
+termination_by (n, 0, 0)
 
 end
 

@@ -135,9 +135,9 @@ was all made inside the innermost loop the path is in. -/
 theorem recEv_good {kind : String} {id : Nat} {arm : Option Nat} {vs : MSt} {πs : List Bool} {always : Bool}
     {st0 st1 st2 F : DSt} {H : Nat → Prop}
     (hr : (record kind id arm (ownedOf st1.held vs) always).run st1 = .ok ((), st2))
-    (x : SchedExt st2 F) (w1 : st1.WF) (rel : Rel F st0 H vs πs) (hheld : ∀ u, u ∈ st0.held → u ∈ st1.held)
+    (x : SchedExt st2 F) (w1 : st1.WF) (rel : Rel F st0 H vs πs)
     (cover : (always = true ∧ exitKind kind = true ∧ ∀ v, v ∈ vs → v.owns = true → F.made v.uid ≤ id) ∨
-      (∀ v, v ∈ vs → v.owns = true → ¬ H v.uid)) :
+      ((∀ u, u ∈ st0.held → u ∈ st1.held) ∧ ∀ v, v ∈ vs → v.owns = true → ¬ H v.uid)) :
     (recEv st1 st2 vs πs).Good F := by
   obtain ⟨ho, hh, ht, hm, hn, hu⟩ := record_eq hr
   have trk : ∀ u, u ∈ st1.held → u ∈ F.tracked := fun u h => x.tracked u (ht ▸ w1.heldTracked u h)
@@ -163,14 +163,15 @@ theorem recEv_good {kind : String} {id : Nat} {arm : Option Nat} {vs : MSt} {πs
     refine ⟨fun v p hvp ho' hp => ?_, fun u hu' => ?_⟩
     · obtain ⟨_, hd'⟩ := rel.mem_zip hvp
       have hv := mem_zip_left hvp
-      rcases hd' hp ho' with hl' | ⟨_, hF, _, hs | hlt⟩
+      rcases hd' hp ho' with hl' | ⟨_, hF, _, hs0⟩
       · exact inE _ (mem_ownedOf.mpr ⟨v, hv, ho', .inl hl', rfl⟩)
-      · exact inE _ (mem_ownedOf.mpr ⟨v, hv, ho', .inr (hheld _ hs), rfl⟩)
-      · rcases cover with ⟨_, hk', hmade⟩ | hU
+      · rcases cover with ⟨_, hk', hmade⟩ | ⟨hheld, hU⟩
         · by_cases hs : v.uid ∈ st1.held
           · exact inE _ (mem_ownedOf.mpr ⟨v, hv, ho', .inr hs, rfl⟩)
           · exact patched (by simpa using hk') v.uid hF (hh ▸ hs) (hmade v hv ho')
-        · exact absurd hlt (hU v hv ho')
+        · rcases hs0 with hs | hlt
+          · exact inE _ (mem_ownedOf.mpr ⟨v, hv, ho', .inr (hheld _ hs), rfl⟩)
+          · exact absurd hlt (hU v hv ho')
     · rcases extra u hu' with h | h
       · simp only [Entry.uids, List.map_map] at h
         have h' : u ∈ ownedOf st1.held vs := by simpa using h
@@ -191,11 +192,11 @@ theorem recEv_good {kind : String} {id : Nat} {arm : Option Nat} {vs : MSt} {πs
     obtain ⟨_, hd'⟩ := rel.mem_zip hvp
     have hv := mem_zip_left hvp
     have none : ∀ u, u ∉ ownedOf st1.held vs := fun u h => by rw [hempty] at h; simp at h
-    rcases hd' hp ho' with hl' | ⟨_, _, _, hs | hlt⟩
-    · exact none _ (mem_ownedOf.mpr ⟨v, hv, ho', .inl hl', rfl⟩)
-    · exact none _ (mem_ownedOf.mpr ⟨v, hv, ho', .inr (hheld _ hs), rfl⟩)
-    · rcases cover with ⟨hal, _, _⟩ | hU
-      · rw [hal] at ha; exact ha rfl
+    rcases cover with ⟨hal, _, _⟩ | ⟨hheld, hU⟩
+    · rw [hal] at ha; exact ha rfl
+    · rcases hd' hp ho' with hl' | ⟨_, _, _, hs | hlt⟩
+      · exact none _ (mem_ownedOf.mpr ⟨v, hv, ho', .inl hl', rfl⟩)
+      · exact none _ (mem_ownedOf.mpr ⟨v, hv, ho', .inr (hheld _ hs), rfl⟩)
       · exact absurd hlt (hU v hv ho')
 
 
@@ -240,7 +241,7 @@ theorem between_facts {F st : DSt} {H : Nat → Prop} : ∀ {σ σ' : MSt} {π �
 before the step's statement. -/
 theorem tryEv_good {id : Nat} {σ σ' : MSt} {m : MoveM MSt} (hm : Shr σ m) {st0 st1 st2 F : DSt} {H : Nat → Prop}
     {π πk : List Bool} (hl : (leavingIf id σ true m).run st1 = .ok (σ', st2))
-    (x : SchedExt st2 F) (w1 : st1.WF) (rel : Rel F st0 H σ π) (hheld : ∀ u, u ∈ st0.held → u ∈ st1.held)
+    (x : SchedExt st2 F) (w1 : st1.WF) (rel : Rel F st0 H σ π)
     (hmade : ∀ v, v ∈ σ → v.owns = true → F.made v.uid ≤ id) (hb : Between (delta σ σ' π) π πk) :
     (tryEv st1 st2 σ πk).Good F := by
   obtain ⟨stm, hmr, _, ho, hh, ht, _, _, _⟩ := leavingIf_spec hm hl
@@ -296,7 +297,9 @@ theorem tryEv_good {id : Nat} {σ σ' : MSt} {m : MoveM MSt} (hm : Shr σ m) {st
           refine List.mem_append_right _ (List.mem_filter.mpr ⟨nym hne _ hm', ?_⟩)
           simp only [List.any_eq_true, Bool.and_eq_true, beq_iff_eq]
           exact ⟨(v, p), hvp, rfl, hp⟩
-    · exact List.mem_append_left _ (inB _ (hdrops ▸ mem_ownedOf.mpr ⟨v', hv', o' ▸ ho', .inr (hheld _ hs), u'⟩))
+    · by_cases hs' : v.uid ∈ st1.held
+      · exact List.mem_append_left _ (inB _ (hdrops ▸ mem_ownedOf.mpr ⟨v', hv', o' ▸ ho', .inr hs', u'⟩))
+      · exact List.mem_append_left _ (patched (by simp [exitKind]) v.uid hF (hh ▸ hs') (hmade v hv ho'))
     · by_cases hs : v.uid ∈ st1.held
       · exact List.mem_append_left _ (inB _ (hdrops ▸ mem_ownedOf.mpr ⟨v', hv', o' ▸ ho', .inr hs, u'⟩))
       · exact List.mem_append_left _ (patched (by simp [exitKind]) v.uid hF (hh ▸ hs) (hmade v hv ho'))
