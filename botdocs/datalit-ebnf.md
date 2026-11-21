@@ -310,6 +310,12 @@ Its inputs are the `examples` blocks above, every `.dlt` file under
 character changed. A disagreement is shrunk to the shortest
 input that still disagrees.
 
+The generated strings must go everywhere in the grammar the start rule
+reaches: every rule, every alternative of every `|`, and every option and
+repetition taken, or the test fails, naming what was never written. The
+generator favours what it has written least, so a rare corner is reached
+without many more strings. The rules written in characters are not yet counted.
+
 The recognizer reads the tokens the real lexer makes, which
 [Lexical Grammar](lexical-grammar.md) holds to its own grammar, with a
 `newline` before a token in a `{|` `|}` pair, outside the brackets nested in

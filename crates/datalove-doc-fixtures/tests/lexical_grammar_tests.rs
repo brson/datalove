@@ -7,12 +7,15 @@
 //! character at a time, strings generated from the grammar, and strings of
 //! characters drawn from those the rules single out, from the seeds of
 //! `DATALOVE_LEX_SEED` and `DATALOVE_LEX_COUNT` (see `bct::random::env_seeds`).
+//!
+//! The generated strings must reach every rule, alternative, option and
+//! repetition of the grammar: see `datalove_doc_fixtures::ebnf::Coverage`.
 
 use rmx::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 use bct::random::{SeededRng, env_seeds, seed_of};
-use datalove_doc_fixtures::ebnf::{Generator, join_chars};
+use datalove_doc_fixtures::ebnf::{Coverage, Generator, join_chars};
 use datalove_doc_fixtures::grammar_check::{files, mutate, shrink, workspace_dir};
 use datalove_doc_fixtures::lexical::{DOC, Lexer, grammar, lexer_tokens, sample, sigils};
 use datalove_doc_fixtures::datafun_grammar;
@@ -106,13 +109,17 @@ fn generated_agree() {
     let lexer = Lexer::new(&g);
     let generator = Generator::new(&g, &sample);
     let mut found = Found::default();
+    let mut coverage = Coverage::new(&generator, &["source"]);
     for seed in env_seeds("DATALOVE_LEX", 0, 3000).iter() {
         let mut rng = SeededRng::new(seed);
         let n = rng.random_range(0..24);
         let drawn: String = (0..n).map(|_| POOL[rng.random_range(0..POOL.len())]).collect();
         found.check(&lexer, &drawn);
-        let generated = join_chars(&generator.generate("source", &mut rng), &|_, _, _| "");
-        found.check(&lexer, &generated);
+        let (pieces, trace) = generator.generate_traced("source", &mut rng);
+        coverage.add(&trace);
+        found.check(&lexer, &join_chars(&pieces, &|_, _, _| ""));
     }
     found.finish("drawn and generated strings");
+    println!("{}", coverage.summary());
+    coverage.assert_full("the generated strings");
 }

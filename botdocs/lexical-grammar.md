@@ -111,3 +111,9 @@ The inputs are every datalit and datafun source the grammar tests read, each
 with characters changed, strings generated from the grammar, and strings of
 characters drawn from those the rules single out. The meaning of each
 `? x ?` is in `crates/datalove-doc-fixtures/src/lexical.rs`.
+
+The generated strings must go everywhere in the grammar the start rule
+reaches: every rule, every alternative of every `|`, and every option and
+repetition taken, or the test fails, naming what was never written. The
+generator favours what it has written least, so a rare corner is reached
+without many more strings.

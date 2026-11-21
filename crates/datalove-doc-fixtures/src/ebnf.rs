@@ -224,6 +224,35 @@ fn substitute(e: &Expr, params: &[String], args: &[Expr]) -> Expr {
 }
 
 impl Expr {
+    /// The expression as EBNF.
+    pub fn show(&self) -> String {
+        // Inside a sequence or an exception, an alternative needs brackets.
+        let tight = |x: &Expr| match x {
+            Expr::Alt(_) | Expr::Seq(_) => fmt!("( {} )", x.show()),
+            x => x.show(),
+        };
+        match self {
+            Expr::Alt(xs) => xs.iter().map(Expr::show).collect::<Vec<_>>().join(" | "),
+            Expr::Seq(xs) => xs
+                .iter()
+                .map(|x| if matches!(x, Expr::Alt(_)) { tight(x) } else { x.show() })
+                .collect::<Vec<_>>()
+                .join(", "),
+            Expr::Opt(x) => fmt!("[ {} ]", x.show()),
+            Expr::Rep(x) => fmt!("{{ {} }}", x.show()),
+            Expr::Except(a, b) => fmt!("{} - {}", tight(a), tight(b)),
+            Expr::Glue(None) => "~".S(),
+            Expr::Glue(Some(x)) => fmt!("~{}", tight(x)),
+            Expr::Lit(t) => {
+                let t = t.replace('\n', "\\n");
+                if t.contains('"') { fmt!("'{t}'") } else { fmt!("\"{t}\"") }
+            }
+            Expr::Range(lo, hi) => fmt!("\"{lo}\" .. \"{hi}\""),
+            Expr::Special(t) => fmt!("? {t} ?"),
+            Expr::Ref(name) | Expr::Assert(name) => name.C(),
+        }
+    }
+
     /// Calls `f` on this expression and every one inside it.
     pub fn visit(&self, f: &mut impl FnMut(&Expr)) {
         f(self);
@@ -995,9 +1024,13 @@ pub enum Piece {
 
 /// Generates random strings of a grammar, as pieces.
 ///
-/// Below `max_depth` rule references, every alternative is equally likely
-/// and options and repetitions are taken half the time; past it, each choice
-/// is the one that finishes soonest. A special sequence's text comes from
+/// Half the time an alternative is drawn evenly and half the time it is the
+/// one taken least so far, and options and repetitions are taken half the
+/// time, or always where they never have been, until a rule has been written inside itself
+/// `max_depth` times on the way to where it is; past that, each choice is the
+/// one that finishes soonest. Only recursion counts: the chain of rules from
+/// `expr` down to `primary` is long, and counting each of them left nothing
+/// deep in an expression ever written. A special sequence's text comes from
 /// `sample`. An exception's `a` is generated whatever `b` is, and an
 /// assertion or `~` is left as a mark, since what follows it is not yet
 /// written: what the pieces make is a candidate, to be put together by the
@@ -1008,6 +1041,182 @@ pub struct Generator<'g> {
     cost: LookupMap<&'g str, u32>,
     sample: &'g dyn Fn(&str, &mut SeededRng) -> String,
     max_depth: u32,
+    points: Points<'g>,
+    rules: LookupMap<&'g str, &'g Rule>,
+    /// How many times each point has been gone through, over every string
+    /// generated so far.
+    hits: std::cell::RefCell<Vec<u32>>,
+}
+
+/// The places in a grammar a generated string can go: each rule, each
+/// alternative of a `|`, and each option or repetition taken.
+struct Points<'g> {
+    all: Vec<Point>,
+    rules: LookupMap<&'g str, u32>,
+    /// By the address of the alternative's expression.
+    branches: LookupMap<usize, u32>,
+    /// By the address of the option or repetition.
+    taken: LookupMap<usize, u32>,
+    /// The points beneath each alternative, option and repetition, its own
+    /// among them, through the rules it uses: by its address.
+    beneath: LookupMap<usize, Vec<u32>>,
+}
+
+/// A place in a grammar a generated string can go.
+#[derive(Clone, Debug)]
+pub struct Point {
+    pub rule: String,
+    /// What it is, as EBNF.
+    pub what: String,
+}
+
+fn address(e: &Expr) -> usize {
+    std::ptr::from_ref(e) as usize
+}
+
+impl<'g> Points<'g> {
+    fn new(g: &'g Grammar) -> Points<'g> {
+        let mut p = Points {
+            all: vec![],
+            rules: LookupMap::new(),
+            branches: LookupMap::new(),
+            taken: LookupMap::new(),
+            beneath: LookupMap::new(),
+        };
+        for rule in &g.rules {
+            let n = p.add(&rule.name, fmt!("{} is reached", rule.name));
+            p.rules.insert(&rule.name, n);
+            p.visit(&rule.name, &rule.body);
+        }
+        // What each rule reaches, itself included, then what lies beneath each
+        // choice.
+        let mut reach: LookupMap<&str, BTreeSet<u32>> = LookupMap::new();
+        for rule in &g.rules {
+            let mut seen = BTreeSet::new();
+            let mut points = BTreeSet::new();
+            let mut todo = vec![rule.name.as_str()];
+            while let Some(name) = todo.pop() {
+                if !seen.insert(name) {
+                    continue;
+                }
+                let r = g.get(name).X();
+                points.insert(p.rules[name]);
+                p.inside(&r.body, &mut points);
+                r.body.visit(&mut |e| {
+                    if let Expr::Ref(n) = e {
+                        todo.push(g.get(n).X().name.as_str());
+                    }
+                });
+            }
+            reach.insert(&rule.name, points);
+        }
+        for rule in &g.rules {
+            rule.body.visit(&mut |e| {
+                let choices: Vec<&Expr> = match e {
+                    Expr::Alt(xs) => xs.iter().collect(),
+                    Expr::Opt(_) | Expr::Rep(_) => vec![e],
+                    _ => vec![],
+                };
+                for x in choices {
+                    let mut points = BTreeSet::new();
+                    points.extend(p.branches.get(&address(x)));
+                    p.inside(x, &mut points);
+                    x.visit(&mut |y| {
+                        if let Expr::Ref(n) = y {
+                            points.extend(&reach[n.as_str()]);
+                        }
+                    });
+                    p.beneath.insert(address(x), points.into_iter().collect());
+                }
+            });
+        }
+        p
+    }
+
+    /// The points written inside `e`, as far as its rule goes.
+    fn inside(&self, e: &Expr, out: &mut BTreeSet<u32>) {
+        e.visit(&mut |x| {
+            out.extend(self.taken.get(&address(x)));
+            if let Expr::Alt(xs) = x {
+                for y in xs {
+                    out.extend(self.branches.get(&address(y)));
+                }
+            }
+        });
+    }
+
+    fn add(&mut self, rule: &str, what: String) -> u32 {
+        self.all.push(Point { rule: rule.S(), what });
+        u32::try_from(self.all.len() - 1).X()
+    }
+
+    fn visit(&mut self, rule: &str, e: &Expr) {
+        match e {
+            Expr::Alt(xs) => {
+                for x in xs {
+                    let n = self.add(rule, fmt!("{rule}: the alternative {}", x.show()));
+                    self.branches.insert(address(x), n);
+                    self.visit(rule, x);
+                }
+            }
+            Expr::Seq(xs) => xs.iter().for_each(|x| self.visit(rule, x)),
+            Expr::Opt(x) | Expr::Rep(x) => {
+                let n = self.add(rule, fmt!("{rule}: {} taken", e.show()));
+                self.taken.insert(address(e), n);
+                self.visit(rule, x);
+            }
+            Expr::Except(a, _) | Expr::Glue(Some(a)) => self.visit(rule, a),
+            Expr::Glue(None) | Expr::Lit(_) | Expr::Range(..) | Expr::Special(_) | Expr::Ref(_) | Expr::Assert(_) => {}
+        }
+    }
+}
+
+/// How much of a grammar the strings generated from some start rules have
+/// gone through, counted over the points those rules reach.
+pub struct Coverage {
+    points: Vec<Point>,
+    /// Whether each point counts: whether the start rules reach its rule.
+    counted: Vec<bool>,
+    hits: Vec<u32>,
+}
+
+impl Coverage {
+    pub fn new(generator: &Generator<'_>, starts: &[&str]) -> Coverage {
+        let reached = generator.grammar.reachable(starts);
+        let points = generator.points.all.C();
+        let counted = points.iter().map(|p| reached.contains(&p.rule)).collect();
+        let hits = vec![0; points.len()];
+        Coverage { points, counted, hits }
+    }
+
+    /// Counts the points a generated string went through.
+    pub fn add(&mut self, trace: &[u32]) {
+        for &n in trace {
+            self.hits[n as usize] += 1;
+        }
+    }
+
+    /// The points no string went through.
+    pub fn missed(&self) -> Vec<&Point> {
+        (0..self.points.len()).filter(|&n| self.counted[n] && self.hits[n] == 0).map(|n| &self.points[n]).collect()
+    }
+
+    /// How many of the points counted were gone through.
+    pub fn summary(&self) -> String {
+        let total = self.counted.iter().filter(|c| **c).count();
+        fmt!("{} of {total} points of the grammar reached", total - self.missed().len())
+    }
+
+    /// Fails, listing them, if any points were missed.
+    pub fn assert_full(&self, what: &str) {
+        let missed: Vec<String> = self.missed().iter().map(|p| p.what.C()).collect();
+        assert!(
+            missed.is_empty(),
+            "{what}: {}; never generated:\n  {}",
+            self.summary(),
+            missed.join("\n  ")
+        );
+    }
 }
 
 const INF: u32 = u32::MAX / 4;
@@ -1031,53 +1240,96 @@ impl<'g> Generator<'g> {
         for (name, c) in cost.iter_unordered() {
             assert!(*c < INF, "rule {name} never finishes");
         }
-        Generator { grammar, cost, sample, max_depth: 12 }
+        let rules = grammar.rules.iter().map(|r| (r.name.as_str(), r)).collect();
+        let points = Points::new(grammar);
+        let hits = std::cell::RefCell::new(vec![0; points.all.len()]);
+        Generator { grammar, cost, sample, max_depth: 3, points, rules, hits }
     }
 
-    /// The same generator, choosing freely only below `max_depth` rule
-    /// references.
+    /// The same generator, choosing freely only below `max_depth` levels of
+    /// recursion.
     pub fn max_depth(self, max_depth: u32) -> Generator<'g> {
         Generator { max_depth, ..self }
     }
 
     pub fn generate(&self, start: &str, rng: &mut SeededRng) -> Vec<Piece> {
-        let start = Expr::Ref(start.S());
-        let mut out = vec![];
-        self.emit(&start, 0, rng, &mut out);
-        out
+        self.generate_traced(start, rng).0
     }
 
-    fn emit(&self, e: &Expr, depth: u32, rng: &mut SeededRng, out: &mut Vec<Piece>) {
+    /// A string generated from `start`, and the points of the grammar it
+    /// went through, for a [`Coverage`].
+    pub fn generate_traced(&self, start: &str, rng: &mut SeededRng) -> (Vec<Piece>, Vec<u32>) {
+        let start = Expr::Ref(start.S());
+        let mut out = vec![];
+        let mut trace = vec![];
+        self.emit(&start, 0, rng, &mut out, &mut trace, &mut vec![]);
+        (out, trace)
+    }
+
+    fn pass(&self, point: Option<&u32>, trace: &mut Vec<u32>) {
+        if let Some(&n) = point {
+            self.hits.borrow_mut()[n as usize] += 1;
+            trace.push(n);
+        }
+    }
+
+    /// The fewest times any point beneath a choice has been gone through.
+    fn least_beneath(&self, e: &Expr) -> u32 {
+        let hits = self.hits.borrow();
+        self.points.beneath[&address(e)].iter().map(|&n| hits[n as usize]).min().unwrap_or(u32::MAX)
+    }
+
+    /// Whether to take an option or repetition: always the first time where
+    /// something beneath it never has been, else half the time.
+    fn take(&self, e: &Expr, first: bool, rng: &mut SeededRng) -> bool {
+        (first && self.least_beneath(e) == 0) || rng.random_bool(0.5)
+    }
+
+    fn emit(&self, e: &Expr, depth: u32, rng: &mut SeededRng, out: &mut Vec<Piece>, trace: &mut Vec<u32>, stack: &mut Vec<&'g str>) {
         let deep = depth > self.max_depth;
         match e {
             Expr::Alt(xs) => {
                 let x = if deep {
                     xs.iter().min_by_key(|x| expr_cost(x, &self.cost)).X()
+                } else if rng.random_bool(0.5) {
+                    // The alternative with the least gone through beneath
+                    // it, so that what is rare, there or deep under it, is
+                    // written as often as what is common.
+                    let scores: Vec<u32> = xs.iter().map(|x| self.least_beneath(x)).collect();
+                    let least = *scores.iter().min().X();
+                    let rare: Vec<&Expr> = xs.iter().zip(&scores).filter(|(_, s)| **s == least).map(|(x, _)| x).collect();
+                    rare[rng.random_range(0..rare.len())]
                 } else {
                     &xs[rng.random_range(0..xs.len())]
                 };
-                self.emit(x, depth, rng, out);
+                self.pass(self.points.branches.get(&address(x)), trace);
+                self.emit(x, depth, rng, out, trace, stack);
             }
-            Expr::Seq(xs) => xs.iter().for_each(|x| self.emit(x, depth, rng, out)),
+            Expr::Seq(xs) => xs.iter().for_each(|x| self.emit(x, depth, rng, out, trace, stack)),
             Expr::Opt(x) => {
-                if !deep && rng.random_bool(0.5) {
-                    self.emit(x, depth, rng, out);
+                if !deep && self.take(e, true, rng) {
+                    self.pass(self.points.taken.get(&address(e)), trace);
+                    self.emit(x, depth, rng, out, trace, stack);
                 }
             }
             Expr::Rep(x) => {
                 if !deep {
-                    while rng.random_bool(0.5) && out.len() < 4096 {
-                        self.emit(x, depth, rng, out);
+                    let mut first = true;
+                    while self.take(e, first, rng) && out.len() < 4096 {
+                        first = false;
+                        self.pass(self.points.taken.get(&address(e)), trace);
+                        self.emit(x, depth, rng, out, trace, stack);
                     }
                 }
             }
             Expr::Except(a, b) => {
                 // Draw `a` again while it is one of the words `b` names.
                 let words = self.grammar.words(b);
-                let mark = out.len();
+                let (mark, traced) = (out.len(), trace.len());
                 for _ in 0..20 {
                     out.truncate(mark);
-                    self.emit(a, depth, rng, out);
+                    trace.truncate(traced);
+                    self.emit(a, depth, rng, out, trace, stack);
                     let text: String = out[mark..]
                         .iter()
                         .filter_map(|p| if let Piece::Text(t) = p { Some(t.as_str()) } else { None })
@@ -1090,7 +1342,7 @@ impl<'g> Generator<'g> {
             Expr::Glue(x) => {
                 out.push(Piece::Mark("~".S()));
                 if let Some(x) = x {
-                    self.emit(x, depth, rng, out);
+                    self.emit(x, depth, rng, out, trace, stack);
                 }
             }
             Expr::Lit(s) => out.push(Piece::Text(s.C())),
@@ -1100,8 +1352,14 @@ impl<'g> Generator<'g> {
             Expr::Special(text) => out.push(Piece::Text((self.sample)(text, rng))),
             Expr::Assert(name) => out.push(Piece::Mark(name.C())),
             Expr::Ref(name) => {
-                let rule = self.grammar.get(name).X();
-                self.emit(&rule.body, depth + 1, rng, out);
+                let rule = *self.rules.get(name.as_str()).X();
+                self.pass(self.points.rules.get(rule.name.as_str()), trace);
+                // Only recursion is deep: a rule already being written is
+                // written inside itself again.
+                let depth = depth + u32::from(stack.contains(&rule.name.as_str()));
+                stack.push(&rule.name);
+                self.emit(&rule.body, depth, rng, out, trace, stack);
+                stack.pop();
             }
         }
     }

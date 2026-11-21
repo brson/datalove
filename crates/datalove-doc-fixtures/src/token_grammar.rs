@@ -284,11 +284,9 @@ impl Recognizers {
         Tokens::new(text, self.eols)
     }
 
-    /// The tokens of `text`, and its parse tree as `start`.
-    pub fn parse(&self, start: &str, text: &str) -> (Tokens, Parse) {
-        let tokens = self.tokens(text);
-        let parse = self.rec(start).parse(&tokens, tokens.len());
-        (tokens, parse)
+    /// The parse tree of `tokens` as `start`.
+    pub fn parse(&self, start: &str, tokens: &Tokens) -> Parse {
+        self.rec(start).parse(tokens, tokens.len())
     }
 
     pub fn derives(&self, start: &str, text: &str) -> bool {
@@ -511,10 +509,12 @@ pub fn join_spaced(pieces: &[Piece]) -> String {
 }
 
 fn join(pieces: &[Piece], space: &mut dyn FnMut() -> bool) -> String {
-    let db = datalove_datalit::Database::default();
+    // A database is dear to make, and most joins never lex.
+    let db = std::cell::OnceCell::new();
     let lex = |t: &str| -> Vec<(usize, usize)> {
-        let source = bct::input::Source::new(&db, t.S());
-        bct::lexer::lex(&db, source).tokens(&db).iter().map(|t| (t.span().start, t.span().end)).collect()
+        let db = db.get_or_init(datalove_datalit::Database::default);
+        let source = bct::input::Source::new(db, t.S());
+        bct::lexer::lex(db, source).tokens(db).iter().map(|t| (t.span().start, t.span().end)).collect()
     };
     let merges = |a: &str, b: &str| {
         let mut apart = lex(a);
@@ -531,7 +531,7 @@ fn join(pieces: &[Piece], space: &mut dyn FnMut() -> bool) -> String {
             Piece::Text(t) if t.is_empty() => {}
             Piece::Text(t) => {
                 let newline = t == "\n" || text.ends_with('\n') || text.is_empty();
-                if !glue && !newline && (merges(&last, t) || space()) {
+                if !glue && !newline && (space() || merges(&last, t)) {
                     text.push(' ');
                 }
                 text.push_str(t);

@@ -58,7 +58,8 @@ alone cannot:
 - **Grouping.** The grammar derives an expression in one way only, and its
   tree is how the expression groups. A node of an expression rule is one
   expression: of `expr`, and of every rule it can be by itself, `or_expr`,
-  `and_expr` and on down through `unary`, `wrapped` and `postfix_expr` to
+  `and_expr` and on down through `unary`, `prefixed`, `hinted`, `wrapped` and
+  `postfix_expr` to
   `primary` and what that can be. A repetition after an operand groups to
   the left: in `a, { op, b }` each `op, b` takes all before it in the rule as
   its left operand, so `a - b - c` is `(a - b) - c` and `x.f[0]?` is
@@ -168,7 +169,8 @@ cmp_op        = "==" | "!=" | ".<" | ".>" | "<=" | ">=" ;
 add_op        = "+" | "-" | "+!" | "-!" | "+?" | "-?" ;
 mul_op        = "*" | "/" | "*!" | "/!" | "*?" | "/?" ;
 
-unary         = prefix_op, unary | wrapped | postfix_expr ;
+unary         = prefixed | hinted | wrapped | postfix_expr ;
+prefixed      = prefix_op, unary ;
 postfix_expr  = primary, { postfix } ;          (* postfix binds tighter than prefix *)
 prefix_op     = "-" | "-?" | "-!" | "not" ;
 postfix       = ~"?" | ~"!" | ~"@"
@@ -176,9 +178,10 @@ postfix       = ~"?" | ~"!" | ~"@"
               | ~"[", expr, "]", ( ~"?" | ~"!" | ? no "?" or "!" glued after it ? )
               | ~"(", [ arg_list ], ")" ;       (* only after a single named field step: P072 *)
 field_sel     = NAME | field_index ;           (* nothing: P079 *)
-wrapped       = hinted                          (* each ends in a unary, which *)
-              | ( "some" | "ok" | "er" | "data" | "error" ), payload   (* takes *)
-              | "term", NAME, payload ;         (* the postfixes after it; D036 *)
+wrapped       = ( "some" | "ok" | "er" | "data" | "error" ), payload
+              | "term", NAME, payload ;         (* D036 *)
+                (* a hinted or wrapped ends in a unary, which takes the
+                   postfixes after it *)
 
 primary       = "true" | "false" | "none"
               | "atom", NAME                          (* D035 *)
@@ -198,8 +201,8 @@ paren         = "(", [ expr, { ",", expr }, [ "," ] ], ")" ;
                 (* one element, no comma: grouping; else a tuple; () is unit *)
 
 (* Hints  (literal.rs) *)
-hinted        = ":", type, "/", unary ;     (* no "/": D049 *)
-                (* a hinted directly under a hint is refused: P080 *)
+hinted        = ":", type, "/", ( prefixed | wrapped | postfix_expr ) ;
+                (* no "/": D049; a hinted directly under it: P080 *)
 
 (* Collections  (literal.rs) *)
 collection    = list | set | map | struct | table | tensor ;
@@ -286,6 +289,8 @@ P081,P001  let y = 1 +
 ok         let y = (1 +
              2)
 ok         let y = 1;;; let z = 2
+P080       let y = : u8 / : u8 / 1
+ok         let y = : i8 / - : i8 / 1
 P021       let y = f(1; 2)
 P034       fun f()
              if a
@@ -545,7 +550,9 @@ generated from the grammar, and each of those with a character changed, each
 parsed as a script, module or rider interface, and the `examples` blocks
 above, fenced as ```` ```examples script ````, `module` or `interface` and
 written as [datalit's are](datalit-ebnf.md#user-content-checking-the-grammar):
-the parser must refuse each with exactly the codes given.
+the parser must refuse each with exactly the codes given. The generated
+strings must reach the whole grammar, as
+[datalit's must](datalit-ebnf.md#user-content-checking-the-grammar).
 
 The same test holds the parser to the grammar's grouping. It generates
 expressions, with a space wherever one may go, and for each the parser takes,
