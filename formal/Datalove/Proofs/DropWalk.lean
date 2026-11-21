@@ -104,6 +104,23 @@ theorem bindFor_made {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MS
     obtain ⟨m2, x2⟩ := bindFor_made xs x1.wf h2 (bindOne_made h1 m)
     exact ⟨m2, x1.trans x2⟩
 
+theorem mBranch_made {Γb : Ctx} {σc : MSt} {binds : List String} {id : Nat} {kind : String}
+    {arm : Option Nat} {walk : MSt → MoveM MOut} {st st' : DSt} {rb : MOut} (w : st.WF) (md : Made σc st)
+    (hwalk : ∀ σb st1 r st2, st1.WF → Made σb st1 → (walk σb).run st1 = .ok (r, st2) →
+      SchedExt st1 st2 ∧ OutMade r st2)
+    (h : (mBranch Γb σc binds id kind arm walk).run st = .ok (rb, st')) : SchedExt st st' ∧ OutMade rb st' := by
+  unfold mBranch at h
+  obtain ⟨σb, st1, h1, h⟩ := MoveM.bind_ok h
+  obtain ⟨m1, x1⟩ := bindM_made w h1 md
+  obtain ⟨r, st2, h2, h⟩ := MoveM.bind_ok h
+  obtain ⟨x2, o2⟩ := hwalk σb st1 r st2 x1.wf m1 h2
+  obtain ⟨_, st3, h3, h⟩ := MoveM.bind_ok h
+  have x3 := SchedGrows.ownedIn _ st2 _ st3 x2.wf h3
+  obtain ⟨_, st4, h4, h⟩ := MoveM.bind_ok h
+  have x4 := SchedGrows.record _ _ _ _ _ st3 _ st4 x3.wf h4
+  cases h
+  exact ⟨x1.trans (x2.trans (x3.trans x4)), (o2.ext' x3).ext' x4⟩
+
 section
 variable (sigs : List (String × Sig)) (env : InferEnv)
 
@@ -237,31 +254,15 @@ theorem walk_ext : ∀ n,
         dsimp only at h
         obtain ⟨σc, st2, h2, h⟩ := MoveM.bind_ok h
         obtain ⟨m2, x2⟩ := leaving_made (mE_shr sigs Γ false σ c) x1.wf h2 m1
-        obtain ⟨σt, st3, h3, h⟩ := MoveM.bind_ok h
-        obtain ⟨m3, x3⟩ := bindM_made x2.wf h3 m2
-        obtain ⟨rt, st4, h4, h⟩ := MoveM.bind_ok h
-        obtain ⟨x4, o4⟩ := IB _ _ _ _ _ _ _ x3.wf m3 h4
-        obtain ⟨_, st5, h5, h⟩ := MoveM.bind_ok h
-        have x5 := SchedGrows.ownedIn _ st4 _ st5 x4.wf h5
-        obtain ⟨_, st6, h6, h⟩ := MoveM.bind_ok h
-        have x6 := SchedGrows.record _ _ _ _ _ st5 _ st6 x5.wf h6
-        have o6 := (o4.ext' x5).ext' x6
-        have mc6 : Made σc st6 := ((m2.ext x3).ext x4 |>.ext x5).ext x6
+        obtain ⟨rt, st6, h6, h⟩ := MoveM.bind_ok h
+        obtain ⟨x6, o6⟩ := mBranch_made x2.wf m2 (fun σb st1 r st2 w m h => IB _ _ _ _ _ _ _ w m h) h6
+        have mc6 : Made σc st6 := m2.ext x6
         obtain ⟨re, st7, h7, h⟩ := MoveM.bind_ok h
         have r7 : SchedExt st6 st7 ∧ OutMade re st7 := by
           cases e with
           | some eb =>
             dsimp only at h7
-            obtain ⟨σe, s1, g1, g⟩ := MoveM.bind_ok h7
-            obtain ⟨n1, y1⟩ := bindM_made x6.wf g1 mc6
-            obtain ⟨re', s2, g2, g⟩ := MoveM.bind_ok g
-            obtain ⟨y2, q2⟩ := IB _ _ _ _ _ _ _ y1.wf n1 g2
-            obtain ⟨_, s3, g3, g⟩ := MoveM.bind_ok g
-            have y3 := SchedGrows.ownedIn _ s2 _ s3 y2.wf g3
-            obtain ⟨_, s4, g4, g⟩ := MoveM.bind_ok g
-            have y4 := SchedGrows.record _ _ _ _ _ s3 _ s4 y3.wf g4
-            cases g
-            exact ⟨y1.trans (y2.trans (y3.trans y4)), (q2.ext' y3).ext' y4⟩
+            exact mBranch_made x6.wf mc6 (fun σb st1 r st2 w m h => IB _ _ _ _ _ _ _ w m h) h7
           | none => cases h7; exact ⟨SchedExt.refl x6.wf, OutMade.simple mc6⟩
         obtain ⟨x7, o7⟩ := r7
         obtain ⟨σ', st8, h8, h⟩ := MoveM.bind_ok h
@@ -270,7 +271,7 @@ theorem walk_ext : ∀ n,
         obtain ⟨rfl, rfl⟩ := h
         subst e8
         have o6' := o6.ext' x7
-        refine ⟨x1.trans (x2.trans (x3.trans (x4.trans (x5.trans (x6.trans x7))))), ?_⟩
+        refine ⟨x1.trans (x2.trans (x6.trans x7)), ?_⟩
         unfold OutMade at o6' o7 ⊢
         refine ⟨?_, fun τ hτ => ?_, fun τ hτ => ?_⟩
         · rcases s8 with s | s
@@ -354,15 +355,10 @@ theorem walk_ext : ∀ n,
           | some db =>
             dsimp only at h4
             obtain ⟨rd, s1, g1, g⟩ := MoveM.bind_ok h4
-            obtain ⟨y1, q1⟩ := IB _ _ _ _ _ _ _ x3.wf mc3 g1
-            obtain ⟨_, s2, g2, g⟩ := MoveM.bind_ok g
-            have y2 := SchedGrows.ownedIn _ s1 _ s2 y1.wf g2
-            obtain ⟨_, s3, g3, g⟩ := MoveM.bind_ok g
-            have y3 := SchedGrows.record _ _ _ _ _ s2 _ s3 y2.wf g3
+            obtain ⟨y1, q3⟩ := mBranch_made x3.wf mc3 (fun σb st1 r st2 w m h => IB _ _ _ _ _ _ _ w m h) g1
             cases g
-            have q3 := (q1.ext' y2).ext' y3
             unfold OutMade at q3
-            refine ⟨y1.trans (y2.trans y3), fun a ha => ?_, q3.2.1, q3.2.2⟩
+            refine ⟨y1, fun a ha => ?_, q3.2.1, q3.2.2⟩
             cases ha with
             | head => exact q3.1.of_same (SameIds.back _ _)
             | tail _ h => cases h
@@ -414,23 +410,18 @@ theorem walk_ext : ∀ n,
       | cons c cs =>
         have tail : ∀ {rb : MOut} {stb : DSt}, SchedExt st stb → OutMade rb stb →
             ∀ {st'' : DSt} {rest : List (MSt × Bool) × List MSt × List MSt}, (do
-              record "match_arm_exit" id (some i) (← ownedIn (scopeOwn σ rb.1))
               let r ← mCases sigs env n Γ vs σ base id (i + 1) cs
               pure ((σ.back rb.1, completes (match c with | .atom _ b => b | .term _ _ b => b)) :: r.1,
                 rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2) : MoveM _).run stb = .ok (rest, st'') →
             SchedExt st st'' ∧ (∀ a, a ∈ rest.1 → Made a.1 st'') ∧ (∀ τ, τ ∈ rest.2.1 → Made τ st'') ∧
               (∀ τ, τ ∈ rest.2.2 → Made τ st'') := by
           intro rb stb xb ob st'' rest g
-          obtain ⟨_, s1, g1, g⟩ := MoveM.bind_ok g
-          have y1 := SchedGrows.ownedIn _ stb _ s1 xb.wf g1
-          obtain ⟨_, s2, g2, g⟩ := MoveM.bind_ok g
-          have y2 := SchedGrows.record _ _ _ _ _ s1 _ s2 y1.wf g2
           obtain ⟨r, s3, g3, g⟩ := MoveM.bind_ok g
-          obtain ⟨y3, a3, b3, c3⟩ := IC _ _ _ _ _ _ _ _ _ _ y2.wf ((m.ext xb).ext y1 |>.ext y2) g3
+          obtain ⟨y3, a3, b3, c3⟩ := IC _ _ _ _ _ _ _ _ _ _ xb.wf (m.ext xb) g3
           cases g
-          have ob' := ((ob.ext' y1).ext' y2).ext' y3
+          have ob' := ob.ext' y3
           unfold OutMade at ob'
-          refine ⟨xb.trans (y1.trans (y2.trans y3)), fun a ha => ?_, fun τ hτ => ?_, fun τ hτ => ?_⟩
+          refine ⟨xb.trans y3, fun a ha => ?_, fun τ hτ => ?_, fun τ hτ => ?_⟩
           · cases ha with
             | head => exact ob'.1.of_same (SameIds.back _ _)
             | tail _ h => exact a3 a h
@@ -444,16 +435,14 @@ theorem walk_ext : ∀ n,
         | atom a b =>
           unfold mCases at h
           obtain ⟨rb, st1, h1, h⟩ := MoveM.bind_ok h
-          obtain ⟨x1, o1⟩ := IB _ _ _ _ _ _ _ w m h1
+          obtain ⟨x1, o1⟩ := mBranch_made w m (fun σb st1 r st2 w m h => IB _ _ _ _ _ _ _ w m h) h1
           exact tail x1 o1 h
         | term a x b =>
           unfold mCases at h
           dsimp only at h
-          obtain ⟨σa, st1, h1, h⟩ := MoveM.bind_ok h
-          obtain ⟨m1, x1⟩ := bindM_made w h1 m
-          obtain ⟨rb, st2, h2, h⟩ := MoveM.bind_ok h
-          obtain ⟨x2, o2⟩ := IB _ _ _ _ _ _ _ x1.wf m1 h2
-          exact tail (x1.trans x2) o2 h
+          obtain ⟨rb, st1, h1, h⟩ := MoveM.bind_ok h
+          obtain ⟨x1, o1⟩ := mBranch_made w m (fun σb st1 r st2 w m h => IB _ _ _ _ _ _ _ w m h) h1
+          exact tail x1 o1 h
 
 end
 

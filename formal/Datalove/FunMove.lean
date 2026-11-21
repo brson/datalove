@@ -534,6 +534,16 @@ def loopEnd (σ σc : MSt) (natural : Bool) (body : List Stmt) (r : MOut) : Move
   if !again.all σ.keepsLive then throw "O007"
   else joinAll "O014" σc ((if natural then [σc] else []) ++ r.2.1.map σc.back)
 
+/-- A branch of an `if`, an arm of a `match` or its default, from `σc`:
+what it binds, then its block (`walk`), then what its own scope owns where
+the block ends, scheduled as a point of statement `id`. -/
+def mBranch (Γb : Ctx) (σc : MSt) (binds : List String) (id : Nat) (kind : String) (arm : Option Nat)
+    (walk : MSt → MoveM MOut) : MoveM MOut := do
+  let σb ← bindM Γb σc binds true
+  let rb ← walk σb
+  record kind id arm (← ownedIn (scopeOwn σc rb.1))
+  pure rb
+
 /-- Binding `u` perhaps held from here on: kept by its tracking byte, and
 added to every way out of the function scheduled from where it was made on. -/
 def holdFrom (u : Nat) (s : DSt) : DSt :=
@@ -596,14 +606,11 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
     | .if_ c tB eB t e =>
       let σc ← leaving id σ c (mE sigs Γ false σ c)
       let Γt := condCtx env n Γ c tB false
-      let rt ← mBlock sigs env n Γt (← bindM Γt σc tB.toList true) base t
-      record "then_branch_exit" id none (← ownedIn (scopeOwn σc rt.1))
+      let rt ← mBranch Γt σc tB.toList id "then_branch_exit" none fun σb => mBlock sigs env n Γt σb base t
       let re ← (match e with
-        | some eb => do
+        | some eb =>
           let Γe := condCtx env n Γ c eB true
-          let re ← mBlock sigs env n Γe (← bindM Γe σc eB.toList true) base eb
-          record "else_branch_exit" id none (← ownedIn (scopeOwn σc re.1))
-          pure re
+          mBranch Γe σc eB.toList id "else_branch_exit" none fun σb => mBlock sigs env n Γe σb base eb
         | none => pure (σc, [], []))
       let σ' ← joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes)
       pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
@@ -633,8 +640,8 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       let r ← mCases sigs env n Γ (matchVariants env n Γ e) σc base id 0 cases
       let d ← (match dflt with
         | some db => do
-          let rd ← mBlock sigs env n Γ σc base db
-          record "match_arm_exit" id (some cases.length) (← ownedIn (scopeOwn σc rd.1))
+          let rd ← mBranch Γ σc [] id "match_arm_exit" (some cases.length) fun σb =>
+            mBlock sigs env n Γ σb base db
           pure ([(σc.back rd.1, completes db)], rd.2.1, rd.2.2)
         | none => pure ([], [], []))
       let σ' ← joinMatch σc (r.1 ++ d.1)
@@ -662,14 +669,12 @@ def mCases (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → List
   | 0, _, _, _, _, _, _, _ => pure ([], [], [])
   | _ + 1, _, _, _, _, _, _, [] => pure ([], [], [])
   | n + 1, Γ, vs, σ, base, id, i, .atom _ b :: cs => do
-    let rb ← mBlock sigs env n Γ σ base b
-    record "match_arm_exit" id (some i) (← ownedIn (scopeOwn σ rb.1))
+    let rb ← mBranch Γ σ [] id "match_arm_exit" (some i) fun σb => mBlock sigs env n Γ σb base b
     let r ← mCases sigs env n Γ vs σ base id (i + 1) cs
     pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
   | n + 1, Γ, vs, σ, base, id, i, .term a x b :: cs => do
     let Γa := termCtx Γ vs a x
-    let rb ← mBlock sigs env n Γa (← bindM Γa σ [x] true) base b
-    record "match_arm_exit" id (some i) (← ownedIn (scopeOwn σ rb.1))
+    let rb ← mBranch Γa σ [x] id "match_arm_exit" (some i) fun σb => mBlock sigs env n Γa σb base b
     let r ← mCases sigs env n Γ vs σ base id (i + 1) cs
     pure ((σ.back rb.1, completes b) :: r.1, rb.2.1 ++ r.2.1, rb.2.2 ++ r.2.2)
 
