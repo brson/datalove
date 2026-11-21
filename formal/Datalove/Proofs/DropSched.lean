@@ -374,13 +374,13 @@ theorem SchedGrows.ownedIn (vs : MSt) : SchedGrows (Fun.ownedIn vs) :=
 
 /-- A step over each of a list, each keeping `SchedExt` where `P` holds of it,
 which `SchedExt` keeps. -/
-theorem forM_ext {f : MVar → MoveM Unit} (P : MVar → DSt → Prop)
+theorem forM_ext {α} {f : α → MoveM Unit} (P : α → DSt → Prop)
     (hf : ∀ v st st', st.WF → P v st → (f v).run st = .ok ((), st') → SchedExt st st')
     (hP : ∀ v st st', P v st → SchedExt st st' → P v st') :
-    ∀ (l : MSt) (st st' : DSt), st.WF → (∀ v, v ∈ l → P v st) → (l.forM f).run st = .ok ((), st') →
+    ∀ (l : List α) (st st' : DSt), st.WF → (∀ v, v ∈ l → P v st) → (l.forM f).run st = .ok ((), st') →
       SchedExt st st'
   | [], st, st', w, _, h => by
-    have e : (List.forM ([] : MSt) f).run st = .ok ((), st) := rfl
+    have e : (List.forM ([] : List α) f).run st = .ok ((), st) := rfl
     rw [e] at h
     cases h; exact SchedExt.refl w
   | v :: l, st, st', w, hp, h => by
@@ -397,12 +397,21 @@ def Made (σ : MSt) (st : DSt) : Prop := ∀ v, v ∈ σ → v.owns = true → v
 theorem Made.ext {σ : MSt} {st st' : DSt} (h : Made σ st) (x : SchedExt st st') : Made σ st' :=
   fun v hv ho => Nat.lt_of_lt_of_le (h v hv ho) x.uid
 
+theorem mem_zipIdx_fst {α} {a : α} {i : Nat} : ∀ {l : List α} {k : Nat}, (a, i) ∈ l.zipIdx k → a ∈ l
+  | [], _, h => by simp at h
+  | x :: l, k, h => by
+    simp only [List.zipIdx_cons, List.mem_cons, Prod.mk.injEq] at h
+    rcases h with ⟨rfl, -⟩ | h
+    · exact .head _
+    · exact .tail _ (mem_zipIdx_fst h)
+
 theorem loopHeld_ext {σc : MSt} {body : List Stmt} {r : MOut} {st st' : DSt} (w : st.WF) (hm : Made σc st)
     (h : (loopHeld σc body r).run st = .ok ((), st')) : SchedExt st st' := by
   unfold loopHeld at h
-  refine forM_ext (fun v st => v.owns = true → v.uid < st.uid)
-    (fun v st st' w p e => ?_) (fun v st st' p x ho => Nat.lt_of_lt_of_le (p ho) x.uid)
-    σc st st' w (fun v hv => hm v hv) h
+  refine forM_ext (fun (vi : MVar × Nat) st => vi.1.owns = true → vi.1.uid < st.uid)
+    (fun vi st st' w p e => ?_) (fun vi st st' p x ho => Nat.lt_of_lt_of_le (p ho) x.uid)
+    σc.zipIdx st st' w (fun vi hv => hm vi.1 (mem_zipIdx_fst hv)) h
+  obtain ⟨v, i⟩ := vi
   dsimp only at e
   split at e
   · next c =>

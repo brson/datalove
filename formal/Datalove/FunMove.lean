@@ -546,16 +546,17 @@ def holdFrom (u : Nat) (s : DSt) : DSt :=
       else (k, st, a, ds) }
 
 /-- What a loop turns out to perhaps hold, as the Rust's `check_loop_repeats`
-finds it: a `var` moved when the loop is entered (`σc`) and given a value
-again at the body's end, where it gets there, or at a `continue`. It is held
+finds it: an owned binding moved when the loop is entered (`σc`) and given a
+value again at the body's end, where it gets there, or at a `continue`,
+found there by its place in scope. Only a `var` is ever given one again. It is held
 from then on, and joins each way out of the function scheduled from where it
 was made on: a pass after the body gave it a value may leave by one in the
 body, and the next pass of a loop around this one by one before this loop.
 Its tracking byte says whether there is anything to drop. -/
 def loopHeld (σc : MSt) (body : List Stmt) (r : MOut) : MoveM Unit :=
-  σc.forM fun v =>
-    let liveIn (τ : MSt) := ((σc.back τ).find? (·.uid == v.uid)).any (·.live)
-    if !v.live && v.writable && !v.lent && v.owns && ((completes body && liveIn r.1) || r.2.2.any liveIn)
+  σc.zipIdx.forM fun (v, i) =>
+    let liveIn (τ : MSt) := ((σc.back τ)[i]?).any (·.live)
+    if !v.live && v.owns && ((completes body && liveIn r.1) || r.2.2.any liveIn)
     then modify (holdFrom v.uid) else pure ()
 
 mutual
