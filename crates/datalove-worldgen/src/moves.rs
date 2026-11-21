@@ -1,9 +1,10 @@
 //! Functions that move, clone, lend and change heap values.
 //!
 //! Each seed writes a function over strings, a struct of two, an enum with a
-//! string payload, a list it borrows and one it changes, that moves, clones,
-//! lends and changes them and their fields across nested `if`s, `match`es,
-//! `for`s over either list, counted `loop`s and an option's binding. It
+//! string payload, a list it borrows and one it changes, and a map it sets
+//! keys of, that moves, clones, lends and changes them and their fields
+//! across nested `if`s, `match`es, `for`s over either list, counted `loop`s
+//! and an option's binding. It
 //! declares variables with no value for an `out` argument or a `set` to give
 //! one, leaves by `ret`, `?`, `break` and `continue` at any depth, and
 //! sometimes writes on past a way out, where nothing runs.
@@ -327,9 +328,12 @@ impl Gen {
                 }
                 16 => fmt!("call fill(out {})", self.target(&mut scope)),
                 // A `?`, sometimes after a value given away to the same call,
-                // which a return from the `?` still owns, and sometimes in a
-                // `debuglog`, which only borrows what it logs.
-                17 => match self.rng.random_range(0..3) {
+                // which a return from the `?` still owns, sometimes in a
+                // `debuglog`, which only borrows what it logs, and sometimes
+                // in a `set` of a map: in a key after the key's call took a
+                // value, or in the value before a bare key is taken into the
+                // map.
+                17 => match self.rng.random_range(0..5) {
                     0 => {
                         let g = self.fresh("g");
                         scope.declare(&g, Kind::Str, false, true);
@@ -341,7 +345,15 @@ impl Gen {
                         scope.declare(&g, Kind::Str, false, true);
                         fmt!("let {g} = both({first}, maybe(c)?)")
                     }
-                    _ => fmt!("debuglog both({}, maybe(c)?)", self.string(&mut scope, true)),
+                    2 => fmt!("debuglog both({}, maybe(c)?)", self.string(&mut scope, true)),
+                    3 => {
+                        let first = self.string(&mut scope, true);
+                        fmt!("set mp[both({first}, maybe(c)?)] = {}", self.string(&mut scope, true))
+                    }
+                    _ => {
+                        let key = self.string(&mut scope, true);
+                        fmt!("set mp[{key}] = both({}, maybe(c)?)", self.string(&mut scope, true))
+                    }
                 },
                 18 => {
                     let value = self.enumeration(&mut scope, true);
@@ -515,7 +527,9 @@ fun go(ref l: [string], mut m: [string], s: string, c: bool): ?string
   var b: string = \"b\"
   var p: P = {{x = \"px\", y = \"py\"}}
   var e: E = mk(c)
-{body}{end}end fun
+  var mp: %{{string -> string}} = %{{\"k\" -> \"v\"}}
+{body}  debuglog mp
+{end}end fun
 let l: [string] = [\"x\", \"y\"]
 var m: [string] = [\"z\"]
 debuglog go(ref l, mut m, \"s\", true)

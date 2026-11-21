@@ -1585,7 +1585,7 @@ it includes the RHS binding, which is still live when a set-index bounds check
 fails.
 
 `before_try_return` is what is live once the statement's expression has been
-evaluated, so it leaves out what the expression moves. But a `?` can return
+evaluated, a `set`'s value and keys both, so it leaves out what they move. But a `?` can return
 before the move: in `call put(mut xs[i]?, v)` the call never takes `v`.
 `try_return_not_yet_moved` lists each binding the expression moves with the
 expression index of the place that moves it, and an early return drops one

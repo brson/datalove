@@ -2220,6 +2220,12 @@ const MOVES_CORPUS: &[&str] = &[
     "  ret some both(x, maybe(c)?)\n",
     "  for w in ref l\n    let y = both(w@, maybe(c)?)\n  end for\n",
     "  call take(x)\n  var k: int = 0\n  loop\n    set k = k + 1\n    if k == 3\n      break\n    end if\n    let y = maybe(c)?\n    set x = \"again\"\n  end loop\n",
+    // A `set`'s keys run after its value, and what they move a return from
+    // a `?` in a later argument of a key's call, or from a checked or
+    // optional operator, does not drop: the key's call has it, or took it.
+    "  var mp: %{string -> string} = %{\"k\" -> \"v\"}\n  set mp[both(x, maybe(c)?)] = s\n  debuglog mp\n",
+    "  var mp: %{string -> string} = %{\"k\" -> \"v\"}\n  set mp[x] = both(s, maybe(c)?)\n  debuglog mp\n",
+    "  var mq: %{string -> u8} = %{\"k\" -> 250}\n  set mq[both(x, \"k\")]? +?= 10\n  debuglog mq\n",
     // Branches.
     "  if c\n    call take(x)\n  end if\n",
     "  if c\n    call take(x)\n  else\n    call take(x)\n  end if\n  debuglog x\n",
@@ -2242,6 +2248,9 @@ const MOVES_CORPUS: &[&str] = &[
     "  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      call take(x)\n      break\n    end if\n  end loop\n",
     "  loop\n    if c\n      call take(x)\n      break\n    end if\n    break\n  end loop\n",
     "  var v: string\n  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      break\n    end if\n    set v = \"a\"\n  end loop\n  debuglog v\n",
+    // A loop inside another gives a value to what was moved before both: the
+    // outer loop's next pass may return holding it before the inner loop.
+    "  call take(x)\n  var i: int = 0\n  loop\n    set i = i + 1\n    if i == 3\n      ret none\n    end if\n    for w in ref l\n      set x = w@\n    end for\n  end loop\n",
     // Keys: one looked up is borrowed, the one a plain `set` inserts taken.
     "  var m: %{string -> u8} = %{\"a\" -> 1}\n  let n = m[x]?\n  debuglog x\n",
     "  var m: %{string -> u8} = %{\"a\" -> 1}\n  set m[x]? = 2\n  debuglog x\n",
@@ -2399,7 +2408,7 @@ fn drop_line(line: &str) -> Option<String> {
 /// the Rust accepts: the two number each function's statements alike, which
 /// every point the schedule names is keyed by, and schedule the same drops
 /// at the same points, naming a binding a return may come before the move of
-/// by the same expression.
+/// by the same expression, and keep a tracking byte for the same vars.
 #[test]
 fn drops_agree() {
     if std::env::var("FORMAL_ORACLE_TEST").is_err() {
@@ -2429,6 +2438,7 @@ fn drops_agree() {
     let mut functions = 0;
     let mut points = 0;
     let mut moved_at = 0;
+    let mut tracked = 0;
     for ((what, text, _, rust), oracle) in cases.iter().zip(&answers) {
         assert!(oracle.get("unsupported").is_none(), "the model does not take:\n{text}\n{oracle}");
         for f in oracle["funs"].as_array().X() {
@@ -2443,7 +2453,14 @@ fn drops_agree() {
             let Some(model_points) = f["points"].as_array() else {
                 panic!("the Rust accepts what the model's move analysis refuses, in `{name}`:\n{text}");
             };
-            let rust_lines: BTreeSet<String> = lines.iter().filter_map(|l| drop_line(l)).collect();
+            let mut rust_lines: BTreeSet<String> = lines.iter().filter_map(|l| drop_line(l)).collect();
+            // The vars that keep a tracking byte, which the drops of one read.
+            let mut rust_tracked: Vec<&str> = lines.iter()
+                .filter_map(|l| l.strip_prefix("tracked:"))
+                .flat_map(|names| names.split_whitespace())
+                .collect();
+            rust_tracked.sort();
+            rust_lines.insert(fmt!("tracked: {}", rust_tracked.join(" ")));
             let model_lines: BTreeSet<String> = model_points.iter()
                 .filter_map(|p| {
                     let kind = p["kind"].as_str().X();
@@ -2455,9 +2472,15 @@ fn drops_agree() {
                     };
                     drop_line(&fmt!("{point}: {}", names.join(" ")))
                 })
+                .chain(std::iter::once({
+                    let mut tracked: Vec<&str> = f["tracked"].as_array().X().iter().map(|n| n.as_str().X()).collect();
+                    tracked.sort();
+                    fmt!("tracked: {}", tracked.join(" "))
+                }))
                 .collect();
-            points += rust_lines.len();
+            points += rust_lines.len() - 1;
             moved_at += rust_lines.iter().filter(|l| l.starts_with("try_return_not_yet_moved")).count();
+            tracked += rust_tracked.len();
             if model_lines != rust_lines {
                 let only_rust: Vec<_> = rust_lines.difference(&model_lines).collect();
                 let only_model: Vec<_> = model_lines.difference(&rust_lines).collect();
@@ -2466,7 +2489,7 @@ fn drops_agree() {
         }
     }
     println!(
-        "{} scripts, {functions} functions, {points} points ({moved_at} naming where a binding is moved), over seeds {}..{}: {} differ; {refused} refused",
+        "{} scripts, {functions} functions, {points} points ({moved_at} naming where a binding is moved), {tracked} tracked vars, over seeds {}..{}: {} differ; {refused} refused",
         cases.len(), seeds.start, seeds.start.wrapping_add(seeds.count), mismatches.len(),
     );
     for m in mismatches.iter().take(5) {

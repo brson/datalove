@@ -1,0 +1,129 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn take(p0):
+                    block0:
+                        drop p0
+                        return
+                    
+                    fn go(p0):
+                    block0:
+                        v0 = const "a"
+                        store.move.tracked s0, v0
+                        v1 = call m0.u0(s0)
+                        v2 = const 0int
+                        store.move s1, v2
+                        goto block1
+                    block1:
+                        v3 = const 1int
+                        v4 = add s1, v3
+                        drop v3
+                        drop s1
+                        store.move s1, v4
+                        v5 = const 3int
+                        v6 = eq s1, v5
+                        drop v5
+                        branch v6, block2, block3
+                    block2:
+                        v7 = none
+                        drop p0
+                        drop s1
+                        drop.tracked s0
+                        return v7
+                    block3:
+                        goto block4
+                    block4:
+                        v8 = const 9int
+                        v9 = eq s1, v8
+                        drop v8
+                        branch v9, block5, block6
+                    block5:
+                        goto block12
+                    block6:
+                        goto block7
+                    block7:
+                        cursorbegin s2, p0
+                        goto block8
+                    block8:
+                        v10 = cursordone s2
+                        branch v10, block11, block9
+                    block9:
+                        v11 = cursorelem s2
+                        v12 = clone *v11
+                        drop.tracked s0
+                        store.move.tracked s0, v12
+                        goto block10
+                    block10:
+                        cursoradvance s2, p0
+                        goto block8
+                    block11:
+                        goto block1
+                    block12:
+                        v13 = const "end"
+                        v14 = some v13
+                        drop p0
+                        drop.tracked s0
+                        drop s1
+                        return v14
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "x"
+                        v1 = const "y"
+                        v2 = list [v0, v1]
+                        v3 = call m0.u1(v2)
+                        v4 = list []
+                        v5 = call m0.u1(v4)
+                        v6 = pack tuple/2 {v3, v5}
+                        unit_end v6
+                """,
+            ),
+            output: "(none, none)",
+        ),
+    ],
+)

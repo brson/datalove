@@ -4,14 +4,18 @@
 //! `datalove-formal-tests`), so the format is a contract with that test: a
 //! `fun` line, then the statements in the order the analysis numbered them,
 //! then a line to each point that drops something, its bindings by name in
-//! the order the analysis listed them.
+//! the order the analysis listed them, and a line of the `var`s that keep a
+//! tracking byte, whose drop reads it and drops nothing where they hold
+//! nothing.
 
 use rmx::prelude::*;
-use datalove::datafun_sema::{BindingId, BindingInfo, DropSchedule};
+use datalove::datafun_ast::ast::ParamMode;
+use datalove::datafun_sema::{BindingId, BindingInfo, DropSchedule, TrackingCategory};
 use std::collections::BTreeMap;
 
-/// The schedule of the function `name`, whose bindings are `bindings`.
-pub fn render(name: &str, schedule: &DropSchedule, bindings: &[BindingInfo]) -> String {
+/// The schedule of the function `name`, whose bindings are `bindings`,
+/// tracked as `tracking` says.
+pub fn render(name: &str, schedule: &DropSchedule, bindings: &[BindingInfo], tracking: &[TrackingCategory]) -> String {
     let names = |ids: &[BindingId]| -> String {
         ids.iter().map(|id| bindings[id.0 as usize].name.as_str()).collect::<Vec<_>>().join(" ")
     };
@@ -45,6 +49,13 @@ pub fn render(name: &str, schedule: &DropSchedule, bindings: &[BindingInfo]) -> 
     }
     if !schedule.at_function_exit.is_empty() {
         out.push_str(&fmt!("  at_function_exit: {}\n", names(&schedule.at_function_exit)));
+    }
+    let tracked: Vec<BindingId> = (0..bindings.len())
+        .filter(|&i| tracking[i] == TrackingCategory::Tracked && bindings[i].param_mode != Some(ParamMode::Out))
+        .map(|i| BindingId(i as u32))
+        .collect();
+    if !tracked.is_empty() {
+        out.push_str(&fmt!("  tracked: {}\n", names(&tracked)));
     }
     out
 }

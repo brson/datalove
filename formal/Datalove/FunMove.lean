@@ -148,6 +148,13 @@ structure DSt where
   /-- Where each binding was last moved: the index of the expression that
   took its value. -/
   movedAt : List (Nat × Nat) := []
+  /-- The index the next statement had when each binding was made: every
+  statement from there on may see it. -/
+  madeAt : List (Nat × Nat) := []
+  /-- The bindings that keep a tracking byte, as the Rust's `stays_tracked`
+  has them: a `var` declared with no value, and one perhaps held. A drop of
+  one reads the byte, and drops nothing where it holds nothing. -/
+  tracked : List Nat := []
 
 /-- The move analysis, keeping the drop schedule as it goes. -/
 abbrev MoveM := StateT DSt (Except Lit.Code)
@@ -164,7 +171,7 @@ def bindOne (Γ' : Ctx) (konst : Bool) (init lent writable byRef : Bool) (σ : M
   let owns := !lent && !konst && match Γ'.lookup x with
     | some (t, _) => !t.isCopy
     | none => false
-  set { s with uid := s.uid + 1, names := (s.uid, x) :: s.names }
+  set { s with uid := s.uid + 1, names := (s.uid, x) :: s.names, madeAt := (s.uid, s.next) :: s.madeAt }
   pure ({ name := x, init, live := true, back := false, lent, writable, byRef, owns, uid := s.uid } :: σ)
 
 /-- Names bound in order, each innermost of those before it. -/
@@ -266,9 +273,9 @@ mutual
 
 /-- An expression, as `evalS` runs it, from a position borrowing or not as
 `b` says: what holds a value after it, or the first thing refused. -/
-def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) (σ : MSt) (e : Expr) : MoveM MSt := do
-  let start ← exprAt
-  let σ ← match e with
+def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) (σ : MSt) (e : Expr) : MoveM MSt :=
+  exprAt >>= fun start =>
+  (match e with
     | .var x => if b then readM σ x else moveM Γ σ x
     | .place x steps => readM σ x >>= fun σ => mSteps sigs Γ σ steps
     | .hinted _ a => mE sigs Γ (b && !buildsFromParts a) σ a
@@ -294,37 +301,36 @@ def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) (σ : MSt) (e : Expr)
       exitM σ
     | .index _ _ none => pure σ
     | .call f args => match sigs.lookup f with
-      | some sig => do
+      | some sig =>
         let ms := sig.params.map (·.1)
-        let σ ← mArgs sigs Γ σ args ms
-        let σ ← if argsExit args ms then exitM σ else pure σ
+        mArgs sigs Γ σ args ms >>= fun σ =>
+        (if argsExit args ms then exitM σ else pure σ) >>= fun σ =>
         pure (giveArgsM σ args ms)
       | none => throw "F089"
     | .tuple es | .list es | .set es | .tensor _ es => mAll sigs Γ σ es
     | .struct fs => mFields sigs Γ σ fs
     | .map es => mEntries sigs Γ σ es
     | .table _ rows => mRows sigs Γ σ rows
-    | .none_ | .tt | .ff | .str _ | .int _ | .float | .hex _ | .atom _ => pure σ
-  exprFrom (start + e.nodes)
-  pure σ
+    | .none_ | .tt | .ff | .str _ | .int _ | .float | .hex _ | .atom _ => pure σ)
+    >>= fun σ' => exprFrom (start + e.nodes) >>= fun _ => pure σ'
 
 /-- A place's steps, each key in order, an index with `?` or `!` a way out. -/
 def mSteps (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List Step → MoveM MSt
   | σ, [] => pure σ
   | σ, .field _ :: rest => mSteps sigs Γ σ rest
-  | σ, .index k m :: rest => do
-    let σ ← mE sigs Γ true σ k
-    let σ ← match m with
+  | σ, .index k m :: rest =>
+    mE sigs Γ true σ k >>= fun σ =>
+    (match m with
       | some _ => exitM σ
-      | none => pure σ
+      | none => pure σ) >>= fun σ =>
     mSteps sigs Γ σ rest
 
 /-- A `mut` or `out` argument's place: its variable holds a value where a
 part of it is reached, or where `need` asks, for a `mut` one, and is not
 moved, for an `out` one too, as the Rust checks of a bare name. -/
-def mPlace (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (e : Expr) (need : Bool) : MoveM MSt := do
-  let start ← exprAt
-  let σ ← match e, need with
+def mPlace (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (e : Expr) (need : Bool) : MoveM MSt :=
+  exprAt >>= fun start =>
+  (match e, need with
     | .var x, need =>
       if need then readM σ x
       else match σ.find x with
@@ -337,22 +343,21 @@ def mPlace (sigs : List (String × Sig)) (Γ : Ctx) (σ : MSt) (e : Expr) (need 
       let σ ← mPlace sigs Γ σ base true
       let σ ← mE sigs Γ true σ k
       exitM σ
-    | _, _ => pure σ
-  exprFrom (start + e.nodes)
-  pure σ
+    | _, _ => pure σ)
+    >>= fun σ' => exprFrom (start + e.nodes) >>= fun _ => pure σ'
 
 /-- A call's arguments, in order, each as its parameter takes it: one
 passed `mut` or `out` a place, not a temporary the write would be lost in
 (O012), then not walked (O015), then one the caller may change (O004,
 O011). -/
 def mArgs (sigs : List (String × Sig)) (Γ : Ctx) : MSt → List (Option Mode × Expr) → List Mode → MoveM MSt
-  | σ, (_, e) :: args, m :: ms => do
-    let σ ← match placeOf e with
+  | σ, (_, e) :: args, m :: ms =>
+    (match placeOf e with
       | some (x, _) =>
         if m == .mut || m == .out then
           unwalkedM σ x >>= fun _ => writableM σ x >>= fun _ => mPlace sigs Γ σ e (m == .mut)
         else mE sigs Γ (m != .in_) σ e
-      | none => if m == .mut || m == .out then throw "O012" else mE sigs Γ (m != .in_) σ e
+      | none => if m == .mut || m == .out then throw "O012" else mE sigs Γ (m != .in_) σ e) >>= fun σ =>
     mArgs sigs Γ σ args ms
   | σ, _, _ => pure σ
 
@@ -399,20 +404,22 @@ def mTarget (σ : MSt) (x : String) (steps : List Step) : Option BinOp → MoveM
 reads: where it can return early, what is owned once it has run is dropped
 there, and what it moved on the way, which a return before the move still
 owns, is scheduled apart. -/
-def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt := do
-  if !exprLeaves e then return ← m
-  let before ← ownedIn σ
-  let σ' ← m
-  let drops ← ownedIn σ'
-  recordNotYetMoved id (before.filter (!drops.contains ·))
-  record "before_try_return" id none drops (always := true)
-  pure σ'
+def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt :=
+  if exprLeaves e then do
+    let before ← ownedIn σ
+    let σ' ← m
+    let drops ← ownedIn σ'
+    recordNotYetMoved id (before.filter (!drops.contains ·))
+    record "before_try_return" id none drops (always := true)
+    pure σ'
+  else m
 
 /-- `set x … = e` or `set x … ⊕= e` of statement `id`: not to what a `for`
 walks (O015), then the value, then the keys, then the place. A return from
-the value or a key drops what is owned once the value has run, and one from
-a failed `?` or `!` on the way to the place what is owned once the keys have
-run. -/
+the value, a key or a checked or optional operator drops what is owned once
+the value and the keys have run, and what they moved on the way apart, for a
+return before the move; one from a failed `?` or `!` on the way to the place
+what is owned once the keys have run. -/
 def mSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : String) (steps : List Step)
     (op : Option BinOp) (e : Expr) : MoveM MSt := do
   unwalkedM σ x
@@ -422,18 +429,20 @@ def mSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : Str
   exprFrom (keys + Expr.nodes.keyNodes steps)
   let σ ← mE sigs Γ op.isSome σ e
   let next ← exprAt
-  let keysLeave := steps.any fun | .index k _ => exprLeaves k | _ => false
-  if exprLeaves e || keysLeave || op.any BinOp.exits then
-    let drops ← ownedIn σ
-    recordNotYetMoved id (before.filter (!drops.contains ·))
-    record "before_try_return" id none drops (always := true)
   exprFrom keys
   let σ ← mKeys sigs Γ σ steps
   exprFrom next
+  let keysLeave := steps.any fun | .index k _ => exprLeaves k | _ => false
+  (if exprLeaves e || keysLeave || op.any BinOp.exits then do
+      let drops ← ownedIn σ
+      recordNotYetMoved id (before.filter (!drops.contains ·))
+      record "before_try_return" id none drops (always := true)
+    else pure ())
   let σ ← mTarget σ x steps op
-  if stepsExit steps then
-    record "before_set_target_early_return" id none (← ownedIn σ) (always := true)
-  let σ ← if stepsExit steps || op.any BinOp.exits then exitM σ else pure σ
+  (if stepsExit steps then do
+      record "before_set_target_early_return" id none (← ownedIn σ) (always := true)
+    else pure ())
+  let σ ← (if stepsExit steps || op.any BinOp.exits then exitM σ else pure σ)
   pure (if steps.isEmpty then σ.give x else σ)
 
 /-- The context the then branch of `if c |x| … else |y| …` runs in, or
@@ -486,9 +495,9 @@ before it, and whether each completes, as the Rust's `analyze_if` has it:
 where both complete they have to agree about what is moved (O008), and what
 is moved after is what the then branch left, unless it alone leaves; a
 variable is given a value after only if both branches gave it one. -/
-def joinIf (t : MSt) (tc : Bool) (e : MSt) (ec : Bool) : MoveM MSt := do
+def joinIf (t : MSt) (tc : Bool) (e : MSt) (ec : Bool) : MoveM MSt :=
   if tc && ec && !t.sameMoves e then throw "O008"
-  pure ((if !tc && ec then e else t).initFrom (t.initMeet e))
+  else pure ((if !tc && ec then e else t).initFrom (t.initMeet e))
 
 /-- What a `match` leaves, from what each arm leaves, back in the scope
 before it, and whether it completes, in order, as the Rust's
@@ -502,7 +511,7 @@ def joinMatch (σ : MSt) (arms : List (MSt × Bool)) : MoveM MSt := do
   match merging with
   | m :: ms =>
     if !ms.all m.sameMoves then throw "O008"
-    pure (ms.foldl MSt.initMeet m)
+    else pure (ms.foldl MSt.initMeet m)
   | [] => match arms.head?, arms.getLast? with
     | some (f, _), some (l, _) => pure (f.initFrom l)
     | _, _ => pure σ
@@ -512,27 +521,34 @@ left: each way back to its start, which reads the condition again, keeps
 unmoved what was unmoved before the condition (O007), and its ways out
 agree (O014), running out of the condition or of the elements leaving what
 the condition left the first time. -/
-def loopEnd (σ σc : MSt) (natural : Bool) (body : List Stmt) (r : MOut) : MoveM MSt := do
+def loopEnd (σ σc : MSt) (natural : Bool) (body : List Stmt) (r : MOut) : MoveM MSt :=
   let again := (if completes body then [σc.back r.1] else []) ++ r.2.2.map σc.back
   if !again.all σ.keepsLive then throw "O007"
-  joinAll "O014" σc ((if natural then [σc] else []) ++ r.2.1.map σc.back)
+  else joinAll "O014" σc ((if natural then [σc] else []) ++ r.2.1.map σc.back)
+
+/-- Binding `u` perhaps held from here on: kept by its tracking byte, and
+added to every way out of the function scheduled from where it was made on. -/
+def holdFrom (u : Nat) (s : DSt) : DSt :=
+  { s with
+    held := if s.held.contains u then s.held else u :: s.held,
+    tracked := if s.tracked.contains u then s.tracked else u :: s.tracked,
+    out := s.out.map fun (k, st, a, ds) =>
+      if (k == "before_return" || k == "before_try_return" || k == "before_set_target_early_return")
+        && st ≥ (s.madeAt.lookup u).getD 0 && !ds.any (·.1 == u) then (k, st, a, ds ++ [(u, none)])
+      else (k, st, a, ds) }
 
 /-- What a loop turns out to perhaps hold, as the Rust's `check_loop_repeats`
 finds it: a `var` moved when the loop is entered (`σc`) and given a value
 again at the body's end, where it gets there, or at a `continue`. It is held
-from then on, and joins each way out of the function scheduled in the loop
-from its first statement on. -/
-def loopHeld (σc : MSt) (body : List Stmt) (r : MOut) (first : Nat) : MoveM Unit := do
-  for v in σc do
-    if v.live || !(v.writable && !v.lent) || !v.owns then continue
+from then on, and joins each way out of the function scheduled from where it
+was made on: a pass after the body gave it a value may leave by one in the
+body, and the next pass of a loop around this one by one before this loop.
+Its tracking byte says whether there is anything to drop. -/
+def loopHeld (σc : MSt) (body : List Stmt) (r : MOut) : MoveM Unit :=
+  σc.forM fun v =>
     let liveIn (τ : MSt) := ((σc.back τ).find? (·.uid == v.uid)).any (·.live)
-    if (completes body && liveIn r.1) || r.2.2.any liveIn then
-      modify fun s => { s with
-        held := if s.held.contains v.uid then s.held else v.uid :: s.held,
-        out := s.out.map fun (k, st, a, ds) =>
-          if (k == "before_return" || k == "before_try_return" || k == "before_set_target_early_return")
-            && st ≥ first && !ds.any (·.1 == v.uid) then (k, st, a, ds ++ [(v.uid, none)])
-          else (k, st, a, ds) }
+    if !v.live && v.writable && !v.lent && v.owns && ((completes body && liveIn r.1) || r.2.2.any liveIn)
+    then modify (holdFrom v.uid) else pure ()
 
 mutual
 
@@ -554,15 +570,18 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
     | .var_ p _ (some e) =>
       let σ ← leaving id σ e (mE sigs Γ false σ e)
       pure (← bindM after σ (patNames p) true (writable := true), [], [])
-    | .var_ p (some _) none => pure (← bindM after σ (patNames p) false (writable := true), [], [])
+    | .var_ p (some _) none =>
+      let σ' ← bindM after σ (patNames p) false (writable := true)
+      modify fun s => { s with tracked := (scopeOwn σ σ').map (·.uid) ++ s.tracked }
+      pure (σ', [], [])
     | .var_ _ none none => pure (σ, [], [])
     | .set_ x steps op e => pure (← mSet sigs Γ id σ x steps op e, [], [])
     | .fun_ _ => pure (σ, [], [])
     | .ret e =>
       let σ ← exitM σ
-      let σ ← match e with
+      let σ ← (match e with
         | some e => leaving id σ e (mE sigs Γ false σ e)
-        | none => pure σ
+        | none => pure σ)
       record "before_return" id none (← ownedIn σ) (always := true)
       pure (σ, [], [])
     | .if_ c tB eB t e =>
@@ -570,22 +589,21 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       let Γt := condCtx env n Γ c tB false
       let rt ← mBlock sigs env n Γt (← bindM Γt σc tB.toList true) base t
       record "then_branch_exit" id none (← ownedIn (scopeOwn σc rt.1))
-      let re ← match e with
+      let re ← (match e with
         | some eb => do
           let Γe := condCtx env n Γ c eB true
           let re ← mBlock sigs env n Γe (← bindM Γe σc eB.toList true) base eb
           record "else_branch_exit" id none (← ownedIn (scopeOwn σc re.1))
           pure re
-        | none => pure (σc, [], [])
+        | none => pure (σc, [], []))
       let σ' ← joinIf (σc.back rt.1) (completes t) (σc.back re.1) (e.all completes)
       pure (σ', rt.2.1 ++ re.2.1, rt.2.2 ++ re.2.2)
     | .loop c body =>
-      let σc ← match c with
+      let σc ← (match c with
         | some c => leaving id σ c (mE sigs Γ false σ c)
-        | none => pure σ
-      let first := (← get).next
+        | none => pure σ)
       let r ← mBlock sigs env n { Γ with inLoop := true } σc σc.length body
-      loopHeld σc body r first
+      loopHeld σc body r
       record "loop_body_end" id none (← ownedIn (scopeOwn σc r.1))
       let σ' ← loopEnd σ σc c.isSome body r
       pure (σ', [], [])
@@ -604,12 +622,12 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
     | .match_ e cases dflt =>
       let σc ← leaving id σ e (mE sigs Γ false σ e)
       let r ← mCases sigs env n Γ (matchVariants env n Γ e) σc base id 0 cases
-      let d ← match dflt with
+      let d ← (match dflt with
         | some db => do
           let rd ← mBlock sigs env n Γ σc base db
           record "match_arm_exit" id (some cases.length) (← ownedIn (scopeOwn σc rd.1))
           pure ([(σc.back rd.1, completes db)], rd.2.1, rd.2.2)
-        | none => pure ([], [], [])
+        | none => pure ([], [], []))
       let σ' ← joinMatch σc (r.1 ++ d.1)
       pure (σ', r.2.1 ++ d.2.1, r.2.2 ++ d.2.2)
     | .for_ names coll body =>
@@ -622,9 +640,8 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
       let Γf := forCtx env n Γ names coll
       let σb ← (names.zip (forRefs env n Γ names coll)).foldlM
         (fun σ (x, r) => bindOne Γf false true true false r σ x) σw
-      let first := (← get).next
       let r ← mBlock sigs env n Γf σb σc.length body
-      loopHeld σc body r first
+      loopHeld σc body r
       record "loop_body_end" id none (← ownedIn (scopeOwn σc r.1))
       let σ' ← loopEnd σc σc true body r
       pure (σ', [], [])
@@ -682,7 +699,7 @@ def mFun (sigs : List (String × Sig)) (env : InferEnv) (aliases : Aliases) (con
             | v :: rest => { v with back := m == .out || m == .mut } :: rest
             | [] => [])) consts
       let (σ, _, _) ← mBlock sigs env fuel Γ σ0 0 body
-      if completes body then discard (exitM σ)
+      (if completes body then discard (exitM σ) else pure ())
       record "at_function_exit" 0 none (← ownedIn (scopeOwn consts σ))
 
 /-- A script's statements, as `runScriptMoves` runs them: each at fuel
@@ -706,20 +723,23 @@ def moveScript (ss : List Stmt) : Option Lit.Code :=
   | .error c => some c
 
 /-- A script's top-level functions' drop schedules, by name, each as
-`mTop` reaches the function: in the context the statements before it leave.
-None for a function the move analysis refuses. -/
-def scriptDrops (ss : List Stmt) : List (String × Option (List DropPoint)) :=
+`mTop` reaches the function: in the context the statements before it leave;
+each with the names of the bindings that keep a tracking byte. None for a
+function the move analysis refuses. -/
+def scriptDrops (ss : List Stmt) : List (String × Option (List DropPoint × List String)) :=
   let sigs := (resolveNames ss).1
-  let rec go (Γ : Ctx) : List Stmt → List (String × Option (List DropPoint))
+  let rec go (Γ : Ctx) : List Stmt → List (String × Option (List DropPoint × List String))
     | [] => []
     | .fun_ f :: rest =>
       let name := match f with | .mk n .. => n
       let r := (mFun sigs movesEnv Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f).run {}
       let points := match r with
-        | .ok (_, s) => some (s.out.reverse.map fun (k, st, a, ds) =>
+        | .ok (_, s) =>
+          let nameOf (u : Nat) := (s.names.lookup u).getD "?"
+          some (s.out.reverse.map (fun (k, st, a, ds) =>
             (k, st, a, ds.map fun
-              | (u, some e) => s!"{(s.names.lookup u).getD "?"}@{e}"
-              | (u, none) => (s.names.lookup u).getD "?"))
+              | (u, some e) => s!"{nameOf u}@{e}"
+              | (u, none) => nameOf u)), s.tracked.map nameOf)
         | .error _ => none
       (name, points) :: go Γ rest
     | s :: rest => go ((checkStmt Γ s).run #[]).1 rest

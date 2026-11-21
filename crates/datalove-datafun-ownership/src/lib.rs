@@ -108,6 +108,9 @@ struct AnalysisCtx<'a, 'db> {
     next_stmt_id: usize,
     /// All bindings (indexed by BindingId).
     bindings: Vec<BindingInfo>,
+    /// The index the next statement had when each binding was made, by
+    /// BindingId: every statement from there on may see it.
+    made_at: Vec<usize>,
     /// Name to binding ID mapping (current scope).
     name_to_binding: bct::lookup::LookupMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
@@ -315,6 +318,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             next_binding: 0,
             next_stmt_id: 0,
             bindings: Vec::new(),
+            made_at: Vec::new(),
             name_to_binding: Default::default(),
             scope_stack: Vec::new(),
             externals: Vec::new(),
@@ -574,6 +578,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             .unwrap_or(false);
 
         self.bindings.push(BindingInfo { name: name.C(), ty, is_slot, is_script_unit, param_mode, is_const });
+        self.made_at.push(self.next_stmt_id);
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -2120,25 +2125,6 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         _ => None,
     });
 
-    // An early return from inside the value or a key, or from a checked or
-    // optional compound operator, drops what is live once the value has been
-    // evaluated: a key that a bare index will consume hasn't been yet. For the
-    // operator, which runs after the keys, it's the same, since a compound
-    // assignment has no bare index to consume one.
-    let op_may_early_return = stmt.op.is_some_and(|op| !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div));
-    let leaves_at = ctx.early_return_in(expr).or(key_early_return);
-    if leaves_at.is_some() || op_may_early_return {
-        let exit = match leaves_at {
-            Some(expr_key) => FunctionExit::Early { expr_key },
-            None => FunctionExit::Set { set_index: stmt.local_index },
-        };
-        let drops = early_return_drops(ctx, exit);
-        schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
-        // Recorded even when empty: a var a loop turns out to give a value
-        // joins it afterwards (`maybe_held`).
-        ctx.schedule.before_try_return.insert(stmt_idx, drops);
-    }
-
     // A key looked up is read where the place is reached, through a
     // reference if it is not copied, so it is held while the later keys run.
     let held_before_keys = ctx.held.len();
@@ -2156,6 +2142,28 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     ctx.held.truncate(held_before_keys);
     if value_pushed {
         ctx.held.pop();
+    }
+
+    // An early return from inside the value or a key, or from a checked or
+    // optional compound operator, drops what is live once the value and the
+    // keys have run, and what they moved on the way where the return comes
+    // before the move: a key's call may take a binding and then return at a
+    // `?` in its next argument, and a compound operator returns after every
+    // key has run, so what the keys took is not the schedule's to drop. A
+    // bare index's key is moved where its place is lowered, which is after
+    // the value.
+    let op_may_early_return = stmt.op.is_some_and(|op| !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div));
+    let leaves_at = ctx.early_return_in(expr).or(key_early_return);
+    if leaves_at.is_some() || op_may_early_return {
+        let exit = match leaves_at {
+            Some(expr_key) => FunctionExit::Early { expr_key },
+            None => FunctionExit::Set { set_index: stmt.local_index },
+        };
+        let drops = early_return_drops(ctx, exit);
+        schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
+        // Recorded even when empty: a var a loop turns out to give a value
+        // joins it afterwards (`maybe_held`).
+        ctx.schedule.before_try_return.insert(stmt_idx, drops);
     }
 
     // Only then is the place reached, so only now does its root have to be
@@ -2859,9 +2867,6 @@ struct LoopEntry<'db> {
     inits_before: BindingMap<OutParamInitState>,
     /// Where each binding given away on entry was given away.
     moved_at_before: BindingMap<ExprKey<'db>>,
-    /// The index the body's first statement is given; every statement in
-    /// the body has one from here on.
-    first_stmt: usize,
 }
 
 impl<'db> LoopEntry<'db> {
@@ -2881,7 +2886,7 @@ impl<'db> LoopEntry<'db> {
         let moved_at_before = ctx.scope_stack.last()
             .map(|frame| frame.moved_at.C())
             .unwrap_or_default();
-        LoopEntry { state_before, outer_live, inits_before, moved_at_before, first_stmt: ctx.next_stmt_id }
+        LoopEntry { state_before, outer_live, inits_before, moved_at_before }
     }
 }
 
@@ -2922,11 +2927,16 @@ fn check_loop_repeats<'db>(
         if live_at_body_end || live_at_continue {
             ctx.stays_tracked.insert(id);
             ctx.maybe_held.insert(id);
-            // A way out of the function from inside the body, scheduled before
-            // this was known, may leave on a pass after the body gave it one.
+            // A way out of the function scheduled before this was known may
+            // leave holding it: one in the body, on a pass after the body gave
+            // it a value, and one before this loop in the body of a loop
+            // around it, on that loop's next pass. Every way out from where
+            // the var was made on drops it, its tracking byte saying whether
+            // there is anything to drop.
+            let from = ctx.made_at[id.0 as usize];
             let schedule = &mut ctx.schedule;
             for exits in [&mut schedule.before_return, &mut schedule.before_try_return, &mut schedule.before_set_target_early_return] {
-                for (_, drops) in exits.range_mut(entry.first_stmt..) {
+                for (_, drops) in exits.range_mut(from..) {
                     if !drops.contains(&id) {
                         drops.push(id);
                     }

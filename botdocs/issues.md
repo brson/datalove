@@ -42,6 +42,7 @@ home here.
   - [Datafun records a copy of every expression's type](#user-content-datafun-records-a-copy-of-every-expressions-type)
 
 - [Backends and performance](#user-content-backends-and-performance)
+  - [Cranelift refuses a module function whose end nothing reaches](#user-content-cranelift-refuses-a-module-function-whose-end-nothing-reaches)
   - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
   - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
   - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
@@ -525,6 +526,25 @@ types would remove both.
 ## Backends and performance
 
 Compiled code that is wrong in a corner, or slower or larger than it needs to be.
+
+### Cranelift refuses a module function whose end nothing reaches
+
+**Reproduced.** A module function returning a value whose body ends in a
+`loop` it leaves only by `ret` -- `var i: int = 0`, then `loop`, `set i = i +
+1`, `if i == 3`, `ret none` -- fails under the engine tests' JIT with
+"verifier errors: return: arguments of return must match function
+signature". Lowering ends every body that does not end in a `ret` with
+`return` and no value (`lower_function_body`), here in the block after the
+loop, which nothing jumps to; the interpreters never get there, but
+Cranelift compiles every block and verifies that one. A script's function of
+the same shape ran under `datalove script --jit`, so something on the way
+there removes the block or does not compile it; not looked into.
+
+What it costs: such a function cannot be compiled by Cranelift, the JIT's or
+presumably the AOT's, though the second has not been tried. A `break` that
+makes the end reachable avoids it, which is what engine fixture 1049 does.
+Either lowering leaves out a block nothing reaches, or the Cranelift codegen
+compiles only the blocks the entry reaches.
 
 ### A generic's descriptor-table cache holds one binding
 

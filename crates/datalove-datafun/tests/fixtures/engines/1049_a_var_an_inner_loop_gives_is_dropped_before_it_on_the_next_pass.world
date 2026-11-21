@@ -1,0 +1,43 @@
+----------
+module local/test/main
+----------
+
+// `v` is moved before the outer loop and given a value by the `for` inside
+// it, so on the outer loop's next pass it holds that value before the `for`
+// as well as after. The analysis added it to what a way out drops only from
+// the `for`'s first statement on, so the `ret` above the `for` returned
+// holding it, and it leaked.
+fun take(x: string)
+end fun
+
+fun go(l: [string]): ?string
+    var v: string = "a"
+    call take(v)
+    var i: int = 0
+    loop
+        set i = i + 1
+        if i == 3
+            ret none
+        end if
+        if i == 9
+            break
+        end if
+        for w in ref l
+            set v = w@
+        end for
+    end loop
+    ret some "end"
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.go
+
+----------
+scriptunit-expr
+----------
+
+(go(["x", "y"]), go([]))

@@ -1,0 +1,48 @@
+----------
+module local/test/main
+----------
+
+// A `set`'s keys run after its value. A key whose call takes `k` and then
+// returns at a `?` in its next argument leaves `k` to the call, and a checked
+// or optional operator returns after every key has run, when the key's call
+// has taken it. The analysis scheduled the drops for those returns before
+// the keys, so `k` was dropped there as well: dropped twice.
+fun both(a: string, b: string): string
+    ret a
+end fun
+
+fun maybe(c: bool): ?string
+    if c
+        ret some "m"
+    end if
+    ret none
+end fun
+
+fun key(c: bool): ?string
+    var m: %{string -> string} = %{"k" -> "v"}
+    let k = "k"
+    set m[both(k, maybe(c)?)] = "w"
+    debuglog m
+    ret some "set"
+end fun
+
+fun op(n: u8): ?u8
+    var m: %{string -> u8} = %{"k" -> n}
+    let k = "k"
+    set m[both(k, "x")]? +?= 10
+    ret some m["k"]?
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.key
+import main.op
+
+----------
+scriptunit-expr
+----------
+
+(key(false), key(true), op(250), op(1))

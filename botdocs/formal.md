@@ -859,12 +859,14 @@ Four things are proved of it:
   is what is owned -- not copy, not borrowed, not a const -- and live, or
   perhaps holding a value: a `var` moved before a loop that the loop gives a
   value again holds one from then on, and joins every way out of the
-  function scheduled in the loop, as the Rust's `maybe_held` does. A
+  function scheduled from where it was made on, its tracking byte saying
+  whether there is anything to drop, as the Rust's `maybe_held` does. A
   branch's, an arm's or a loop body's end drops what its own scope made,
   even where the scope never reaches its end; a `break` or `continue` what
   the scopes back to the loop made; a `ret`, and the body's end, what the
-  function holds; a `?` what is held once its statement's expression has
-  run, with what that expression moved on the way listed apart, for a
+  function holds; a `?` what is held once its statement's expressions have
+  run, a `set`'s value and keys both, with what they moved on the way
+  listed apart, for a
   return before the move, each with the expression that moved it; and a
   `set` through `?` or `!` what is held once its keys have run. An
   expression is named as the Rust names it, by its index in its function's
@@ -890,7 +892,22 @@ Four things are proved of it:
   (backend fixture `1047_a_question_mark_in_debuglog_drops_what_is_owned`),
   and the move generator writes a `?` in a `debuglog`, and after a value
   given to the same call, which with the fix undone fails 67 of the
-  ownership fuzz test's 2000 seeds. A place a hint was folded into,
+  ownership fuzz test's 2000 seeds. Setting out the proof of the schedule
+  found that a `set` scheduled a return's drops once its value had run,
+  before its keys: a key whose call took a binding and then returned at a
+  `?` in its next argument, or a checked or optional operator, which returns
+  after every key, dropped what the key's call had taken a second time.
+  They are scheduled once the keys have run now, what the keys moved listed
+  apart as the value's is (engine fixture
+  `1048_a_key_that_moves_then_returns_early_drops_once`), and the move
+  generator sets keys of a map that move and return, which with the fix
+  undone fails 4 of the ownership fuzz test's 2000 seeds. It also found that a
+  var moved before a loop and given a value by a loop inside it was added
+  to what a way out drops only from the inner loop's first statement on,
+  though the outer loop's next pass may return holding it before the inner
+  loop: it leaked (engine fixture
+  `1049_a_var_an_inner_loop_gives_is_dropped_before_it_on_the_next_pass`),
+  which the generator meets once in 4000 seeds with the fix undone. A place a hint was folded into,
   `(: T / p).a`, the model takes as steps on what is hinted, each an
   expression, where the parser files one place; no generator writes one.
 - **Passing by pointer is copying in and out where nothing written is

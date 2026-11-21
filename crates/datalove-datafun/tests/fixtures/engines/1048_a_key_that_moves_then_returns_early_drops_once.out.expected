@@ -1,0 +1,155 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn both(p0, p1):
+                    block0:
+                        v0 = move p0
+                        drop p1
+                        return v0
+                    
+                    fn maybe(p0):
+                    block0:
+                        v0 = copy p0
+                        branch v0, block1, block2
+                    block1:
+                        v1 = const "m"
+                        v2 = some v1
+                        return v2
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = none
+                        return v3
+                    
+                    fn key(p0):
+                    block0:
+                        v0 = const "k"
+                        v1 = const "v"
+                        v2 = %{v0: v1}
+                        store.move s0, v2
+                        v3 = const "k"
+                        v4 = const "w"
+                        v5 = call m0.u1(p0)
+                        v6, v7 = unwrap_option v5
+                        branch v7, block2, block1
+                    block1:
+                        v8 = none
+                        drop v4
+                        drop v3
+                        drop s0
+                        return v8
+                    block2:
+                        v9 = call m0.u0(v3, v6)
+                        mapupsert s0[v9] = v4
+                        debuglog s0
+                        v10 = const "set"
+                        v11 = some v10
+                        drop s0
+                        return v11
+                    
+                    fn op(p0):
+                    block0:
+                        v0 = const "k"
+                        v1 = copy p0
+                        v2 = %{v0: v1}
+                        store.move s0, v2
+                        v3 = const "k"
+                        v4 = const 10u8
+                        v5 = const "x"
+                        v6 = call m0.u0(v3, v5)
+                        v7 = mapcontainskey s0[v6]
+                        branch v7, block2, block1
+                    block1:
+                        v8 = none
+                        drop v6
+                        drop s0
+                        return v8
+                    block2:
+                        v9 = mapvalueref s0[v6]
+                        v10 = add.assign.checked *v9, v4
+                        branch v10, block3, block4
+                    block3:
+                        v11 = none
+                        drop v6
+                        drop s0
+                        return v11
+                    block4:
+                        drop v6
+                        v12 = const "k"
+                        v13, v14 = mapget s0[v12]
+                        branch v14, block6, block5
+                    block5:
+                        v15 = none
+                        drop v12
+                        drop s0
+                        return v15
+                    block6:
+                        drop v12
+                        v16 = some v13
+                        drop s0
+                        return v16
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const false
+                        v1 = call m0.u2(v0)
+                        v2 = const true
+                        v3 = call m0.u2(v2)
+                        v4 = const 250u8
+                        v5 = call m0.u3(v4)
+                        v6 = const 1u8
+                        v7 = call m0.u3(v6)
+                        v8 = pack tuple/4 {v1, v3, v5, v7}
+                        unit_end v8
+                """,
+            ),
+            output: "(none, some \"set\", none, some 11)",
+            debug_output: Some("%{\"k\" -> \"w\"}\n"),
+        ),
+    ],
+)

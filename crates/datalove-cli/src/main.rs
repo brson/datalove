@@ -517,7 +517,7 @@ impl ScriptIrCommand {
         let mut analyses = compiler.unit_function_analyses(compiler.unit_count() - 1);
         analyses.sort_by(|a, b| a.0.cmp(&b.0));
         for (name, analysis) in &analyses {
-            print!("{}", drops::render(name, &analysis.schedule, &analysis.bindings));
+            print!("{}", drops::render(name, &analysis.schedule, &analysis.bindings, &analysis.tracking));
         }
         Ok(())
     }
