@@ -205,4 +205,72 @@ theorem Inv.reframe {F st st' : DSt} {U : Nat} {H : Nat → Prop} {base : Nat} {
   let h' := h.same x s
   ⟨rel, h'.hU, h'.made, h'.scope, h'.lt, h'.ule, h'.base⟩
 
+theorem sameLive_walk (x : String) : ∀ (σ : MSt), (σ.walk x).SameLive σ
+  | [] => .nil
+  | v :: σ => by
+    simp only [MSt.walk, MSt.update]
+    split
+    · exact .cons rfl rfl rfl (MSt.SameLive.refl σ)
+    · exact .cons rfl rfl rfl (sameLive_walk x σ)
+
+/-- What a `for` binds each pass: names before what it was given, each
+holding a value and owning nothing, as each element is lent. -/
+theorem bindFor_spec {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MSt} {st st' : DSt},
+    (xs.foldlM (fun σ (x, r) => bindOne Γf false true true false r σ x) σ).run st = .ok (σ', st') →
+    ∃ new, σ' = new ++ σ ∧ ∀ v, v ∈ new → v.live = true ∧ v.owns = false
+  | [], _, _, _, _, h => by cases h; exact ⟨[], rfl, fun _ h => by cases h⟩
+  | (x, r) :: xs, σ, σ', st, st', h => by
+    simp only [List.foldlM] at h
+    obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok h
+    have e1 : ∃ v, σ1 = v :: σ ∧ v.live = true ∧ v.owns = false := by
+      simp only [bindOne, MoveM.run_bind] at h1
+      cases h1; exact ⟨_, rfl, rfl, by simp⟩
+    obtain ⟨v, rfl, hl, ho⟩ := e1
+    obtain ⟨new, e, hn⟩ := bindFor_spec xs h2
+    refine ⟨new ++ [v], by rw [e]; simp, fun u hu => ?_⟩
+    rcases List.mem_append.mp hu with hu | hu
+    · exact hn u hu
+    · simp only [List.mem_singleton] at hu; subst hu; exact ⟨hl, ho⟩
+
+/-- Where a `for`'s body starts: what the path holds at the loop's start,
+under names that own nothing, in the frame of the body, whose own bindings
+are numbered from `st2.uid` on. -/
+theorem Inv.forBody {F st2 st2b st4 : DSt} {U : Nat} {H : Nat → Prop} {base : Nat} {σc σw new : MSt}
+    {π0 π : List Bool} (invc : Inv F st2 U H base σc π0) (x : SchedExt st2 st2b) (sl : σw.SameLive σc)
+    (hn : ∀ v, v ∈ new → v.live = true ∧ v.owns = false) (hr : Rel F st4 H σc π) :
+    Inv F st2b st2.uid (fun u => u < st2.uid ∧ (u ∈ st4.held ∨ H u)) σc.length (new ++ σw)
+      (newFlags σc (new ++ σw) ++ π) := by
+  have hl := sl.length
+  have flags : newFlags σc (new ++ σw) = new.map (·.live) := by
+    simp [newFlags, scopeOwn, hl]
+  rw [flags]
+  have relNew : ∀ (l : MSt), (∀ v, v ∈ l → v.live = true) →
+      Rel F st2b (fun u => u < st2.uid ∧ (u ∈ st4.held ∨ H u)) l (l.map (·.live)) := by
+    intro l hl'
+    induction l with
+    | nil => exact .nil
+    | cons v l ih' => exact .cons (fun hv => hv) (fun hp _ => .inl hp) (ih' (fun u hu => hl' u (.tail _ hu)))
+  have inσc : ∀ v, v ∈ new ++ σw → v.owns = true → ∃ w, w ∈ σc ∧ v.uid = w.uid ∧ v.owns = w.owns := by
+    intro v hv ho
+    rcases List.mem_append.mp hv with hv | hv
+    · rw [(hn v hv).2] at ho; cases ho
+    · exact sl.same.mem hv
+  refine ⟨Rel.append (relNew new (fun v hv => (hn v hv).1))
+      ((hr.sameLive sl).conv fun v hv ho hd => ?_), fun _ h => h.1, fun v hv ho => ?_, fun v hv ho => ?_,
+    fun v hv ho => ?_, x.uid, by simp [hl]⟩
+  · obtain ⟨w, hw, u, o⟩ := sl.same.mem hv
+    exact .inr ⟨u ▸ invc.lt w hw (o ▸ ho), hd⟩
+  · obtain ⟨w, hw, u, o⟩ := inσc v hv ho
+    obtain ⟨m, hm, hle⟩ := invc.made w hw (o ▸ ho)
+    exact ⟨m, u ▸ x.made _ _ hm, Nat.le_trans hle x.next⟩
+  · have e : List.take ((new ++ σw).length - σc.length) (new ++ σw) = new := by simp [hl]
+    rw [e] at hv
+    rw [(hn v hv).2] at ho; cases ho
+  · obtain ⟨w, hw, u, o⟩ := inσc v hv ho
+    exact Nat.lt_of_lt_of_le (u ▸ invc.lt w hw (o ▸ ho)) x.uid
+
+theorem MSt.Ids.of_same : ∀ {a b : MSt}, a.Same b → MSt.Ids a b
+  | [], [], .nil => .nil
+  | _ :: _, _ :: _, .cons u o t => .cons u o (MSt.Ids.of_same t)
+
 end Datalove.Fun

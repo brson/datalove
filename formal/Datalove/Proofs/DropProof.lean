@@ -193,6 +193,25 @@ inductive PStmt : Nat → Ctx → MSt → Nat → Stmt → DSt → List Bool →
         (fun π πn => c.isSome = true ∧ πn = delta σ σc π) (fun π πb => πb = delta σ σc π)
         n { Γ with inLoop := true } σc σc body st2 r st4 st5 π out evs →
       PStmt (n + 1) Γ σ base (.loop c body) st π out evs
+  | for_exit {n Γ σ base names coll body st π id st1 σc st2 πk} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ coll (mE sigs Γ true σ coll)).run st1 = .ok (σc, st2) →
+      exprLeaves coll = true → Between (delta σ σc π) π πk →
+      PStmt (n + 1) Γ σ base (.for_ names coll body) st π .exit [tryEv st1 st2 σ πk]
+  | for_ {n Γ σ base names coll body st π id st1 σc st2 σb st2b r st3 st4 st5 k out evs} :
+      stmtId.run st = .ok (id, st1) →
+      (leaving id σ coll (mE sigs Γ true σ coll)).run st1 = .ok (σc, st2) →
+      ((names.zip (forRefs env n Γ names coll)).foldlM
+        (fun σ (x, r) => bindOne (forCtx env n Γ names coll) false true true false r σ x)
+        (match placeOf coll with
+          | some (x, _) => σc.walk x
+          | none => σc)).run st2 = .ok (σb, st2b) →
+      (mBlock sigs env n (forCtx env n Γ names coll) σb σc.length body).run st2b = .ok (r, st3) →
+      (loopHeld σc body r).run st3 = .ok ((), st4) →
+      (record "loop_body_end" id none (ownedOf st4.held (scopeOwn σc r.1))).run st4 = .ok ((), st5) →
+      PIter k (fun _ _ => False) (fun π πn => πn = π) (fun π πb => πb = newFlags σc σb ++ π)
+        n (forCtx env n Γ names coll) σc σb body st2b r st4 st5 (delta σ σc π) out evs →
+      PStmt (n + 1) Γ σ base (.for_ names coll body) st π out evs
 
 /-- The paths through a block: its statements in order, until one does not
 go on. -/
@@ -319,6 +338,8 @@ theorem pstmt_breaks {n Γ σ base s st π π' evs} (hp : PStmt sigs env n Γ σ
   | match_dflt _ _ _ hb => simp [hasBreakS, hasBreakElse, pbranch_breaks hb]
   | loop_ _ _ _ _ _ hi =>
     rcases piter_out _ hi with h | ⟨_, h⟩ <;> cases h
+  | for_ _ _ _ _ _ _ hi =>
+    rcases piter_out _ hi with h | ⟨_, h⟩ <;> cases h
 
 theorem pblock_breaks {n Γ σ base ss st π π' evs} (hp : PBlock sigs env n Γ σ base ss st π (.brk π') evs) :
     hasBreak ss = true := by
@@ -395,6 +416,7 @@ theorem pstmt_completes {n Γ σ base s st π π' evs} (hp : PStmt sigs env n Γ
     · cases c with
       | some _ => rfl
       | none => simpa [completesS] using h
+  | for_ => simp [completesS]
 
 theorem pblock_completes {n Γ σ base ss st π π' evs} (hp : PBlock sigs env n Γ σ base ss st π (.norm π') evs) :
     completes ss = true := by
@@ -984,6 +1006,89 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     · rintro π πb hr rfl
       refine ⟨(Rel.step (fun _ h => h) hr bc).conv (fun v hv ho hd => .inr ⟨invc.lt v hv ho, hd⟩),
         fun u h => h.1, invc.made, fun v hv _ => by simp at hv, invc.lt, Nat.le_refl _, Nat.le_refl _⟩
+  | @for_exit m _ _ _ names coll body _ _ id st1 σc st2 πk hid h2 hl hb =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    obtain ⟨σb, st3, h3, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨r, st4, h4, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨_, st5, h5, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨ds, st6, h6, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨_, st7, h7, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨σ', st8, h8, hw⟩ := MoveM.bind_ok hw
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ true σ _)) _ _ _ x1.wf h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below (leavingIf_below (mE_shr sigs Γ true σ _) h2))
+    obtain ⟨σw, slw, h3w⟩ : ∃ σw, σw.SameLive σc ∧
+        ((names.zip (forRefs env m Γ names coll)).foldlM
+          (fun σ (x, r) => bindOne (forCtx env m Γ names coll) false true true false r σ x) σw).run st2
+          = .ok (σb, st3) := by
+      split at h3
+      · exact ⟨_, sameLive_walk _ _, h3⟩
+      · exact ⟨_, MSt.SameLive.refl _, h3⟩
+    obtain ⟨mb, x3⟩ := bindFor_made _ x2.wf h3w (Made.of_same invc.toMade (fun v hv => slw.same.mem hv))
+    obtain ⟨x4, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x3.wf mb h4
+    have x5 := loopHeld_ext x4.wf ((invc.toMade.ext x3).ext x4) h5
+    obtain ⟨rfl, rfl⟩ := ownedIn_run h6
+    have x7 := SchedGrows.record _ _ _ _ _ _ _ _ x5.wf h7
+    obtain ⟨rfl, -⟩ := loopEnd_eq h8
+    have xF := x3.trans (x4.trans (x5.trans (x7.trans hF)))
+    obtain ⟨rfl, _⟩ := stmtId_eq hid
+    refine ⟨fun ev hev => ?_, trivial⟩
+    simp only [List.mem_singleton] at hev
+    subst hev
+    unfold leaving at h2
+    rw [hl] at h2
+    exact tryEv_good (mE_shr sigs Γ true σ _) h2 xF x1.wf inv.rel (inv.madeBefore (x1.trans (x2.trans xF))) hb
+  | @for_ m _ _ _ names coll body _ _ id st1 σc st2 σb st2b r st3 st4 st5 k _ _ hid h2 h3 hb hl hrec hi =>
+    unfold mStmt at hw
+    obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hid hid')
+    dsimp only at hw
+    obtain ⟨σc', st2', h2', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h2 h2')
+    obtain ⟨σb', st2b', h3', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det h3 h3')
+    obtain ⟨r', st3', hb', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (MoveM.det hb hb')
+    obtain ⟨_, st4', hl', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hl hl')
+    obtain ⟨ds, st4'', ho, hw⟩ := MoveM.bind_ok hw
+    obtain ⟨rfl, rfl⟩ := ownedIn_run ho
+    obtain ⟨_, st5', hrec', hw⟩ := MoveM.bind_ok hw
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hrec hrec')
+    obtain ⟨σ', st6, hend, hw⟩ := MoveM.bind_ok hw
+    simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
+    obtain ⟨rfl, rfl⟩ := hw
+    have x1 := SchedGrows.stmtId st _ _ w hid
+    have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ true σ _)) _ _ _ x1.wf h2
+    have invc := inv.same (x1.trans x2) (MSt.Same.of_below (leavingIf_below (mE_shr sigs Γ true σ _) h2))
+    obtain ⟨σw, slw, h3w⟩ : ∃ σw, σw.SameLive σc ∧
+        ((names.zip (forRefs env m Γ names coll)).foldlM
+          (fun σ (x, r) => bindOne (forCtx env m Γ names coll) false true true false r σ x) σw).run st2
+          = .ok (σb, st2b) := by
+      split at h3
+      · exact ⟨_, sameLive_walk _ _, h3⟩
+      · exact ⟨_, MSt.SameLive.refl _, h3⟩
+    obtain ⟨mb, x3⟩ := bindFor_made _ x2.wf h3w (Made.of_same invc.toMade (fun v hv => slw.same.mem hv))
+    obtain ⟨new, rfl, hn⟩ := bindFor_spec _ h3w
+    obtain ⟨x4, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x3.wf mb hb
+    have x5 := loopHeld_ext x4.wf ((invc.toMade.ext x3).ext x4) hl
+    have x6 := SchedGrows.record _ _ _ _ _ _ _ _ x5.wf hrec
+    obtain ⟨e7, -⟩ := loopEnd_eq hend
+    have x0 : SchedExt st2 st6 := by rw [e7]; exact x3.trans (x4.trans (x5.trans x6))
+    have hsb : MSt.Ids (sfx σc.length (new ++ σw)) σc := by
+      rw [sfx_append (by rw [slw.length]; exact Nat.le_refl _), ← slw.length, sfx_self]
+      exact MSt.Ids.of_same slw.same
+    exact iter_ok (Ub := st2.uid) hi hb hl hrec hend x3.wf hF mb (invc.toMade.ext x3)
+      (by simp [slw.length]) hsb invc x0 (MSt.Below.refl _) (fun _ _ _ => rfl) (fun _ _ _ h => h.elim)
+      (fun _ _ hr h => h ▸ hr) (by rintro π πb hr rfl; exact Inv.forBody invc x3 slw hn hr)
+      (invc.rel.mono (x3.trans (x4.trans x5)).held (fun _ h => h))
   | @if_exit _ _ _ _ c tB eB t e _ _ id st1 σc st2 πk hid h2 hl hb =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
