@@ -204,6 +204,9 @@ impl Gen {
         if self.chance(0.15) {
             if let Some(p) = self.pick(&scope.held(Kind::Struct)) {
                 let field = ["x", "y"][self.rng.random_range(0..2)];
+                // Sometimes through a hint, which the parser folds into the
+                // place, filing the hint and the hinted place before the step.
+                let p = if self.chance(0.2) { fmt!("(: P / {p})") } else { p };
                 return if consumed { fmt!("{p}.{field}@") } else { fmt!("{p}.{field}") };
             }
         }

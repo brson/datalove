@@ -90,14 +90,18 @@ partial def exprLeaves : Expr → Bool
 /-- How many expressions the parser files for `e` in its body's arena, each
 after its parts (`Parser::push_expr`): one a node, but `e[k]` under `?` or
 `!`, which the model takes as one form and the parser as an index under a
-try, and a place, which is its root and one for each step, after the keys.
-A `set`'s target files only its keys (`keyNodes`). An expression's
+try, a place, which is its root and one for each step, after the keys, and
+a hint on a place, which is the hint and the hinted place both. A `set`'s
+target files only its keys (`keyNodes`). An expression's
 index in the arena, which the Rust's `ExprKey::local_index` is, is then how
 many the body filed before its parts. -/
 partial def Expr.nodes : Expr → Nat
   | .binop _ a c => a.nodes + c.nodes + 1
   | .unop _ a | .tryOpt a | .tryRes a | .some_ a | .ok a | .er a | .data a | .error a | .term _ a
-  | .enum a | .hinted _ a | .adapt a | .proj a _ => a.nodes + 1
+  | .enum a | .adapt a | .proj a _ => a.nodes + 1
+  -- A hint on a place files the hint and then the place again with the hint
+  -- kept in it (`create_expr`), which the steps after extend.
+  | .hinted _ a => a.nodes + match a with | .var _ | .place _ _ => 2 | _ => 1
   | .call _ args => (args.map (·.2.nodes)).sum + 1
   | .tuple es | .list es | .set es | .tensor _ es => (es.map Expr.nodes).sum + 1
   | .struct fs => (fs.map (·.2.nodes)).sum + 1

@@ -257,10 +257,14 @@ bits, a tensor with as many elements as its shape, a table whose header is
 the type's and whose rows have one element per column, an atom or term that
 is a variant of the enum, a recursive type's values its unfolding's. The
 theorem holds for any synthesis, and for any Check-Subsume that never
-succeeds, which the real one does not (`Lit.subsume_fails`): it always ends
-in T032, or in what inference threw first. So `Lit.check_sound'` says it of
-the real checker, with no premise. Dropping the tensor element-count check
-from the checker breaks the proof, as it should.
+succeeds. The model's `subsume` is written as one: it infers, for the
+malformed hint inference may find first, and throws T032, so
+`Lit.subsume_fails` holds of it by construction and is no evidence about
+the Rust's; that the real fallback never succeeds is the typing-rules doc's
+claim (`Check-Subsume` there), which `lit_tests` holds the Rust to. So
+`Lit.check_sound'` says it of the model's checker, with no premise.
+Dropping the tensor element-count check from the checker breaks the proof,
+as it should.
 
 `lit_tests` holds the Rust to it. It starts from an expression `ast_gen`
 makes, or from a literal of a type the hint generator above makes, which
@@ -555,10 +559,14 @@ Four things are proved of it:
   variant twice (D038), and the conversion sorts the variants by name, so
   under aliases that do the same, every enum it makes names its variants in
   strictly increasing order, and so each once (`Hint.convertWith_namesOnce`,
-  in `Proofs/Variants.lean`). The order is what lets a type's equality be
-  structural: an enum's variants written in another order sort to the same
-  ones (`Variants.sortByName_perm`). Lean's core now proves the order on
-  strings strict and total, which is all the proof needed of it.
+  in `Proofs/Variants.lean`). That the enum `synthF` gives the input is one
+  of those, made by that conversion and kept so through every step of
+  synthesis, is not proved: it is the one link in the chain left to the
+  Rust's types, as the proof's header says. The order is what lets a
+  type's equality be structural: an enum's variants written in another
+  order sort to the same ones (`Variants.sortByName_perm`). Lean's core
+  now proves the order on strings strict and total, which is all the proof
+  needed of it.
 - **Checking a generic once is enough** (`Fun.checkFun_instance`, in
   `Proofs/InstanceStmt.lean`, on `Proofs/Instance.lean` and
   `Proofs/InstanceCheck.lean`). A generic function whose check reports
@@ -939,8 +947,11 @@ Four things are proved of it:
   lowering does not destroy first: `drops_agree` compares them, 330 over
   four thousand seeds, and looking at the target before the value runs
   makes 256 functions differ. A place a hint was folded into,
-  `(: T / p).a`, the model takes as steps on what is hinted, each an
-  expression, where the parser files one place; no generator writes one.
+  `(: T / p).a`, the model takes as steps on what is hinted, and counts
+  the hint and the hinted place the parser files for it both
+  (`Expr.nodes`), so that what follows is named alike: counting the hint
+  alone named a move after one an expression early. The move generator
+  reads a struct's field through one.
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
