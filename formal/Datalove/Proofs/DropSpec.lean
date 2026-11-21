@@ -1,4 +1,5 @@
 import Datalove.Proofs.DropPath
+import Datalove.Proofs.DropLen
 
 /-!
 # What the walk's steps record, exactly
@@ -349,6 +350,10 @@ theorem MSt.Same.update {f : MVar → MVar} (hf : ∀ v, (f v).uid = v.uid ∧ (
     · exact .cons (hf v).1 (hf v).2 (MSt.Same.refl σ)
     · exact .cons rfl rfl (MSt.Same.update hf x σ)
 
+theorem MSt.Same.symm : ∀ {a b : MSt}, a.Same b → b.Same a
+  | [], [], .nil => .nil
+  | _ :: _, _ :: _, .cons u o t => .cons u.symm o.symm (MSt.Same.symm t)
+
 theorem MSt.Same.mem : ∀ {τ σ : MSt}, τ.Same σ → ∀ {w}, w ∈ τ → ∃ v, v ∈ σ ∧ w.uid = v.uid ∧ w.owns = v.owns
   | [], [], .nil, _, h => by simp at h
   | _ :: _, _ :: _, .cons u o t, _, h => by
@@ -510,5 +515,146 @@ theorem leavingIf_below {id : Nat} {σ σ' : MSt} {c : Bool} {m : MoveM MSt} (hm
   · exact (hm st σ' st' h).1
   · obtain ⟨stm, hmr, _⟩ := leavingIf_spec hm h
     exact (hm st σ' stm hmr).1
+
+
+/-! ## Joins keep what a path through a completing branch holds -/
+
+/-- Two states of the same bindings, each as live as the other. -/
+inductive MSt.SameLive : MSt → MSt → Prop where
+  | nil : MSt.SameLive [] []
+  | cons {w v : MVar} {τ σ : MSt} : w.uid = v.uid → w.owns = v.owns → w.live = v.live → MSt.SameLive τ σ →
+      MSt.SameLive (w :: τ) (v :: σ)
+
+theorem MSt.SameLive.refl : ∀ (σ : MSt), σ.SameLive σ
+  | [] => .nil
+  | _ :: σ => .cons rfl rfl rfl (MSt.SameLive.refl σ)
+
+theorem MSt.SameLive.trans : ∀ {a b c : MSt}, a.SameLive b → b.SameLive c → a.SameLive c
+  | [], [], [], .nil, .nil => .nil
+  | _ :: _, _ :: _, _ :: _, .cons u1 o1 l1 t1, .cons u2 o2 l2 t2 =>
+    .cons (u1.trans u2) (o1.trans o2) (l1.trans l2) (MSt.SameLive.trans t1 t2)
+
+theorem MSt.SameLive.length : ∀ {a b : MSt}, a.SameLive b → a.length = b.length
+  | [], [], .nil => rfl
+  | _ :: _, _ :: _, .cons _ _ _ t => by simp [MSt.SameLive.length t]
+
+theorem MSt.SameLive.same : ∀ {a b : MSt}, a.SameLive b → a.Same b
+  | [], [], .nil => .nil
+  | _ :: _, _ :: _, .cons u o _ t => .cons u o (MSt.SameLive.same t)
+
+theorem Rel.sameLive {F st : DSt} {H : Nat → Prop} : ∀ {σ' b : MSt} {π : List Bool}, Rel F st H b π →
+    σ'.SameLive b → Rel F st H σ' π
+  | [], [], [], .nil, .nil => .nil
+  | _ :: _, _ :: _, _ :: _, .cons a c t, .cons u o l s =>
+    .cons (fun h => a (l ▸ h)) (fun hp ho => by
+      rcases c hp (o ▸ ho) with h | d
+      · exact .inl (l ▸ h)
+      · exact .inr ⟨o ▸ d.1, u ▸ d.2.1, u ▸ d.2.2.1, u ▸ d.2.2.2⟩) (Rel.sameLive t s)
+
+theorem Inv.sameLive {F st : DSt} {U : Nat} {H : Nat → Prop} {base : Nat} {σ' b : MSt} {π : List Bool}
+    (h : Inv F st U H base b π) (s : σ'.SameLive b) : Inv F st U H base σ' π := by
+  have sm := s.same
+  refine ⟨h.rel.sameLive s, h.hU, fun v hv ho => ?_, fun v hv ho => ?_, fun v hv ho => ?_, h.ule, ?_⟩
+  · obtain ⟨w, hw, u, o⟩ := sm.mem hv; exact u ▸ h.made w hw (o ▸ ho)
+  · rw [sm.length] at hv
+    obtain ⟨w, hw, u, o⟩ := (sm.take _).mem hv
+    exact u ▸ h.scope w hw (o ▸ ho)
+  · obtain ⟨w, hw, u, o⟩ := sm.mem hv; exact u ▸ h.lt w hw (o ▸ ho)
+  · rw [sm.length]; exact h.base
+
+theorem sameLive_zipWith {f : MVar → MVar → MVar}
+    (hf : ∀ v w, (f v w).uid = v.uid ∧ (f v w).owns = v.owns ∧ (f v w).live = v.live) :
+    ∀ (σ τ : MSt), σ.length = τ.length → MSt.SameLive (List.zipWith f σ τ) σ
+  | [], [], _ => .nil
+  | v :: σ, w :: τ, h => by
+    simp only [List.zipWith_cons_cons]
+    exact .cons (hf v w).1 (hf v w).2.1 (hf v w).2.2 (sameLive_zipWith hf σ τ (by simpa using h))
+
+theorem sameLive_initFrom {σ τ : MSt} (h : σ.length = τ.length) : (σ.initFrom τ).SameLive σ :=
+  sameLive_zipWith (f := fun v w => { v with init := w.init }) (fun _ _ => ⟨rfl, rfl, rfl⟩) σ τ h
+
+theorem sameLive_initMeet {σ τ : MSt} (h : σ.length = τ.length) : (σ.initMeet τ).SameLive σ :=
+  sameLive_zipWith (f := fun v w => { v with init := v.init && w.init }) (fun _ _ => ⟨rfl, rfl, rfl⟩) σ τ h
+
+theorem sameMoves_sameLive : ∀ {t e : MSt}, t.Same e → t.sameMoves e = true → t.SameLive e
+  | [], [], .nil, _ => .nil
+  | _ :: _, _ :: _, .cons u o s, h => by
+    simp only [MSt.sameMoves, List.zip_cons_cons, List.all_cons, Bool.and_eq_true, beq_iff_eq] at h
+    exact .cons u o h.1 (sameMoves_sameLive s (by simpa [MSt.sameMoves] using h.2))
+
+theorem joinIf_live {t e r : MSt} {tc ec : Bool} {st st' : DSt}
+    (h : (joinIf t tc e ec).run st = .ok (r, st')) (s : t.Same e) :
+    (tc = true → r.SameLive t) ∧ (ec = true → r.SameLive e) := by
+  have hl := s.length
+  unfold joinIf at h
+  split at h
+  · cases h
+  · next c =>
+    cases h
+    have ml : t.length = (t.initMeet e).length := by simp [initMeet_length, hl]
+    have ml' : e.length = (t.initMeet e).length := by simp [initMeet_length, hl]
+    refine ⟨fun htc => ?_, fun hec => ?_⟩
+    · simp only [htc, Bool.not_true, Bool.false_and, Bool.false_eq_true, ite_false]
+      exact sameLive_initFrom ml
+    · by_cases htc : tc = true
+      · simp only [htc, Bool.not_true, Bool.false_and, Bool.false_eq_true, ite_false]
+        have hm : t.sameMoves e = true := by
+          simp only [htc, hec, Bool.true_and, Bool.not_eq_true'] at c
+          simpa using c
+        exact (sameLive_initFrom ml).trans (sameMoves_sameLive s hm)
+      · simp only [Bool.not_eq_true] at htc
+        simp only [htc, hec, Bool.not_false, Bool.and_self, ite_true]
+        exact sameLive_initFrom ml'
+
+theorem foldl_initMeet_sameLive : ∀ (ms : List MSt) (m : MSt), (∀ x, x ∈ ms → x.length = m.length) →
+    (ms.foldl MSt.initMeet m).SameLive m
+  | [], m, _ => MSt.SameLive.refl m
+  | n :: ms, m, hl => by
+    have h1 : (m.initMeet n).SameLive m := sameLive_initMeet (hl n (.head _)).symm
+    exact (foldl_initMeet_sameLive ms (m.initMeet n)
+      (fun x hx => by rw [h1.length]; exact hl x (.tail _ hx))).trans h1
+
+theorem joinMatch_live {σ r : MSt} {arms : List (MSt × Bool)} {st st' : DSt}
+    (h : (joinMatch σ arms).run st = .ok (r, st')) (hs : ∀ a b, a ∈ arms → b ∈ arms → a.1.Same b.1) :
+    ∀ a, a ∈ arms → a.2 = true → r.SameLive a.1 := by
+  intro a ha hc
+  unfold joinMatch at h
+  simp only at h
+  have amem : a.1 ∈ (arms.filter (·.2)).map (·.1) := List.mem_map.mpr ⟨a, List.mem_filter.mpr ⟨ha, hc⟩, rfl⟩
+  split at h
+  · next m ms hm =>
+    split at h
+    · cases h
+    · next c =>
+      cases h
+      have mem : ∀ x, x ∈ (arms.filter (·.2)).map (·.1) → ∃ b, b ∈ arms ∧ b.1 = x := fun x hx => by
+        obtain ⟨b, hb, e⟩ := List.mem_map.mp hx; exact ⟨b, (List.mem_filter.mp hb).1, e⟩
+      rw [hm] at mem amem
+      obtain ⟨bm, hbm, em⟩ := mem m (.head _)
+      have sameTo : ∀ x, x ∈ m :: ms → x.Same m := fun x hx => by
+        obtain ⟨bx, hbx, ex⟩ := mem x hx; rw [← ex, ← em]; exact hs bx bm hbx hbm
+      have fold := foldl_initMeet_sameLive ms m (fun x hx => (sameTo x (.tail _ hx)).length)
+      have hall : ms.all m.sameMoves = true := by simpa using c
+      cases amem with
+      | head => exact fold
+      | tail _ hx =>
+        have hm' : m.sameMoves a.1 = true := List.all_eq_true.mp hall a.1 hx
+        exact fold.trans (sameMoves_sameLive (sameTo a.1 (.tail _ hx)).symm hm')
+  · next hm =>
+    rw [hm] at amem; cases amem
+
+
+/-- Leaving the innermost `k` bindings, all inside the innermost loop: the
+path drops as many flags, and keeps what it carries. -/
+theorem Inv.drop {F st : DSt} {U : Nat} {H : Nat → Prop} {base : Nat} {σ : MSt} {π : List Bool}
+    (h : Inv F st U H base σ π) (k : Nat) (hk : k + base ≤ σ.length) :
+    Inv F st U H base (σ.drop k) (π.drop k) := by
+  refine ⟨h.rel.drop k, h.hU, fun v hv ho => h.made v (List.mem_of_mem_drop hv) ho, fun v hv ho => ?_,
+    fun v hv ho => h.lt v (List.mem_of_mem_drop hv) ho, h.ule, by simp; omega⟩
+  rw [List.take_drop] at hv
+  have hv' := List.mem_of_mem_drop hv
+  have e : k + ((σ.drop k).length - base) = σ.length - base := by simp; omega
+  rw [e] at hv'
+  exact h.scope v hv' ho
 
 end Datalove.Fun
