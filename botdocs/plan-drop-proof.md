@@ -63,7 +63,8 @@ its place, and the end of the body:
 At a `?`, the point's drops are what lowering drops: `before_try_return`,
 and of `try_return_not_yet_moved` the bindings the path has not moved yet.
 
-Owned means not copy, not borrowed, not a const (`MVar.owns`).
+Owned means not copy and not borrowed (`MVar.owns`); a const declared in
+the body is owned as a `let` is.
 
 ## Why it holds
 

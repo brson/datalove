@@ -24,7 +24,7 @@ script, so it stays true by running.
 - [Datafun Grammar (EBNF)](datafun-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
 - [Datafun Typing Rules](datafun-typing-rules.md)
-- [Proving the Type System](formal.md)
+- [The Formal Model](formal.md)
 - [Sigil Assignments](sigil-assignments.md)
 
 ---

@@ -1,21 +1,21 @@
-# Proving the Type System
+# The Formal Model
 
-How datalove's type rules are modelled in Lean, what is proved of the model,
-and how the model is held to the Rust. Explanation and how-to; written
-November 2026, when the first part, the type language of datalit, went in,
-and extended as the second, datalit's literal typing, and the third, a slice
-of datafun's statements, did.
+How datalove is modelled in Lean, what is proved of the model, and how the
+model is held to the Rust. Explanation and how-to; written November 2026,
+when the first part, the type language of datalit, went in, and extended
+part by part since: datalit's literal typing, a slice of datafun's
+statements, running a script, and the ownership analyses.
 
 ## Contents
 
 - [The problem](#user-content-the-problem)
 - [The shape of the answer](#user-content-the-shape-of-the-answer)
-- [What is modelled](#user-content-what-is-modelled)
-- [What is proved](#user-content-what-is-proved)
-- [What ties the model to the code](#user-content-what-ties-the-model-to-the-code)
-- [What it found](#user-content-what-it-found)
+- [Coverage](#user-content-coverage)
+- [The type language](#user-content-the-type-language)
 - [Literal typing](#user-content-literal-typing)
-- [Statements](#user-content-statements)
+- [Datafun checking](#user-content-datafun-checking)
+- [Running a script](#user-content-running-a-script)
+- [Ownership](#user-content-ownership)
 - [Running it](#user-content-running-it)
 - [Keeping it true](#user-content-keeping-it-true)
 - [What is not covered](#user-content-what-is-not-covered)
@@ -24,18 +24,22 @@ of datafun's statements, did.
 
 The typing rules in [Datalit Typing Rules](datalit-typing-rules.md) and
 [Datafun Typing Rules](datafun-typing-rules.md) say what the checker accepts,
-and the docs state properties of them: `≡` is syntactic, `@` never narrows,
-a recursive type and its unfolding stand for each other. Nothing checks
-either that the properties hold or that the code does what the rules say. A
-property that fails shows up, if at all, as a program a user expected to
-check and that did not.
+[botspec](botspec.md) says what a program means and what the ownership pass
+refuses, and the docs state properties of them: `≡` is syntactic, `@` never
+narrows, a recursive type and its unfolding stand for each other, a `match`
+that checks covers its enum, a function drops each value it owns once.
+Nothing checks either that the properties hold or that the code does what
+the rules say. A property that fails shows up, if at all, as a program a
+user expected to check and that did not, or as a leak or a double free on
+some run.
 
 ## The shape of the answer
 
 Three pieces, each covering what the others cannot:
 
-1. **A model in Lean 4** (`formal/`), which transcribes the Rust functions
-   case for case, so that what it computes is what the Rust computes.
+1. **A model in Lean 4** (`formal/`) of the rules, transcribed from the Rust
+   case for case or written from the docs rule by rule, so that what it
+   computes is what the Rust computes, or what the doc says it should.
 2. **Proofs about the model**, which say a property holds for every type, not
    only the ones a test happened to try.
 3. **Differential tests** (`crates/datalove-formal-tests`), which run the
@@ -44,19 +48,58 @@ Three pieces, each covering what the others cannot:
    the Rust: a proof is about the transcription, and the tests say the
    transcription is faithful.
 
-The Rust is not translated into Lean mechanically. It runs on salsa and
-interned names, which tools such as Aeneas do not take; a hand transcription,
-checked by testing, is cheaper and follows refactors without ceremony.
+The model is written two ways. The type language and the ownership analyses
+are transcribed from the Rust, case for case, so that a proof about them is
+a proof about the code's own rule, and the tests say the transcription is
+faithful. Datalit's literal typing, datafun's checking and the meaning of a
+running program are written from the docs instead, rule by rule, so that
+holding the Rust to the model holds the code to the doc; where a doc leaves
+a choice open the model says which it made, and where the two differ the
+tests say which was wrong. The Rust is not translated into Lean
+mechanically. It runs on salsa and interned names, which tools such as
+Aeneas do not take; a hand transcription, checked by testing, is cheaper and
+follows refactors without ceremony.
 
 Beside them, the **law tests** check the properties the model proves directly
 against the Rust, with no Lean needed, so that they run in `just test`. A law
 the Rust breaks is one the model cannot prove, and the law test finds it
 faster than a failed proof says why.
 
-## What is modelled
+The build fails on any warning, and a `sorry` is one, so a proof left
+unfinished cannot pass for a finished one. Every theorem rests on Lean's
+three standard axioms, `propext`, `Classical.choice` and `Quot.sound`, and
+nothing else, and the build checks it: `formal/AxiomCheck.lean` collects the
+axioms of every theorem and definition in a `Datalove` module, about seven
+and a half thousand, and fails on any other, a `sorryAx` that got past the
+warning, a `Lean.ofReduceBool` that `native_decide` would bring in, or an
+`axiom` the model declared. The finite case splits use `decide +kernel`,
+which the kernel checks.
 
-The type language of datalit, as `crates/datalove-datalit/src/tycheck/types.rs`
-has it. Each Lean definition names the Rust function it transcribes.
+## Coverage
+
+Each area of the language, what models it, where the model was written
+from, the test that holds it to the Rust, and the main thing proved of it.
+The sections below take the areas in this order. The model is under
+`formal/Datalove/`, the proofs under `formal/Datalove/Proofs/`, and the
+tests in `crates/datalove-formal-tests`.
+
+| Area | Model | Written from | Held to the Rust by | Proved |
+|------|-------|--------------|---------------------|--------|
+| The type language: datalit's types, `≡`, `≈`, `⇝`, copy, hint conversion, well-formedness | `Ty`, `Relations`, `Classes`, `Hint`, `WF` | the Rust | `oracle_tests`; `law_tests`, on the Rust alone | `≡` is equality, `≈` an equivalence, `⇝` reflexive and transitive, the conversion makes only well-formed types, `expose` ends |
+| Literal typing: inference, defaults, checking and synthesis of datalit's expressions | `Lit` | the typing-rules doc | `lit_tests` | a literal that checks is a value of its type |
+| Datafun checking: scripts, functions, generics, consts, modules | `Fun`, `FunJson`, `FunTrace` | the typing-rules doc | `fun_tests`: every code in order, binding types, `instances_check`, `world_typing_agrees` | early returns fit, `completes` is sound, a `match` covers its enum, checking a generic once is enough, inference steps with its instances |
+| Running a script: expressions, statements, calls, consts, the script | `FunEval`, `FunExec`, `FunCall`, `FunRun`, `FunShow` | the language's meaning, following the checker case for case | `runs_agree`, on every engine | a script that checks runs soundly |
+| What holds a value (O005, O006, O009), and F089 | `FunInit`, `FunConsts` | the ownership pass | `init_agrees`, `consts_agrees`, `world_consts_agrees` | a script let through never reads what holds nothing, its consts included |
+| Moves (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016) | `FunMove` | the ownership pass | `moves_agree`, and `runScriptMoves` | not yet |
+| Drops: the schedule | `FunMove`, `FunDrop` | the ownership pass | `drops_agree`, through `datalove script-drops` | each value owned is dropped exactly once on every path |
+| Aliasing (O010) | `FunAlias` | the ownership pass | `aliasing_agrees` | a call it accepts passes nothing written by two pointers, so passing by pointer is copying in and out |
+| Held operands (O017) | `FunHeld` | the ownership pass | `held_agrees` | a held operand read late reads what it read early |
+
+## The type language
+
+The first part, and the one the rest builds on: the type language of
+datalit, as `crates/datalove-datalit/src/tycheck/types.rs` has it. Each Lean
+definition names the Rust function it transcribes.
 
 | Lean | Rust | File |
 |------|------|------|
@@ -75,7 +118,7 @@ Rust type's equality. The hint conversion is modelled step for step,
 `RecScope` and all, so that the first error the model reports, and the name
 it reports it at, are the Rust's.
 
-## What is proved
+### What is proved
 
 Under `formal/Datalove/Proofs/`:
 
@@ -107,57 +150,12 @@ Under `formal/Datalove/Proofs/`:
   `rec X X`; T064 is what rules that out.
 - **A well-formed recursive type does not expose to a number**
   (`Ty.expose_not_numeric`), since its body uses its name.
-- **A literal that checks is a value of its type** (`Lit.check_sound`); see
-  [Literal typing](#user-content-literal-typing).
-- **Inference fails only where its comments say** (`Lit.infer_errors`,
-  `Fun.infer_errors`, in `Proofs/Infer.lean`): datalit's only on a
-  malformed hint or a decision that depends on what a type parameter stands
-  for (F110), datafun's only on F110, each save running out of fuel.
-  Datalit's types hold no type parameter, so it never meets F110, but that
-  is not proved. Unification panics where a variable it just pruned is not
-  free. In Lean's logic a panic is not an error: it is the monad's default,
-  which here succeeds and changes nothing, so a theorem about which errors
-  can occur says nothing of it, and the proofs show instead that no panic is
-  reached. A variable is never bound to another variable (`Lit.Inv`), which
-  every step of the unifier, `resolve` and inference keeps, so pruning finds
-  a free root or a type that is not a variable. Binding one variable to
-  another in place of linking them breaks the proof.
-- **In datafun, every early return fits the function, `completes` is
-  sound, a `match` covers its enum, and checking a generic once is
-  enough**; see [Statements](#user-content-statements).
-- **A function's drop schedule drops each value it owns exactly once on
-  every path** (`fun_ok`, in `Proofs/DropFun.lean`). For a function the
-  move analysis accepts, on every way through its body -- each `if` one
-  branch, each `match` one arm, each loop any number of passes, each
-  expression that can return early finishing or returning after any of its
-  moves -- every point the path passes, and the body's end where it gets
-  there, drops each owned binding of the scopes it leaves that holds a
-  value on the path, and nothing else but a binding with a tracking byte.
-  The path moves what the walk says each statement moves; that the run
-  moves the same is `moves_agree`, tested. The theorem takes only the move
-  analysis's acceptance, and a path through a call may hold a `mut` or
-  `out` argument that a later argument moved before a `?` between them
-  returned; that no argument does is O017 and O010, which the Rust refuses
-  and the model decides apart (`FunHeld.lean`, `FunAlias.lean`), so the
-  result is of functions the Rust accepts.
-  [plan-drop-proof.md](plan-drop-proof.md) has the argument and what it
-  leaves out.
 - **A recursive type meets its one-step unfolding** (`Ty.meet_unfold`), on
   well-formed types, however many `rec`s it starts with.
 - **`@` is reflexive and transitive** on well-formed types (`Ty.adapt_refl`,
   `Ty.adapt_trans`), so it never needs to be written twice.
 
-The build fails on any warning, and a `sorry` is one, so a proof left
-unfinished cannot pass for a finished one. Every theorem rests on Lean's
-three standard axioms, `propext`, `Classical.choice` and `Quot.sound`, and
-nothing else, and the build checks it: `formal/AxiomCheck.lean` collects the
-axioms of every theorem and definition in a `Datalove` module, about seven
-and a half thousand, and fails on any other, a `sorryAx` that got past the warning, a
-`Lean.ofReduceBool` that `native_decide` would bring in, or an `axiom` the
-model declared. The finite case splits use `decide +kernel`, which the kernel
-checks.
-
-## What ties the model to the code
+### Held to the Rust
 
 `oracle_tests` generates type hints from seeds, biased toward `rec`s and
 toward name uses that are guarded, and asks both sides:
@@ -169,15 +167,16 @@ toward name uses that are guarded, and asks both sides:
   second is always yes, since these are the types it accepted: this checks
   that the model accepts whatever the Rust does, and not the reverse, which
   `Hint.convert_wf` covers for the model's own conversion;
-- for pairs of those types, `≡`, `≈` and `⇝`. Random pairs are rarely
-  related, so most pairs are built to be: each type with itself, its
-  one-step unfolding and its full unfolding, every pair of scalars, each enum variant with its enum and the
-  recursive type around it, and each atom or term with an enum that lists it.
+- for pairs of those types, `≡`, `≈` and `⇝`. Random pairs are rarely related,
+  so most pairs are built to be: each type with itself, its one-step unfolding
+  and its full unfolding, every pair of scalars, each enum variant with its
+  enum and the recursive type around it, and each atom or term with an enum
+  that lists it.
 
 The oracle reads JSON lines and answers in kind; the encoding is in
-`formal/Datalove/Json.lean`. `just test-formal` runs a thousand seeds by default, which ask about
-forty-five thousand questions and take a few seconds; the test alone defaults
-to two hundred.
+`formal/Datalove/Json.lean`. `just test-formal` runs a thousand seeds by
+default, which ask about forty-five thousand questions and take a few seconds;
+the test alone defaults to two hundred.
 
 `law_tests` checks, against the Rust alone, that `≈` and `⇝` compose on every
 chain of two related pairs the generator makes (about two and a half thousand
@@ -193,17 +192,17 @@ random almost never uses both names well: at the default seeds twenty-two
 types of the pool start with two, where there were none, and putting back
 the meeting that unfolded only one side makes twenty-two chains fail.
 
-## What it found
+### What it found
 
 `@` was not transitive, for three reasons. Writing the transitivity proof
 found the first two, and the law tests confirmed them before either was
 fixed:
 
-- An atom or term did not adapt to a recursive enum. With
-  `type Json = rec J enum { atom Null, term Arr [J] }` and `a = atom Null`,
-  `let j: Json = a@` was F091, though `let e: enum { atom Null, term Arr [Json] } = a@`
-  and then `let j: Json = e` both checked, and so did the literal
-  `let j: Json = atom Null`.
+- An atom or term did not adapt to a recursive enum. With `type Json = rec J
+  enum { atom Null, term Arr [J] }` and `a = atom Null`, `let j: Json = a@`
+  was F091, though `let e: enum { atom Null, term Arr [Json] } = a@` and then
+  `let j: Json = e` both checked, and so did the literal `let j: Json = atom
+  Null`.
 - A recursive type whose unfolding is a term, `rec X term A [X]`, did not
   adapt to an enum listing `term A [rec X term A [X]]`, though its unfolding
   did.
@@ -235,12 +234,10 @@ direct reading of the rules would, in every one of the error kinds.
 
 The second part takes the typing of datalit's expressions: inference with
 literal classes and unification, the defaults, checking and synthesis
-(`formal/Datalove/Lit.lean`). It is a different kind of model from the first.
-The type relations were transcribed from the Rust, so that proofs about them
-are about the code. The literal typing is written from
-[the typing rules](datalit-typing-rules.md) instead, rule by rule, so that
-holding the Rust to it holds the code to the doc. Where the doc leaves a
-choice open, the model says which it made. It is not wholly independent of
+(`formal/Datalove/Lit.lean`), written from
+[the typing rules](datalit-typing-rules.md), rule by rule, so that holding
+the Rust to it holds the code to the doc. Where the doc leaves a choice
+open, the model says which it made. It is not wholly independent of
 the code: it was written by someone who had read the checker first, and its
 structure follows the checker's where the doc allows.
 
@@ -297,78 +294,92 @@ did not find this; a case written by hand did, and the code now follows the
 doc. The datalit fixture `79_atom_then_hinted_term_of_its_name` holds it in
 `just test`.
 
-## Statements
+One more thing is proved of inference, datalit's and datafun's both:
 
-The third part takes datafun: a slice of
-[its typing rules](datafun-typing-rules.md), written from the doc as the
-literal typing was (`formal/Datalove/Fun.lean`). The slice is scripts of
-functions, generic or not, type aliases and statements: `let` and `var`, binding a name or a
+- **Inference fails only where its comments say** (`Lit.infer_errors`,
+  `Fun.infer_errors`, in `Proofs/Infer.lean`): datalit's only on a
+  malformed hint or a decision that depends on what a type parameter stands
+  for (F110), datafun's only on F110, each save running out of fuel.
+  Datalit's types hold no type parameter, so it never meets F110, but that
+  is not proved. Unification panics where a variable it just pruned is not
+  free. In Lean's logic a panic is not an error: it is the monad's default,
+  which here succeeds and changes nothing, so a theorem about which errors
+  can occur says nothing of it, and the proofs show instead that no panic is
+  reached. A variable is never bound to another variable (`Lit.Inv`), which
+  every step of the unifier, `resolve` and inference keeps, so pruning finds
+  a free root or a type that is not a variable. Binding one variable to
+  another in place of linking them breaks the proof.
+
+## Datafun checking
+
+The third part takes datafun: a slice of [its typing
+rules](datafun-typing-rules.md), written from the doc as the literal typing
+was (`formal/Datalove/Fun.lean`). The slice is scripts of functions, generic
+or not, type aliases and statements: `let` and `var`, binding a name or a
 pattern, `set` with or without an operator and through fields and indexes,
-`if` and the binding `if`, `loop` and `loop while`, `for`, `match`,
-`break`, `continue`, `ret`, `debuglog` and `call`; datalit's literal forms,
-which datafun types by datalit's rules with a context added; and datafun's
+`if` and the binding `if`, `loop` and `loop while`, `for`, `match`, `break`,
+`continue`, `ret`, `debuglog` and `call`; datalit's literal forms, which
+datafun types by datalit's rules with a context added; and datafun's
 variables, places with field and index steps, fields and indexes of what is
 not a place, operators, `?`, `!`, `@` and calls, each in a borrowed position
-or not, and consts. Worlds of modules are in it too (`checkWorld`). A
-module is a list of declarations under its requires and imports: its consts
-are checked as a script's are, but a `?`, `!` or other early return in one
-is F105, not F049, since there is no function to return from. A module
-exports its functions' signatures and nothing else, so an import of a const
-is F002 as an import of a missing function is; one through an alias nothing
-is required under is F078, one of a name the module defines a function by
-F106, and a second of one name F059 if it comes from another module. A
-qualified call `a.f` is a call of the name `a.f`, which every function of a
-required module is in scope under, and `a.` marks the alias as required, so
-that a call through one that is not is F078 rather than F002. A const's
-initializer names only consts (F058), a function body sees the consts above
-it, a const argument names one (F076), and in a generic neither a const
-parameter's type (F077) nor a const's (F088) mentions a type parameter. A
-function's type
-parameters are names for themselves, in scope in its signature and body as
-aliases are; one is in a class only by its bound, a set or map over one
-needs an order (F061), and a call infers what each stands for from its
-arguments and then from what it is expected to be, as the Rust does, then
-holds the answers to their bounds (F092) and reports one nothing decided
-(F101). A script's
-aliases and its functions' signatures are resolved first, in the order they
-are written, each seeing the aliases above it, as the Rust's name
-resolution does; hint conversion is datalit's with the aliases in scope
-(`Hint.convertWith`), and so is its `rec` checking. Inference is
-datalit's, extended by the doc's table: the `@` class lives in `Lit.lean`'s
-unifier, as datafun's lives in datalit's in the Rust, and so does an
-`unknown` class for what inference cannot read, which the Rust marks by a
-variable's origin.
+or not, and consts. Worlds of modules are in it too (`checkWorld`). A module
+is a list of declarations under its requires and imports: its consts are
+checked as a script's are, but a `?`, `!` or other early return in one is
+F105, not F049, since there is no function to return from. A module exports
+its functions' signatures and nothing else, so an import of a const is F002 as
+an import of a missing function is; one through an alias nothing is required
+under is F078, one of a name the module defines a function by F106, and a
+second of one name F059 if it comes from another module. A qualified call
+`a.f` is a call of the name `a.f`, which every function of a required module
+is in scope under, and `a.` marks the alias as required, so that a call
+through one that is not is F078 rather than F002. A const's initializer names
+only consts (F058), a function body sees the consts above it, a const argument
+names one (F076), and in a generic neither a const parameter's type (F077) nor
+a const's (F088) mentions a type parameter. A function's type parameters are
+names for themselves, in scope in its signature and body as aliases are; one
+is in a class only by its bound, a set or map over one needs an order (F061),
+and a call infers what each stands for from its arguments and then from what
+it is expected to be, as the Rust does, then holds the answers to their bounds
+(F092) and reports one nothing decided (F101). A script's aliases and its
+functions' signatures are resolved first, in the order they are written, each
+seeing the aliases above it, as the Rust's name resolution does; hint
+conversion is datalit's with the aliases in scope (`Hint.convertWith`), and so
+is its `rec` checking. Inference is datalit's, extended by the doc's table:
+the `@` class lives in `Lit.lean`'s unifier, as datafun's lives in datalit's
+in the Rust, and so does an `unknown` class for what inference cannot read,
+which the Rust marks by a variable's origin.
 
 The checker reports what is wrong and goes on, so the model's answer for a
 script is every diagnostic code, in order, and so is what it is held to. That
 holds the model to the Rust's recovery as well as its rules: what is bound
-after a failed `let`, which bodies of a binding `if` are checked, where a
-call stops. The doc said nothing of that, and now says what the tests found
-([Going on after an error](datafun-typing-rules.md#user-content-going-on-after-an-error)).
+after a failed `let`, which bodies of a binding `if` are checked, where a call
+stops. The doc said nothing of that, and now says what the tests found ([Going
+on after an
+error](datafun-typing-rules.md#user-content-going-on-after-an-error)).
 
 `fun_tests` holds the Rust to it. Scripts come from worldgen, configured to
 stay inside the slice, as the single module it writes, checked as a script.
 Worldgen's bodies use their bindings little, so each script is changed up to
 three times a line at a time: a type or value changed, an operator swapped,
-`?`, `!` or `@` added, a name unbound, a `ret` dropped, a stray `break`,
-`set` or `call`, or a statement added that computes from the parameters and
-locals in scope, unwraps them, matches on them with a binding `if`, calls
-with them, reads a field or element of them, borrowed or not, or sets one,
-or changes a generic's bound, uses its type parameters, or calls it with
-what is at hand. One more puts, at the top of a generic's body, a statement
-where inference must decide something of a type parameter's value: a
-literal beside it, a part read off it, it adapted, met by a type with
-parts or passed with a literal, or a `rec` hint holding it. Some of these
-are F110 and some are clean, so the Rust's marking of what depends on a
-type parameter is held to the model's failing; without it worldgen reached
-F110 about once in two thousand scripts. The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is
-the oracle's input, read as it is (`formal/Datalove/FunJson.lean`); a script
-using a form outside the slice is skipped and counted. A corpus of cases
-written by hand runs first; worldgen's parameters are mostly scalars, so it
-is the corpus that reaches F069 to F073 most, and F101, since every generic
-worldgen writes names its type parameter in a parameter. Thirty thousand
-scripts from a random seed agree on every diagnostic, all but the 1216 that
-do not parse inside the slice, reaching every statement code the slice has.
+`?`, `!` or `@` added, a name unbound, a `ret` dropped, a stray `break`, `set`
+or `call`, or a statement added that computes from the parameters and locals
+in scope, unwraps them, matches on them with a binding `if`, calls with them,
+reads a field or element of them, borrowed or not, or sets one, or changes a
+generic's bound, uses its type parameters, or calls it with what is at hand.
+One more puts, at the top of a generic's body, a statement where inference
+must decide something of a type parameter's value: a literal beside it, a part
+read off it, it adapted, met by a type with parts or passed with a literal, or
+a `rec` hint holding it. Some of these are F110 and some are clean, so the
+Rust's marking of what depends on a type parameter is held to the model's
+failing; without it worldgen reached F110 about once in two thousand scripts.
+The Rust's serde AST (`datalove-datafun-ast/src/ast_serde.rs`) is the oracle's
+input, read as it is (`formal/Datalove/FunJson.lean`); a script using a form
+outside the slice is skipped and counted. A corpus of cases written by hand
+runs first; worldgen's parameters are mostly scalars, so it is the corpus that
+reaches F069 to F073 most, and F101, since every generic worldgen writes names
+its type parameter in a parameter. Thirty thousand scripts from a random seed
+agree on every diagnostic, all but the 1216 that do not parse inside the
+slice, reaching every statement code the slice has.
 
 Diagnostics say nothing of a script that checks, and worldgen writes a hint
 on nearly every binding, so each generated script also runs with the hints
@@ -379,49 +390,7 @@ are compared too: the oracle lists the model's by `Fun.traceScript`, in
 it in, and the test lists the Rust's from its expression types. A thousand
 seeds compare about 4700 such types, and all agree.
 
-`runs_agree` holds the runtime to the model's evaluation. Each generated
-script, as written and changed, that checks gets a driver: for each function
-that is not generic and whose parameters take literals, top-level
-`debuglog`s of calls with literals of their types, at and near their ranges'
-ends. The model runs it (`Fun.runScript`, the oracle printing each logged
-value as `debuglog` does, `Fun.showVal` in `FunShow.lean`), and so does the
-CLI, on every engine: the bytecode interpreter, the IR walker, the JIT
-compiling each function at its first call and entering a loop's code after
-its first pass, and both AOT backends, Cranelift's and C's, each building an
-executable that is then run. The AOT backends take a build and a link a
-script, so they run the corpus and one generated script in eight
-(`FORMAL_FUN_AOT_EVERY`). Every run checks for leaks, and a run that leaks
-does not agree. Every line must agree, up to what the model does not carry, a float,
-an error's message, a map's or set's entries, which match anything; a
-string prints with its text, escaped as `debuglog` escapes it; a script the model runs to its end, or to an early return, the CLI
-must too, printing what it returned early last. Where the model stops at
-what it does not run, what it logged must be what the CLI logged first. A
-script a later phase refuses, the ownership analysis say, is skipped and
-counted. A corpus written by hand runs first, for what generated functions
-rarely do with their parameters: checked and optional arithmetic at its
-bounds, division, indexes in and out of range, `for`, `loop`, recursion,
-`match`, a binding `if`, `!` and `set` through an index, and `mut` and `out`
-arguments written back, an early return's included, from calls inside
-larger expressions, read later in them, and returned early from after,
-under a hint or not, strings, escaped, compared and as map keys, and calls
-of functions declared below, from the top level, a body and a const. The
-Rust must take each corpus script and the model run it to its end: one
-refused would compare nothing, and one the model stops in only a prefix,
-which a gap in the model passes.
-`FORMAL_FUN_RUN_OF=<file>` with the `run_of` test prints what the model
-logs of a file and how it ends, to find where it stops. For this test worldgen
-writes `mut`, `out` and `ref` parameters, and the driver passes a `mut` or
-`out` argument as a variable, set or not, under a hint or not, or as a field,
-tuple element or list element of a hinted place, `(: {a: T, b: u8} / w).a`,
-binds the call's value, and logs the variables after it. Worldgen's own calls
-pass a `ref`, `mut` or `out` argument as a binding or a field of one, at times
-hinted on the place or on the binding under the field. A thousand
-seeds run about 1150 scripts on each interpreter and the JIT, and 156 on
-each AOT backend, logging about 29000 lines, all agreeing, one in thirty
-with something the model does not carry; it takes about a minute and a
-half, most of it the AOT builds.
-
-What it found:
+### What it found
 
 - **No rule of the slice differs** between the doc and the code. The
   differences were all recovery, which the doc did not cover, and which the
@@ -446,11 +415,11 @@ What it found:
   checked as any negation is: there F016, and F026 for `-(: i64 / 8)`. A
   mutation that changed a binding's type from `int` to `u8` found it; the
   error fixture `128_negated_literal_with_a_hint` holds it.
-- **Aliases, patterns and `match` agreed on the first run**, the corpus
-  and the generated scripts alike, worldgen now writing enums under aliases
-  and matching on them, and a mutation damaging a `match`'s cases. Writing
-  them down settled recovery the doc had not said, now in
-  [Going on after an error](datafun-typing-rules.md#user-content-going-on-after-an-error).
+- **Aliases, patterns and `match` agreed on the first run**, the corpus and
+  the generated scripts alike, worldgen now writing enums under aliases and
+  matching on them, and a mutation damaging a `match`'s cases. Writing them
+  down settled recovery the doc had not said, now in [Going on after an
+  error](datafun-typing-rules.md#user-content-going-on-after-an-error).
 - **Two of the model's own rules were wrong**, found when projections
   widened what the tests reach. A literal form with no rule for the
   expected type inferred itself first, so `ret some x` with `x` unbound was
@@ -459,14 +428,14 @@ What it found:
   the Rust leaves a variable to be synthesized, which decides between F001
   and T016 in `(x, none)`. Both now follow the Rust, and the doc says how
   the second goes.
-- **A temporary's field was refused where its element was not.**
-  `f().name` of a non-copy field was F070, while `f()[0]?` of a non-copy
-  element had no F072 check, and was read by cloning it, with no `@`
-  written. Both are now refused outside a borrowed position
-  ([the issue](issues.md#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
-  says why), and a borrowed one is read through a reference: `f()[0]?@`
-  cloned twice, and `debuglog f().name` leaked the temporary. The backend
-  fixture `45_borrowed_part_of_a_temporary` holds both.
+- **A temporary's field was refused where its element was not.** `f().name` of
+  a non-copy field was F070, while `f()[0]?` of a non-copy element had no F072
+  check, and was read by cloning it, with no `@` written. Both are now refused
+  outside a borrowed position ([the
+  issue](issues.md#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
+  says why), and a borrowed one is read through a reference: `f()[0]?@` cloned
+  twice, and `debuglog f().name` leaked the temporary. The backend fixture
+  `45_borrowed_part_of_a_temporary` holds both.
 - **Generics agreed on the first run**, worldgen writing generic functions
   of a dozen shapes and calling them, mutations changing, dropping or adding
   a bound, using a type parameter in a body and calling a generic with what
@@ -526,18 +495,20 @@ What it found:
   the bound writes what it wrote before; three hundred default-configured
   worlds are byte for byte the same.
 
-Four things are proved of it:
+### What is proved
+
+Of checking, and of the inference under it:
 
 - **Every early return fits the function** (`Fun.checkFun_early_returns_fit`,
   in `Proofs/EarlyReturn.lean`). A function whose check reports nothing has
-  every early return in its body, from `?`, `!`, `-?`, `-!`, an index's `?`
-  or `!`, read or in a `set` target, or a checked or optional operator, a
-  compound `set`'s included, at any depth of any expression of any
-  statement, one its return type can carry: `none` only where it returns an option, an error only where it
-  returns a result. Underneath it, `Fun.checkF_guarded` says the same of any
-  expression that checks or synthesizes. Taking `fits` out of `?`'s rule
-  breaks the proof, as taking F049 out of a place's index step or a compound
-  `set` does.
+  every early return in its body, from `?`, `!`, `-?`, `-!`, an index's `?` or
+  `!`, read or in a `set` target, or a checked or optional operator, a
+  compound `set`'s included, at any depth of any expression of any statement,
+  one its return type can carry: `none` only where it returns an option, an
+  error only where it returns a result. Underneath it, `Fun.checkF_guarded`
+  says the same of any expression that checks or synthesizes. Taking `fits`
+  out of `?`'s rule breaks the proof, as taking F049 out of a place's index
+  step or a compound `set` does.
 - **`completes` is sound** (`Fun.completes_sound`, in
   `Proofs/Completes.lean`). A body it says cannot complete has no execution
   that finishes normally, against a semantics of control flow in which any
@@ -569,93 +540,178 @@ Four things are proved of it:
   needed of it.
 - **Checking a generic once is enough** (`Fun.checkFun_instance`, in
   `Proofs/InstanceStmt.lean`, on `Proofs/Instance.lean` and
-  `Proofs/InstanceCheck.lean`). A generic function whose check reports
-  nothing has instances whose checks report nothing: its body checked with
-  each type parameter an alias for a type argument the parameter's bound
-  admits, no bounds in scope, and its parameter and return types
-  substituted, F063 included. That is what compiling a generic once and
-  running it at the types its calls pick relies on. Under it,
-  `Fun.synthF_inst` and `Fun.checkF_inst` say the same of every expression,
-  at the substituted type, and `Fun.checkStmtF_inst` of every statement.
-  The type arguments have no type parameter and no `rec` in them
-  (`Ground`); with one, `expose` would not commute with substituting it, and
-  an instance spelling a recursive type into a key would be T065, which
-  only refuses the spelling ([the issue](issues.md#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)).
+  `Proofs/InstanceCheck.lean`). A generic function whose check reports nothing
+  has instances whose checks report nothing: its body checked with each type
+  parameter an alias for a type argument the parameter's bound admits, no
+  bounds in scope, and its parameter and return types substituted, F063
+  included. That is what compiling a generic once and running it at the types
+  its calls pick relies on. Under it, `Fun.synthF_inst` and `Fun.checkF_inst`
+  say the same of every expression, at the substituted type, and
+  `Fun.checkStmtF_inst` of every statement. The type arguments have no type
+  parameter and no `rec` in them (`Ground`); with one, `expose` would not
+  commute with substituting it, and an instance spelling a recursive type into
+  a key would be T065, which only refuses the spelling ([the
+  issue](issues.md#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)).
   The theorem takes inference as a parameter, as the theorems above do, and
   asks of it that under an instance it answer what it answered under the
-  generic, substituted, wherever the generic checked quietly (`InstEnv`).
-  That is proved of the real inference (`Fun.inferEnv_inst`, in
-  `Proofs/Lockstep.lean`), so `Fun.checkFun_instance_real` states the
-  theorem with nothing assumed of inference; `instances_check` holds the
-  Rust to its conclusion, below. A signature names only its own type
-  parameters and is well formed (`SigsOk`), which is proved of what
-  `resolveNames` builds (`Fun.resolveNames_sigsOk`, in `Proofs/Sigs.lean`),
-  so the theorem holds of a script without assuming it;
-  and a body declares no type alias, which the parser refuses (P074). Making a type
-  parameter copyable breaks the proof, as letting a bound satisfy another at
-  a call does: each would let a generic through whose instance the Rust
-  refuses.
+  generic, substituted, wherever the generic checked quietly (`InstEnv`). That
+  is proved of the real inference (`Fun.inferEnv_inst`, in
+  `Proofs/Lockstep.lean`), so `Fun.checkFun_instance_real` states the theorem
+  with nothing assumed of inference; `instances_check` holds the Rust to its
+  conclusion, below. A signature names only its own type parameters and is
+  well formed (`SigsOk`), which is proved of what `resolveNames` builds
+  (`Fun.resolveNames_sigsOk`, in `Proofs/Sigs.lean`), so the theorem holds of
+  a script without assuming it; and a body declares no type alias, which the
+  parser refuses (P074). Making a type parameter copyable breaks the proof, as
+  letting a bound satisfy another at a call does: each would let a generic
+  through whose instance the Rust refuses.
+- **Inference under a generic steps with inference under its instances**
+  (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
+  arguments touches only known types, so a variable keeps its number, and
+  a state is substituted variable by variable. Run from a substituted state,
+  inference under an instance ends in the substituted state with the
+  substituted answer, or fails as the generic's did, unless the generic's
+  failed with F110 or ran out of fuel (`Lit.Lock`). Each decision either
+  comes out the same, since a ground type argument keeps the head of a type
+  whose head is no type parameter, or is one that depends on what a type
+  parameter stands for, which is F110 under the generic: a literal's class
+  against `T`, a value adapted to or from a type holding one that does not
+  adapt, `T` met by a type with parts or read for its parts, and a hint with
+  `T` inside a `rec` (T066). A generic that checks quietly met neither F110
+  nor running out, which is how the theorem's assumption is discharged. A
+  hint reads the same under the substituted aliases, failures included
+  (`Fun.convertIn_inst`), and a call's signature instantiates the same,
+  being well formed, so that no `rec` in it holds a type parameter
+  (`Fun.instantiate_inst`). Nothing is assumed: it rests on Lean's three
+  axioms alone, as every theorem here does.
+
+To make these provable, checking was made total: it takes inference as a
+parameter (`InferEnv`), which only says what types are and so cannot move an
+early return, and it runs on fuel, every call spending one, so that the
+recursion between checking and synthesis needs no measure. Running out is a
+failure, never a success, so the theorems hold for any fuel; the oracle gives
+a million. A statement's expression checks run on a fresh list of
+diagnostics, added to the statement's after, so that a statement that adds
+none is one whose checks all succeeded. And the statement checker is written
+with its binds explicit, the `match` and `if` of `do` notation otherwise
+copying what follows into every branch. Each of these leaves the answers as
+they were, which `fun_tests` confirms.
+
+## Running a script
+
+The model runs what it checks: expressions (`FunEval.lean`), statements
+(`FunExec.lean`), calls (`FunCall.lean`) and a script (`FunRun.lean`), each
+following the checker one function for one and taking the types it gives,
+as a compiled program carries them. `runs_agree` holds every engine to it,
+and the theorems say what the run of a checked program can and cannot do.
+
+### Held to the engines
+
+`runs_agree` holds the runtime to the model's evaluation. Each generated
+script, as written and changed, that checks gets a driver: for each function
+that is not generic and whose parameters take literals, top-level
+`debuglog`s of calls with literals of their types, at and near their ranges'
+ends. The model runs it (`Fun.runScript`, the oracle printing each logged
+value as `debuglog` does, `Fun.showVal` in `FunShow.lean`), and so does the
+CLI, on every engine: the bytecode interpreter, the IR walker, the JIT
+compiling each function at its first call and entering a loop's code after
+its first pass, and both AOT backends, Cranelift's and C's, each building an
+executable that is then run. The AOT backends take a build and a link a
+script, so they run the corpus and one generated script in eight
+(`FORMAL_FUN_AOT_EVERY`). Every run checks for leaks, and a run that leaks
+does not agree. Every line must agree, up to what the model does not
+carry, a float, an error's message, a map's or set's entries, which match
+anything; a string prints with its text, escaped as `debuglog` escapes it;
+a script the model runs to its end, or to an early return, the CLI must
+too, printing what it returned early last. Where the model stops at
+what it does not run, what it logged must be what the CLI logged first. A
+script a later phase refuses, the ownership analysis say, is skipped and
+counted. A corpus written by hand runs first, for what generated functions
+rarely do with their parameters: checked and optional arithmetic at its
+bounds, division, indexes in and out of range, `for`, `loop`, recursion,
+`match`, a binding `if`, `!` and `set` through an index, and `mut` and `out`
+arguments written back, an early return's included, from calls inside
+larger expressions, read later in them, and returned early from after,
+under a hint or not, strings, escaped, compared and as map keys, and calls
+of functions declared below, from the top level, a body and a const. The
+Rust must take each corpus script and the model run it to its end: one
+refused would compare nothing, and one the model stops in only a prefix,
+which a gap in the model passes.
+`FORMAL_FUN_RUN_OF=<file>` with the `run_of` test prints what the model
+logs of a file and how it ends, to find where it stops. For this test worldgen
+writes `mut`, `out` and `ref` parameters, and the driver passes a `mut` or
+`out` argument as a variable, set or not, under a hint or not, or as a field,
+tuple element or list element of a hinted place, `(: {a: T, b: u8} / w).a`,
+binds the call's value, and logs the variables after it. Worldgen's own calls
+pass a `ref`, `mut` or `out` argument as a binding or a field of one, at times
+hinted on the place or on the binding under the field. A thousand
+seeds run about 1150 scripts on each interpreter and the JIT, and 156 on
+each AOT backend, logging about 29000 lines, all agreeing, one in thirty
+with something the model does not carry; it takes about a minute and a
+half, most of it the AOT builds.
+
+### What is proved
 
 - **A datafun expression that checks evaluates to a value of its type**
   (`Fun.evalS_sound`, in `Proofs/EvalSound.lean`, of the evaluator in
   `FunEval.lean`), for every form: literals, variables, places, hints,
   operators, `?`, `!`, `@`, fields, indexes and calls. Where an expression
-  checks quietly in a context whose variables line up with its own, each
-  that is set holding a value of its type (`Agree`), evaluating it gives a
-  value of its type (`Lit.HasType`, datalit's), the variables, which a call
-  may write to, lining up still; or returns early with a value of the
-  function's return type: never an operand of the wrong kind, a checked
-  operator's result outside its type's range, or an early return the
-  function's type does not take, or an index or field read off the wrong
-  kind of value. An index with nothing at its key returns early as its `?`
-  or `!` says, and a tensor's of rank above one is a slice, of the size its
-  shape says. A call goes to whatever runs calls, and the theorem holds for
-  any that do what calls may (`CallOk`), below. What an operator does depends on its operands' type, as
+  checks quietly in a context whose variables line up with its own, each that
+  is set holding a value of its type (`Agree`), evaluating it gives a value of
+  its type (`Lit.HasType`, datalit's), the variables, which a call may write
+  to, lining up still; or returns early with a value of the function's return
+  type: never an operand of the wrong kind, a checked operator's result
+  outside its type's range, or an early return the function's type does not
+  take, or an index or field read off the wrong kind of value. An index with
+  nothing at its key returns early as its `?` or `!` says, and a tensor's of
+  rank above one is a slice, of the size its shape says. A call goes to
+  whatever runs calls, and the theorem holds for any that do what calls may
+  (`CallOk`), below. What an operator does depends on its operands' type, as
   `a +! b` overflows at `u8`'s bounds or `i8`'s, so evaluation follows the
   checker one function for one and takes the types it gives, as a compiled
-  program carries them. A string carries its text, escapes read as the
-  parser reads them (`Lit.stringValue`). A float, `data` and `error` carry
-  nothing in the model, so a comparison, or a map lookup, is answered where
-  the values' contents are modelled, numbers, booleans and strings and what
-  is built of them, and is otherwise not run. It holds for any inference, since what inference finds is checked
-  before it is used, and of contexts with no type parameter's bound, as an
-  instance's are, so of a generic through the check-once theorem. Proving it
-  changed two things. A hex literal's value is also the integer it spells
-  (`HasType.hexInt`), since `@` takes a `u8` to an `i16`, which no hex
-  literal is of. And an enum takes a term by its first variant of that
-  name, as checking a term against it does, where `@` asked of any
-  (`Variants.hasTerm`); the two differ only for an enum naming a variant
+  program carries them. A string carries its text, escapes read as the parser
+  reads them (`Lit.stringValue`). A float, `data` and `error` carry nothing in
+  the model, so a comparison, or a map lookup, is answered where the values'
+  contents are modelled, numbers, booleans and strings and what is built of
+  them, and is otherwise not run. It holds for any inference, since what
+  inference finds is checked before it is used, and of contexts with no type
+  parameter's bound, as an instance's are, so of a generic through the
+  check-once theorem. Proving it changed two things. A hex literal's value is
+  also the integer it spells (`HasType.hexInt`), since `@` takes a `u8` to an
+  `i16`, which no hex literal is of. And an enum takes a term by its first
+  variant of that name, as checking a term against it does, where `@` asked of
+  any (`Variants.hasTerm`); the two differ only for an enum naming a variant
   twice, which the parser refuses.
 - **A datafun block that checks keeps its variables at their types**
-  (`Fun.execBlock_sound`, in `Proofs/ExecSound.lean`, of the statements run
-  in `FunExec.lean`), for every statement. Where a block
-  checks quietly in a context with no type parameter's bound, and its
-  variables line up with the context's, each that is set holding a value of
-  its type (`Agree`), running it leaves its scope's variables so, with more
-  bound. Otherwise it breaks or continues inside a loop; or it returns early with a value
-  of the return type, or with none from a function that returns nothing.
-  It may also stop at a read of a variable declared with no value, which
-  the ownership analysis refuses (O005, and `Fun.runScript_noUninit` below shows
-  that a script it and the F089 check let through does not), at a loop run more often than it
-  was given, or calls nested deeper than they were given, and at what the
-  model does not run, each a case of `Gap` in `FunEval.lean`: a call with a
-  type argument that has a `rec` in it, a comparison or map key of a float,
-  `data` or `error`, whose contents the model does not carry, and a `for`
-  with an index over more elements than `index` counts. Nothing else:
-  the theorems allow `Stop.unsupported` only with a `Gap`, so a gap added to
-  the model is a case added to `Gap` and shows up in what they say. A `set`
-  through a tensor's slice, `set t[i]![j]! = v`, writes the slice back into
-  the tensor, and a call has a function in the table for every signature
-  (`Fun.funDefs_covers`); both used to stop. So did a temporary passed
-  `mut` or `out`, `f(mut g())`, which the ownership analysis refuses
-  (O012) as a write nothing can read: copied in and out, what its parameter
-  came to is dropped with it, and the model now says so.
-  It breaks only where the block has a `break` of its own (`hasBreak`), and
-  ends normally only where control can reach its end (`completes`). As with expressions, running follows the checker
-  one function for one, asking it for the context after each statement, and
-  a `match` walks its cases as `checkCases` does, each at one less fuel. A
-  scope is a prefix of the variables, so leaving a block drops what it bound
-  and keeps what it set.
+  (`Fun.execBlock_sound`, in `Proofs/ExecSound.lean`, of the statements run in
+  `FunExec.lean`), for every statement. Where a block checks quietly in a
+  context with no type parameter's bound, and its variables line up with the
+  context's, each that is set holding a value of its type (`Agree`), running
+  it leaves its scope's variables so, with more bound. Otherwise it breaks or
+  continues inside a loop; or it returns early with a value of the return
+  type, or with none from a function that returns nothing. It may also stop at
+  a read of a variable declared with no value, which the ownership analysis
+  refuses (O005, and `Fun.runScript_noUninit` below shows that a script it and
+  the F089 check let through does not), at a loop run more often than it was
+  given, or calls nested deeper than they were given, and at what the model
+  does not run, each a case of `Gap` in `FunEval.lean`: a call with a type
+  argument that has a `rec` in it, a comparison or map key of a float, `data`
+  or `error`, whose contents the model does not carry, and a `for` with an
+  index over more elements than `index` counts. Nothing else: the theorems
+  allow `Stop.unsupported` only with a `Gap`, so a gap added to the model is a
+  case added to `Gap` and shows up in what they say. A `set` through a
+  tensor's slice, `set t[i]![j]! = v`, writes the slice back into the tensor,
+  and a call has a function in the table for every signature
+  (`Fun.funDefs_covers`); both used to stop. So did a temporary passed `mut`
+  or `out`, `f(mut g())`, which the ownership analysis refuses (O012) as a
+  write nothing can read: copied in and out, what its parameter came to is
+  dropped with it, and the model now says so. It breaks only where the block
+  has a `break` of its own (`hasBreak`), and ends normally only where control
+  can reach its end (`completes`). As with expressions, running follows the
+  checker one function for one, asking it for the context after each
+  statement, and a `match` walks its cases as `checkCases` does, each at one
+  less fuel. A scope is a prefix of the variables, so leaving a block drops
+  what it bound and keeps what it set.
 - **Calls into a checked program are sound** (`Fun.runCall_ok`, in
   `Proofs/CallSound.lean`, of `runCall` in `FunCall.lean`). A call runs the
   function's body as an instance, in the context the check-once theorem
@@ -675,37 +731,76 @@ Four things are proved of it:
   signature's type parameters are its declaration's; that a script's consts
   hold values of their types is left to running a script, below.
 
-  A call with a `mut` or `out` parameter runs wherever it is. Evaluation
-  reads and writes the variables as it goes (`EvalT`, a state over them),
-  so a call's arguments are copied in, an `out` one as no value, and what
-  each parameter came to is written back to its argument's variable, as
+  A call with a `mut` or `out` parameter runs wherever it is. Evaluation reads
+  and writes the variables as it goes (`EvalT`, a state over them), so a
+  call's arguments are copied in, an `out` one as no value, and what each
+  parameter came to is written back to its argument's variable, as
   `paramsAfter` reads it from the body's variables when it returns, an early
-  return's included; a variable read later in the same expression reads
-  what it came to, as `f(mut a) + a` does in the Rust. A return, by `ret` or
-  early from inside an expression, is `Stop.returned`, carrying the
-  variables as they were, for that. Copying in and out is what writing in
-  place does, the ownership analysis keeping an argument from being read
-  another way during the call, and keeping anything later in an expression
-  from changing what an earlier operand reads by reference (O017), so that
-  reading every operand as it is evaluated, as the model does, agrees with
-  the Rust, which reads a copy one then and others when they are used. A
-  `set` runs its value, then its keys, and only then reaches its place, as
-  the variable is once they have run (`setPlan`, `writeSteps`). The theorems for expressions are of
-  evaluating from any variables that line up with the context (`Agree`),
-  and say they still line up after (`SoundT`); what a parameter comes to is
-  of its type, so writing it back keeps them so (`Fun.writeBack_sound`), a
-  `mut` or `out` argument checking against its parameter's type, so that
-  the variable is of it. An argument into a field or element of a variable,
-  `mut xs[i]!` or `out p.f`, evaluates its keys with the arguments, as the
-  Rust takes its pointer then (`evalPath`), and is written back through the
-  same steps with those keys' values, as a `set` writes (`writeSteps`); the
-  steps and keys are of the types `setPlan` gives them (`PathOk`), so the
-  variable keeps its type, an index that is gone by then returning early as
-  its mode says. A hint on such an argument, or on a place along the way to
-  it, `mut (: R / r).a`, says only its type: it is written back to the place
-  its hints are on (`placeOf`), and evaluated as `checkF` reaches it, through
-  the hints, each key at the fuel it is checked at (`placeC`, sound by
-  `Fun.placeC_sound`), so no check has to be had again at another fuel.
+  return's included; a variable read later in the same expression reads what
+  it came to, as `f(mut a) + a` does in the Rust. A return, by `ret` or early
+  from inside an expression, is `Stop.returned`, carrying the variables as
+  they were, for that. Copying in and out is what writing in place does, the
+  ownership analysis keeping an argument from being read another way during
+  the call, and keeping anything later in an expression from changing what an
+  earlier operand reads by reference (O017), so that reading every operand as
+  it is evaluated, as the model does, agrees with the Rust, which reads a copy
+  one then and others when they are used. A `set` runs its value, then its
+  keys, and only then reaches its place, as the variable is once they have run
+  (`setPlan`, `writeSteps`). The theorems for expressions are of evaluating
+  from any variables that line up with the context (`Agree`), and say they
+  still line up after (`SoundT`); what a parameter comes to is of its type, so
+  writing it back keeps them so (`Fun.writeBack_sound`), a `mut` or `out`
+  argument checking against its parameter's type, so that the variable is of
+  it. An argument into a field or element of a variable, `mut xs[i]!` or `out
+  p.f`, evaluates its keys with the arguments, as the Rust takes its pointer
+  then (`evalPath`), and is written back through the same steps with those
+  keys' values, as a `set` writes (`writeSteps`); the steps and keys are of
+  the types `setPlan` gives them (`PathOk`), so the variable keeps its type,
+  an index that is gone by then returning early as its mode says. A hint on
+  such an argument, or on a place along the way to it, `mut (: R / r).a`, says
+  only its type: it is written back to the place its hints are on (`placeOf`),
+  and evaluated as `checkF` reaches it, through the hints, each key at the
+  fuel it is checked at (`placeC`, sound by `Fun.placeC_sound`), so no check
+  has to be had again at another fuel.
+- **A script that checks runs soundly** (`Fun.runScript_sound`, in
+  `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
+  statement as `checkScript` checks them, each top-level `debuglog` logs a
+  value of the type the checker gives it, and the script ends, or returns
+  early with a value of its type `!()`, or stops at a `Gap`, at a
+  variable read before it is set, or where a loop or calls ran as long as
+  they were given. It puts the theorems above together. As the Rust does,
+  the script's top-level consts are evaluated first, in order (`constPass`),
+  and every function is in the table calls run from the start, wherever it
+  is declared, with the values of the consts declared above it, the latest
+  of each name and type (`constEnv`). Each evaluated const holds a value of
+  its type (`StoreOk`), so each function is as `ProgOk` asks, by the
+  check-once theorem and since F088 keeps a top-level const's type free of
+  type parameters (`funTable_ok`). A const's expression reads only consts
+  above it, through the functions it calls too, as F089 sees to; the model
+  does not need that for soundness, since a const it read before it was
+  evaluated would read as unset, a stop a script may end with, and
+  `Fun.runScript_noUninit` shows F089 rules that stop out. A function goes
+  into the table under the signature `resolveNames` gave its name, and the
+  runner checks nothing more of it. In a script that checks, that signature
+  is its own, with its type parameters and as many parameters
+  (`Fun.resolveNames_own`, in `Proofs/Sigs.lean`, since a second function of
+  a name is F086 and a
+  signature that does not convert is reported), and its body declares no type
+  alias: the model reports P074 for one at the top level (`checkDecl`), as the
+  parser refuses it, so a script that checks quietly has none.
+
+## Ownership
+
+The ownership pass (`crates/datalove-datafun-ownership`) decides what holds
+a value, what is moved, what is dropped where, and which arguments may
+name one place or be held across an expression. Each of its analyses is
+transcribed into the model case for case and held to the Rust on generated
+functions, and of each but moves something is proved: that a program let
+through never reads what holds nothing, drops each value once, and reads
+the same through a pointer as the model reads in place.
+
+### What holds a value, and consts
+
 - **A script the ownership analysis lets through never reads what holds
   nothing** (`Fun.runScript_init`, in `Proofs/InitSound.lean`, of O005,
   O006 and O009 as `FunInit.lean` models them). The analysis follows a body
@@ -802,156 +897,174 @@ Four things are proved of it:
   F089 and six hundred O005, none differ; checking with only a module's own
   signatures makes 164 of a thousand worlds differ, and marking every const
   as holding a value 219.
-- **What is moved is modelled, run, and held to the Rust, but not yet
-  proved** (`FunMove.lean`, of O001, O003, O004, O007, O008, O011, O012,
-  O014, O015 and O016, with
-  O005, O006 and O009 as `FunInit.lean` has them). A read of a variable
-  whose type is not copy, where the ownership analysis has the read take
-  the value rather than borrow it, moves it: a `let`'s or `set`'s value, an
-  `in` argument, a `ret`, a part of what an expression builds, a condition
-  that binds. That is `Ctx.lends`, which the checker's context carries
-  beside `borrowed` and its transformations keep alike, but for an index's
-  key, which the analysis borrows where the checker does not (F070 for
-  `m[p.s]?`, `Ctx.key`), and a const argument, passed by reference. Nothing
-  the checker decides reads it, so evaluation and checking still pass the
-  same contexts. The run moves where `InferEnv.moves` asks (`Ctx.takes`,
-  `takeVar`): a moved variable holds nothing and a later read stops at
-  `Stop.uninit`. `inferEnv` does not ask, so every theorem about
-  `runScript` stands (`InitSound` takes `env.moves = false`); `movesEnv`
-  does, and `runScriptMoves` runs a script with it. The analysis follows
-  each expression with the flag the run has there, and each statement at
-  the fuel and in the context the run gives it (`checkStmtF` at that fuel,
-  `funCtx` for a body), so that the two decide the same reads take. The
-  key a plain `set m[k] = v` inserts the Rust takes, and so does the
-  analysis; the run lends every key, so there the analysis moves what the
-  run does not, which only refuses more. Reading a moved variable is O001,
-  moving a `ref`, `mut` or `out` parameter or a `for`'s element O003, and
-  a const O016. A `for`'s body may not change what it walks (O015): the
+
+### Moves
+
+- **What is moved is modelled, run, and held to the Rust, but not yet proved**
+  (`FunMove.lean`, of O001, O003, O004, O007, O008, O011, O012, O014, O015 and
+  O016, with O005, O006 and O009 as `FunInit.lean` has them). A read of a
+  variable whose type is not copy, where the ownership analysis has the read
+  take the value rather than borrow it, moves it: a `let`'s or `set`'s value,
+  an `in` argument, a `ret`, a part of what an expression builds, a condition
+  that binds. That is `Ctx.lends`, which the checker's context carries beside
+  `borrowed` and its transformations keep alike, but for an index's key, which
+  the analysis borrows where the checker does not (F070 for `m[p.s]?`,
+  `Ctx.key`), and a const argument, passed by reference. Nothing the checker
+  decides reads it, so evaluation and checking still pass the same contexts.
+  The run moves where `InferEnv.moves` asks (`Ctx.takes`, `takeVar`): a moved
+  variable holds nothing and a later read stops at `Stop.uninit`. `inferEnv`
+  does not ask, so every theorem about `runScript` stands (`InitSound` takes
+  `env.moves = false`); `movesEnv` does, and `runScriptMoves` runs a script
+  with it. The analysis follows each expression with the flag the run has
+  there, and each statement at the fuel and in the context the run gives it
+  (`checkStmtF` at that fuel, `funCtx` for a body), so that the two decide the
+  same reads take. The key a plain `set m[k] = v` inserts the Rust takes, and
+  so does the analysis; the run lends every key, so there the analysis moves
+  what the run does not, which only refuses more. Reading a moved variable is
+  O001, moving a `ref`, `mut` or `out` parameter or a `for`'s element O003,
+  and a const O016. A `for`'s body may not change what it walks (O015): the
   variable its collection is a place in, the binding as it was before the
   loop's names shadow it, is marked walked (`MVar.walked`), and moving it,
-  passing it or a part of it `mut` or `out`, or a `set` to it or a part of
-  it is refused, the `set` before its value is looked at, as the Rust's
+  passing it or a part of it `mut` or `out`, or a `set` to it or a part of it
+  is refused, the `set` before its value is looked at, as the Rust's
   `analyze_set` does, and a move before O003. What is passed `mut` or `out`
   has to be a `var` or a `mut` or `out` parameter (`MVar.writable`): a `ref`
   parameter or what a `for` binds by reference is O004 (`MVar.byRef`, all a
-  `for` binds but an index), and a `let`, an `in` parameter, a const or what
-  a condition or `match` binds O011, checked after O015, and before both,
-  what is not a place at all, a temporary the write would be lost in, is
-  O012 (a hinted place is a place, to both). O002, a second move, is
-  retired: the Rust's one way to it read the value first, which is O001. The corpus found
+  `for` binds but an index), and a `let`, an `in` parameter, a const or what a
+  condition or `match` binds O011, checked after O015, and before both, what
+  is not a place at all, a temporary the write would be lost in, is O012 (a
+  hinted place is a place, to both). O002, a second move, is retired: the
+  Rust's one way to it read the value first, which is O001. The corpus found
   that the Rust let a const declared outside a function through as a `mut`
-  argument in its body, which then changed the const on every engine (the
-  pass knew it only as a name); it is O011 now (backend fixture
-  `1046_a_const_outside_a_function_passed_mut_error`). Where branches meet, whether a variable was moved has to
-  agree, where whether it was given a value need not: an `if`'s or
-  `match`'s branches that complete (O008), what is moved after being what
-  the first of them left, or the first branch where none completes, as the
-  Rust's `analyze_if` and `analyze_match` take it; a loop's ways out
-  (O014), running out leaving what the condition left; and each way back
-  to a loop's start, which may not have moved what was unmoved before the
-  condition (O007). `moves_agree` in `fun_tests` holds the Rust's ownership
-  codes to the model's, the first code reported as well as whether there
-  is one, on `datalove_worldgen::moves_script`'s functions, which
-  `ownership_fuzz_tests` runs too, with three operands in ten naming
-  whatever they like, and on a corpus of hand-written bodies in the shapes
-  the generator makes rarely: loop exits, a condition that moves, branches
-  that both return, keys, consts and borrowed bindings, and a walked
-  collection changed through a field, shadowed, walked twice and changed
-  after its loop, and each kind of binding passed `mut` or `out`. Over ten
-  thousand seeds, two hundred O015, three hundred O011 and forty O004, none
-  differ; not marking what is walked makes the corpus's seven differ, letting
-  everything be passed `mut` ten, reporting O011 for what is bound by
-  reference three, and letting a temporary through three. It also runs each
-  script with `runScriptMoves` and requires that where the analysis lets it
-  through, and the Rust reports neither O010 nor O017, which see that no
-  argument a call writes back through is moved before the call takes it,
-  the run never reads what was moved: the theorem not yet proved, held to
-  the model's run. Over twenty-five thousand seeds, four thousand O001, two
-  thousand O008, a thousand O007, five hundred O003 and fifty O014, none
-  differ and no run reads what was moved. Taking no value on a move makes
-  412 of a thousand differ from the Rust and five runs read what was moved,
-  the then branch's state after every `if` 12 differ, and checking O007
-  against what the condition left rather than what was before it the
-  corpus's loop whose condition moves. The first version followed the
-  checker's `borrowed`, and borrowed a plain `set`'s key the Rust takes:
-  `set m[k] = 1` then `debuglog k` was let through, which the run, moving
-  as the checker has it, read empty; the review that found it, run on the
-  model by hand, is why the run is now held to the analysis directly.
-- **What is dropped where is modelled, held to the Rust, and proved to
-  drop each value once on every path** (`FunMove.lean`, `FunDrop.lean`;
-  the proof is `fun_ok`, in `Proofs/DropFun.lean`, and
-  [plan-drop-proof.md](plan-drop-proof.md) says how it goes). The ownership analysis decides,
-  for each point a function leaves a scope by, which bindings still own a
-  value there (`DropSchedule`), and lowering only carries that out, so the
-  schedule is where a drop is decided right or wrong. The move analysis
-  keeps it as it goes, as the Rust's does, in the state its walk threads
-  (`DSt`): it numbers the statements as the Rust's `alloc_stmt_id` does,
-  every one in order, each before what it holds, dead ones too
+  argument in its body, which then changed the const on every engine (the pass
+  knew it only as a name); it is O011 now (backend fixture
+  `1046_a_const_outside_a_function_passed_mut_error`). Where branches meet,
+  whether a variable was moved has to agree, where whether it was given a
+  value need not: an `if`'s or `match`'s branches that complete (O008), what
+  is moved after being what the first of them left, or the first branch where
+  none completes, as the Rust's `analyze_if` and `analyze_match` take it; a
+  loop's ways out (O014), running out leaving what the condition left; and
+  each way back to a loop's start, which may not have moved what was unmoved
+  before the condition (O007). `moves_agree` in `fun_tests` holds the Rust's
+  ownership codes to the model's, the first code reported as well as whether
+  there is one, on `datalove_worldgen::moves_script`'s functions, which
+  `ownership_fuzz_tests` runs too, with three operands in ten naming whatever
+  they like, and on a corpus of hand-written bodies in the shapes the
+  generator makes rarely: loop exits, a condition that moves, branches that
+  both return, keys, consts and borrowed bindings, and a walked collection
+  changed through a field, shadowed, walked twice and changed after its loop,
+  and each kind of binding passed `mut` or `out`. Over ten thousand seeds, two
+  hundred O015, three hundred O011 and forty O004, none differ; not marking
+  what is walked makes the corpus's seven differ, letting everything be passed
+  `mut` ten, reporting O011 for what is bound by reference three, and letting
+  a temporary through three. It also runs each script with `runScriptMoves`
+  and requires that where the analysis lets it through, and the Rust reports
+  neither O010 nor O017, which see that no argument a call writes back through
+  is moved before the call takes it, the run never reads what was moved: the
+  theorem not yet proved, held to the model's run. Over twenty-five thousand
+  seeds, four thousand O001, two thousand O008, a thousand O007, five hundred
+  O003 and fifty O014, none differ and no run reads what was moved. Taking no
+  value on a move makes 412 of a thousand differ from the Rust and five runs
+  read what was moved, the then branch's state after every `if` 12 differ, and
+  checking O007 against what the condition left rather than what was before it
+  the corpus's loop whose condition moves. The first version followed the
+  checker's `borrowed`, and borrowed a plain `set`'s key the Rust takes: `set
+  m[k] = 1` then `debuglog k` was let through, which the run, moving as the
+  checker has it, read empty; the review that found it, run on the model by
+  hand, is why the run is now held to the analysis directly.
+
+### Drops
+
+- **What is dropped where is modelled, held to the Rust, and proved to drop
+  each value once on every path** (`FunMove.lean`, `FunDrop.lean`; the proof
+  is `fun_ok`, in `Proofs/DropFun.lean`, and
+  [plan-drop-proof.md](plan-drop-proof.md) says how it goes). The ownership
+  analysis decides, for each point a function leaves a scope by, which
+  bindings still own a value there (`DropSchedule`), and lowering only carries
+  that out, so the schedule is where a drop is decided right or wrong. The
+  move analysis keeps it as it goes, as the Rust's does, in the state its walk
+  threads (`DSt`): it numbers the statements as the Rust's `alloc_stmt_id`
+  does, every one in order, each before what it holds, dead ones too
   (`stmtKinds`, in `FunDrop.lean`, says what that numbering is), and gives
-  each binding an identity of its own, as a `BindingId` is. What is dropped
-  is what is owned -- not copy and not borrowed, a const declared in the body
-  among it, as `alloc_const_binding` has it -- and live, or
-  perhaps holding a value: a `var` moved before a loop that the loop gives a
-  value again holds one from then on, and joins every way out of the
-  function scheduled from where it was made on, its tracking byte saying
-  whether there is anything to drop, as the Rust's `maybe_held` does. A
-  branch's, an arm's or a loop body's end drops what its own scope made,
-  even where the scope never reaches its end; a `break` or `continue` what
-  the scopes back to the loop made; a `ret`, and the body's end, what the
-  function holds; a `?` what is held once its statement's expressions have
-  run, a `set`'s value and keys both, with what they moved on the way
-  listed apart, for a
-  return before the move, each with the expression that moved it; and a
-  `set` through `?` or `!` what is held once its keys have run. An
-  expression is named as the Rust names it, by its index in its function's
-  expression arena, which the walk keeps as the parser fills it: each
-  expression after its parts, a place its root and one for each step after
-  its keys, and an index under `?` or `!` two (`Expr.nodes`).
-  `datalove script-drops` writes a script's schedules, the statements in
-  the order they were numbered too in a debug build, and `drops_agree` in
-  `fun_tests` holds the two to each other on `moves_agree`'s scripts the
-  Rust accepts: the numbering first, then every point, its names sorted,
-  since the Rust lists them in the order of a map. Over ten thousand seeds,
-  eighty-four thousand points, a hundred and thirty-seven of them naming
-  where a binding is moved, none differ. Counting a copy or a borrowed
-  binding as owned makes five hundred functions of a hundred seeds differ,
-  never holding what a loop gives a value two of a thousand, dropping at a
-  `?` what was held before its expression four of the corpus, and no point
-  for a `set`'s place three; naming each move one expression late makes 23
-  functions of a thousand seeds differ, and a struct literal filing no
-  expression of its own 17. The model found that a `?` in a `debuglog`
-  scheduled nothing: a failed one returned without dropping what the
-  function owned, which leaked on every engine; it is
-  `analyze_leaving_expr`'s now, as every other statement's expression is
+  each binding an identity of its own, as a `BindingId` is. What is dropped is
+  what is owned -- not copy and not borrowed, a const declared in the body
+  among it, as `alloc_const_binding` has it -- and live, or perhaps holding a
+  value: a `var` moved before a loop that the loop gives a value again holds
+  one from then on, and joins every way out of the function scheduled from
+  where it was made on, its tracking byte saying whether there is anything to
+  drop, as the Rust's `maybe_held` does. A branch's, an arm's or a loop body's
+  end drops what its own scope made, even where the scope never reaches its
+  end; a `break` or `continue` what the scopes back to the loop made; a `ret`,
+  and the body's end, what the function holds; a `?` what is held once its
+  statement's expressions have run, a `set`'s value and keys both, with what
+  they moved on the way listed apart, for a return before the move, each with
+  the expression that moved it; and a `set` through `?` or `!` what is held
+  once its keys have run. An expression is named as the Rust names it, by its
+  index in its function's expression arena, which the walk keeps as the parser
+  fills it: each expression after its parts, a place its root and one for each
+  step after its keys, and an index under `?` or `!` two (`Expr.nodes`).
+  `datalove script-drops` writes a script's schedules, the statements in the
+  order they were numbered too in a debug build, and `drops_agree` in
+  `fun_tests` holds the two to each other on `moves_agree`'s scripts the Rust
+  accepts: the numbering first, then every point, its names sorted, since the
+  Rust lists them in the order of a map. Over ten thousand seeds, eighty-four
+  thousand points, a hundred and thirty-seven of them naming where a binding
+  is moved, none differ. Counting a copy or a borrowed binding as owned makes
+  five hundred functions of a hundred seeds differ, never holding what a loop
+  gives a value two of a thousand, dropping at a `?` what was held before its
+  expression four of the corpus, and no point for a `set`'s place three;
+  naming each move one expression late makes 23 functions of a thousand seeds
+  differ, and a struct literal filing no expression of its own 17. The model
+  found that a `?` in a `debuglog` scheduled nothing: a failed one returned
+  without dropping what the function owned, which leaked on every engine; it
+  is `analyze_leaving_expr`'s now, as every other statement's expression is
   (backend fixture `1047_a_question_mark_in_debuglog_drops_what_is_owned`),
-  and the move generator writes a `?` in a `debuglog`, and after a value
-  given to the same call, which with the fix undone fails 67 of the
-  ownership fuzz test's 2000 seeds. Setting out the proof of the schedule
-  found that a `set` scheduled a return's drops once its value had run,
-  before its keys: a key whose call took a binding and then returned at a
-  `?` in its next argument, or a checked or optional operator, which returns
-  after every key, dropped what the key's call had taken a second time.
-  They are scheduled once the keys have run now, what the keys moved listed
-  apart as the value's is (engine fixture
-  `1048_a_key_that_moves_then_returns_early_drops_once`), and the move
-  generator sets keys of a map that move and return, which with the fix
-  undone fails 4 of the ownership fuzz test's 2000 seeds. It also found that a
-  var moved before a loop and given a value by a loop inside it was added
-  to what a way out drops only from the inner loop's first statement on,
+  and the move generator writes a `?` in a `debuglog`, and after a value given
+  to the same call, which with the fix undone fails 67 of the ownership fuzz
+  test's 2000 seeds. Setting out the proof of the schedule found that a `set`
+  scheduled a return's drops once its value had run, before its keys: a key
+  whose call took a binding and then returned at a `?` in its next argument,
+  or a checked or optional operator, which returns after every key, dropped
+  what the key's call had taken a second time. They are scheduled once the
+  keys have run now, what the keys moved listed apart as the value's is
+  (engine fixture `1048_a_key_that_moves_then_returns_early_drops_once`), and
+  the move generator sets keys of a map that move and return, which with the
+  fix undone fails 4 of the ownership fuzz test's 2000 seeds. It also found
+  that a var moved before a loop and given a value by a loop inside it was
+  added to what a way out drops only from the inner loop's first statement on,
   though the outer loop's next pass may return holding it before the inner
   loop: it leaked (engine fixture
   `1049_a_var_an_inner_loop_gives_is_dropped_before_it_on_the_next_pass`),
-  which the generator meets once in 4000 seeds with the fix undone. The
-  model also notes the plain `set`s whose target holds nothing once the
-  value has run (`noteOverMoved`, the Rust's `set_over_moved`), whose store
-  lowering does not destroy first: `drops_agree` compares them, 330 over
-  four thousand seeds, and looking at the target before the value runs
-  makes 256 functions differ. A place a hint was folded into,
-  `(: T / p).a`, the model takes as steps on what is hinted, and counts
-  the hint and the hinted place the parser files for it both
-  (`Expr.nodes`), so that what follows is named alike: counting the hint
-  alone named a move after one an expression early. The move generator
-  reads a struct's field through one.
+  which the generator meets once in 4000 seeds with the fix undone. The model
+  also notes the plain `set`s whose target holds nothing once the value has
+  run (`noteOverMoved`, the Rust's `set_over_moved`), whose store lowering
+  does not destroy first: `drops_agree` compares them, 330 over four thousand
+  seeds, and looking at the target before the value runs makes 256 functions
+  differ. A place a hint was folded into, `(: T / p).a`, the model takes as
+  steps on what is hinted, and counts the hint and the hinted place the parser
+  files for it both (`Expr.nodes`), so that what follows is named alike:
+  counting the hint alone named a move after one an expression early. The move
+  generator reads a struct's field through one.
+- **A function's drop schedule drops each value it owns exactly once on
+  every path** (`fun_ok`, in `Proofs/DropFun.lean`). For a function the
+  move analysis accepts, on every way through its body -- each `if` one
+  branch, each `match` one arm, each loop any number of passes, each
+  expression that can return early finishing or returning after any of its
+  moves -- every point the path passes, and the body's end where it gets
+  there, drops each owned binding of the scopes it leaves that holds a
+  value on the path, and nothing else but a binding with a tracking byte.
+  The path moves what the walk says each statement moves; that the run
+  moves the same is `moves_agree`, tested. The theorem takes only the move
+  analysis's acceptance, and a path through a call may hold a `mut` or
+  `out` argument that a later argument moved before a `?` between them
+  returned; that no argument does is O017 and O010, which the Rust refuses
+  and the model decides apart (`FunHeld.lean`, `FunAlias.lean`), so the
+  result is of functions the Rust accepts.
+  [plan-drop-proof.md](plan-drop-proof.md) has the argument and what it
+  leaves out.
+
+### Aliasing and held operands
+
 - **Passing by pointer is copying in and out where nothing written is
   shared** (`PassBy.ptr_eq_copy`, in `Proofs/PassBy.lean`). The model's
   copy-in, copy-out is the meaning of a call; the Rust passes every
@@ -1016,63 +1129,6 @@ Four things are proved of it:
   held, makes 32 of 900 differ. An `out` argument's keys are read as a
   `set`'s are, with the place held (`outKeyClashes`).
 
-- **A script that checks runs soundly** (`Fun.runScript_sound`, in
-  `Proofs/RunSound.lean`, of `runScript` in `FunRun.lean`). Run statement by
-  statement as `checkScript` checks them, each top-level `debuglog` logs a
-  value of the type the checker gives it, and the script ends, or returns
-  early with a value of its type `!()`, or stops at a `Gap`, at a
-  variable read before it is set, or where a loop or calls ran as long as
-  they were given. It puts the theorems above together. As the Rust does,
-  the script's top-level consts are evaluated first, in order (`constPass`),
-  and every function is in the table calls run from the start, wherever it
-  is declared, with the values of the consts declared above it, the latest
-  of each name and type (`constEnv`). Each evaluated const holds a value of
-  its type (`StoreOk`), so each function is as `ProgOk` asks, by the
-  check-once theorem and since F088 keeps a top-level const's type free of
-  type parameters (`funTable_ok`). A const's expression reads only consts
-  above it, through the functions it calls too, as F089 sees to; the model
-  does not need that for soundness, since a const it read before it was
-  evaluated would read as unset, a stop a script may end with, and
-  `Fun.runScript_noUninit` shows F089 rules that stop out. A function goes into the
-  table under the signature `resolveNames` gave its name, and the runner
-  checks nothing more of it. In a script that checks, that signature is its
-  own, with its type parameters and as many parameters (`Fun.resolveNames_own`,
-  in `Proofs/Sigs.lean`, since a second function of a name is F086 and a
-  signature that does not convert is reported), and its body declares no type
-  alias: the model reports P074 for one at the top level (`checkDecl`), as the
-  parser refuses it, so a script that checks quietly has none.
-- **Inference under a generic steps with inference under its instances**
-  (`Fun.inferEnv_inst`, in `Proofs/Lockstep.lean`). Substituting type
-  arguments touches only known types, so a variable keeps its number, and
-  a state is substituted variable by variable. Run from a substituted state,
-  inference under an instance ends in the substituted state with the
-  substituted answer, or fails as the generic's did, unless the generic's
-  failed with F110 or ran out of fuel (`Lit.Lock`). Each decision either
-  comes out the same, since a ground type argument keeps the head of a type
-  whose head is no type parameter, or is one that depends on what a type
-  parameter stands for, which is F110 under the generic: a literal's class
-  against `T`, a value adapted to or from a type holding one that does not
-  adapt, `T` met by a type with parts or read for its parts, and a hint with
-  `T` inside a `rec` (T066). A generic that checks quietly met neither F110
-  nor running out, which is how the theorem's assumption is discharged. A
-  hint reads the same under the substituted aliases, failures included
-  (`Fun.convertIn_inst`), and a call's signature instantiates the same,
-  being well formed, so that no `rec` in it holds a type parameter
-  (`Fun.instantiate_inst`). Nothing is assumed: it rests on Lean's three
-  axioms alone, as every theorem here does.
-
-To make these provable, checking was made total: it takes inference as a
-parameter (`InferEnv`), which only says what types are and so cannot move an
-early return, and it runs on fuel, every call spending one, so that the
-recursion between checking and synthesis needs no measure. Running out is a
-failure, never a success, so the theorems hold for any fuel; the oracle gives
-a million. A statement's expression checks run on a fresh list of
-diagnostics, added to the statement's after, so that a statement that adds
-none is one whose checks all succeeded. And the statement checker is written
-with its binds explicit, the `match` and `if` of `do` notation otherwise
-copying what follows into every branch. Each of these leaves the answers as
-they were, which `fun_tests` confirms.
-
 ## Running it
 
 Lean comes through elan; `formal/lean-toolchain` pins the version, which
@@ -1081,24 +1137,25 @@ Lean comes through elan; `formal/lean-toolchain` pins the version, which
 - `just formal-build` builds the model and the oracle, checking every proof
   and the axioms each rests on.
   About twenty seconds from clean.
-- `just test-formal SEED COUNT` builds, then runs `oracle_tests`,
-  `lit_tests` and `fun_tests` over `COUNT` seeds from `SEED` (`random` draws one), as every generative suite takes its
-  seeds. `fun_tests` includes `instances_check`, which takes each generated
-  script the Rust checks cleanly, before and after the mutations that touch
-  generics, appends an instance of each of its generic functions, its type
-  parameters declared as aliases of type arguments their bounds admit, and
-  requires the Rust and the model both to report nothing: the check-once
-  theorem's conclusion, held to the Rust and its inference. It also
-  includes `world_typing_agrees`, which takes worldgen's worlds of up to
-  three modules, each requiring and importing from the ones before it and
-  calling them qualified, changes a module at a time as the scripts are,
-  checks them through the Rust's module graph, and holds each module's codes
-  to `checkWorld`'s, its F089 to `constWorld`'s as `world_consts_agrees`
-  does (`world_differs`). A diagnostic is the module's whose source its first
-  label points into. Over five thousand seeds 3480 worlds agree and none
-  differ; the rest are skipped, for a mutation that leaves a statement at
-  the top level, where the model takes only declarations, or for one that
-  leaves a require or import below a declaration.
+- `just test-formal SEED COUNT` builds, then runs `oracle_tests`, `lit_tests`
+  and `fun_tests` over `COUNT` seeds from `SEED` (`random` draws one), as
+  every generative suite takes its seeds. `fun_tests` includes
+  `instances_check`, which takes each generated script the Rust checks
+  cleanly, before and after the mutations that touch generics, appends an
+  instance of each of its generic functions, its type parameters declared as
+  aliases of type arguments their bounds admit, and requires the Rust and the
+  model both to report nothing: the check-once theorem's conclusion, held to
+  the Rust and its inference. It also includes `world_typing_agrees`, which
+  takes worldgen's worlds of up to three modules, each requiring and importing
+  from the ones before it and calling them qualified, changes a module at a
+  time as the scripts are, checks them through the Rust's module graph, and
+  holds each module's codes to `checkWorld`'s, its F089 to `constWorld`'s as
+  `world_consts_agrees` does (`world_differs`). A diagnostic is the module's
+  whose source its first label points into. Over five thousand seeds 3480
+  worlds agree and none differ; the rest are skipped, for a mutation that
+  leaves a statement at the top level, where the model takes only
+  declarations, or for one that leaves a require or import below a
+  declaration.
 - Every script `fun_tests` makes parses, mutated or not, and `rust_side`
   fails the test on one that does not, before type checking it: the type
   checker is not made to run on what a parse error leaves, which the CLI
@@ -1120,7 +1177,7 @@ job of their own that installs elan (`.github/workflows/ci.yml`).
 ## Keeping it true
 
 A change to a function in the table under
-[What is modelled](#user-content-what-is-modelled) needs the same change to
+[The type language](#user-content-the-type-language) needs the same change to
 its Lean transcription, or `oracle_tests` fails on the cases that differ.
 The change may then break a proof, which is the point: either the proof is
 repaired, or the change broke a property the language promised, and the docs
@@ -1160,19 +1217,19 @@ In rough order of what to do next:
   then.
 
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
-- **Order independence.** The doc claims that where unification's
-  constraints all hold and no `rec` is involved, the order of a
-  collection's elements does not change what it synthesizes. With `rec` it
-  does not hold ([the issue](issues.md#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
+- **Order independence.** The doc claims that where unification's constraints
+  all hold and no `rec` is involved, the order of a collection's elements does
+  not change what it synthesizes. With `rec` it does not hold ([the
+  issue](issues.md#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
   Without, it is tested, not proved: `lit_tests`'s `order_does_not_matter`
   puts generated pairs in a list both ways, holds the Rust to the model on
   each, and requires that where either order checks both do, to one type;
-  thirty thousand seeds give nearly twenty thousand pairs, eight thousand
-  of which check, and no failure. Removing its `rec` filter finds the issue
+  thirty thousand seeds give nearly twenty thousand pairs, eight thousand of
+  which check, and no failure. Removing its `rec` filter finds the issue
   again. A proof needs that unification computes the unique most general
   solution of its constraints, since two orders do not step together as a
-  generic and its instance do; it is better left until the canonical form
-  the issue proposes settles what a recursive type's spelling is.
+  generic and its instance do; it is better left until the canonical form the
+  issue proposes settles what a recursive type's spelling is.
 - **Calls the model does not run.** A call with a recursive type argument
   stops, until the check-once theorem takes one.
 - **Recursive type arguments.** The check-once theorem takes type arguments

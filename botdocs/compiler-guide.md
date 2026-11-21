@@ -111,7 +111,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-rider-sys-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |
 | `datalove-tests` | Workspace-wide test suites |
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
-| `datalove-formal-tests` | The type relations held to the Lean model in `formal/`, and the laws it proves held to the Rust; see [formal.md](formal.md) |
+| `datalove-formal-tests` | The Lean model in `formal/` held to the Rust as an oracle: the type relations, literal typing, datafun checking, running a script, and the ownership analyses; and the laws it proves held to the Rust alone; see [formal.md](formal.md) |
 | `datalove-bench` | Divan benchmarks |
 | `datalove-doc-fixtures` | The fixtures behind what the docs show the engine producing, and the tests that keep them fresh; see [doc-fixtures.md](doc-fixtures.md) |
 | `datalove-script-steps` | Script sessions driven a change at a time and compared with a fresh run, for the step tables and the generated sessions |

@@ -383,7 +383,7 @@ The postfix `@` clones, and converts where a type is expected. `T ⇝ U`, "a
 Nothing else adapts. There is no narrowing, and no enum adapts to another.
 On well-formed types `⇝` is reflexive and transitive, so `@` never needs to be
 written twice; the Lean model proves it (see
-[Proving the Type System](formal.md)).
+[The Formal Model](formal.md)).
 
 ```
 Γ ⊢ e ⇒ T    T ⇝ U                Γ ⊢ e ⇒ T
@@ -931,7 +931,7 @@ afterwards, decides which faults after the first are reported:
   a later alias may take the name; an alias of a name taken (F066) is
   refused without its body being converted, and the first stays.
 
-The Lean model of these rules ([Proving the Type System](formal.md)) does the
+The Lean model of these rules ([The Formal Model](formal.md)) does the
 same, and its tests hold the Rust to it.
 
 ## Diagnostics
