@@ -2,9 +2,10 @@
 
 The formal model's drop schedule agrees with the Rust's (`drops_agree`), but
 agreeing with the Rust is not being right: two implementations of one wrong
-rule agree. This plan is for a proof, in `formal/`, that the schedule the
-move analysis builds drops each value a function owns exactly once on every
-way through the function.
+rule agree. This is the proof, in `formal/`, that the schedule the move
+analysis builds drops each value a function owns exactly once on every way
+through the function: `fun_ok`, in `Proofs/DropFun.lean`. It began as a
+plan; [Where the proof is](#user-content-where-the-proof-is) maps it.
 
 ## Contents
 
@@ -14,7 +15,7 @@ way through the function.
 - [Why it holds](#user-content-why-it-holds)
 - [What it leaves out](#user-content-what-it-leaves-out)
 - [What setting it out found](#user-content-what-setting-it-out-found)
-- [Steps](#user-content-steps)
+- [Where the proof is](#user-content-where-the-proof-is)
 
 ## The problem
 
@@ -102,8 +103,16 @@ holds what was live after it plus what it had not yet moved, which is the
 - **That lowering carries the schedule out.** The IR's drop check
   (`ir.md`, "The drop check") holds lowering to its own consistency in a
   debug build; nothing compares it with the schedule.
-- **A `set` to a binding that is not a `var`.** Typechecking refuses it,
-  and the move analysis does not look; the proof takes it as given.
+- **A `set` to a binding that is not a `var`.** The move analysis refuses
+  one now (`writableM`, O011), so the proof needs nothing of typechecking
+  here.
+- **A `break` or `continue` outside a loop.** Typechecking refuses one. A
+  path through a body that leaves by one is a path still, and its points
+  are right, but the theorem says nothing of where it goes after.
+- **Statements outside a function.** The theorem is per function; a
+  script's top-level statements have no schedule of their own.
+- **A walk out of fuel.** Paths are only those the walk took with fuel to
+  spare; the analysis runs at a fuel no real body reaches.
 
 ## What setting it out found
 
@@ -122,14 +131,27 @@ Rust and in the model alike:
   every way out from where it was made on now: wider than needed, which its
   tracking byte makes harmless, and what the proof can say in a line.
 
-## Steps
+## Where the proof is
 
-1. The path relation, over the walk's run: a statement's step taken from the
-   walk's sub-results, the path's state threaded beside the walk's.
-2. That along an expression what is live only shrinks (`mE` and its parts).
-3. That the schedule only grows after a point is recorded: later points are
-   added, and a way out of the function gains only perhaps-held bindings.
-4. The invariant through each statement, by induction on the walk's fuel,
-   and the two properties at each point from it.
-5. The theorem for a function, and `formal.md`'s entry moved from "not
-   proved" to proved.
+Under `formal/Datalove/Proofs/`:
+
+- **The path relation** (`DropPath.lean`, `DropProof.lean`): a path's state
+  (`delta`, `Rel`), the points it passes (`Ev`, `Ev.Good`), and the paths
+  through a statement, a block, a branch, a `match`'s cases and a loop's
+  passes (`PStmt`, `PBlock`, `PBranch`, `PCases`, `PIter`), each a step the
+  walk took.
+- **What is live only shrinks along an expression** (`DropShrink.lean`,
+  `mE_shr` and its parts).
+- **The schedule only grows** (`DropSched.lean`, `DropWalk.lean`:
+  `SchedExt`, `walk_ext`), and the walk keeps the bindings it was given in
+  place (`DropLen.lean`: `walk_len`, `walk_shape`).
+- **The invariant through each statement** (`DropSpec.lean`: `Inv`;
+  `DropProof.lean`: `stmt_ok`, `block_ok`, `branch_ok`, `cases_ok`,
+  `iter_ok`, by induction on the walk's fuel and a loop's passes). A pass
+  of a loop starts from the walk's state at the loop's start, related to
+  the path's by `Rel` in a frame where a binding the loop gave a value may
+  diverge; `DropLoop.lean` has what the loop's checks and `loopHeld` say of
+  every pass.
+- **The theorem for a function** (`DropFun.lean`: `fun_ok`), from the
+  parameters' bindings, where the path holds everything and nothing
+  diverges.

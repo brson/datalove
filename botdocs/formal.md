@@ -125,6 +125,18 @@ Under `formal/Datalove/Proofs/`:
 - **In datafun, every early return fits the function, `completes` is
   sound, a `match` covers its enum, and checking a generic once is
   enough**; see [Statements](#user-content-statements).
+- **A function's drop schedule drops each value it owns exactly once on
+  every path** (`fun_ok`, in `Proofs/DropFun.lean`). For a function the
+  move analysis accepts, on every way through its body -- each `if` one
+  branch, each `match` one arm, each loop any number of passes, each
+  expression that can return early finishing or returning after any of its
+  moves -- every point the path passes, and the body's end where it gets
+  there, drops each owned binding of the scopes it leaves that holds a
+  value on the path, and nothing else but a binding with a tracking byte.
+  The path moves what the walk says each statement moves; that the run
+  moves the same is `moves_agree`, tested.
+  [plan-drop-proof.md](plan-drop-proof.md) has the argument and what it
+  leaves out.
 - **A recursive type meets its one-step unfolding** (`Ty.meet_unfold`), on
   well-formed types, however many `rec`s it starts with.
 - **`@` is reflexive and transitive** on well-formed types (`Ty.adapt_refl`,
@@ -134,8 +146,8 @@ The build fails on any warning, and a `sorry` is one, so a proof left
 unfinished cannot pass for a finished one. Every theorem rests on Lean's
 three standard axioms, `propext`, `Classical.choice` and `Quot.sound`, and
 nothing else, and the build checks it: `formal/AxiomCheck.lean` collects the
-axioms of every theorem and definition in a `Datalove` module, about six
-thousand, and fails on any other, a `sorryAx` that got past the warning, a
+axioms of every theorem and definition in a `Datalove` module, about seven
+and a half thousand, and fails on any other, a `sorryAx` that got past the warning, a
 `Lean.ofReduceBool` that `native_decide` would bring in, or an `axiom` the
 model declared. The finite case splits use `decide +kernel`, which the kernel
 checks.
@@ -846,8 +858,10 @@ Four things are proved of it:
   `set m[k] = 1` then `debuglog k` was let through, which the run, moving
   as the checker has it, read empty; the review that found it, run on the
   model by hand, is why the run is now held to the analysis directly.
-- **What is dropped where is modelled and held to the Rust, but not
-  proved** (`FunMove.lean`, `FunDrop.lean`). The ownership analysis decides,
+- **What is dropped where is modelled, held to the Rust, and proved to
+  drop each value once on every path** (`FunMove.lean`, `FunDrop.lean`;
+  the proof is `fun_ok`, in `Proofs/DropFun.lean`, and
+  [plan-drop-proof.md](plan-drop-proof.md) says how it goes). The ownership analysis decides,
   for each point a function leaves a scope by, which bindings still own a
   value there (`DropSchedule`), and lowering only carries that out, so the
   schedule is where a drop is decided right or wrong. The move analysis
