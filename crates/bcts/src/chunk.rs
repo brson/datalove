@@ -315,22 +315,16 @@ fn cut(
             }
         }
         CollectionKind::Table => {
-            // A row begins at a token a line break came before, as
-            // `split::Lines` has it; the first line is the header.
-            let mut cursor = level;
-            let mut header_from = None;
-            while let Some(index) = cursor.next_index() {
-                let token = cursor.raw(index);
-                match header_from {
-                    None => header_from = Some(index),
-                    Some(from) if token.newline_before => {
-                        if header.is_none() {
-                            header = Some((from, index));
-                        }
-                        chunker.item(index, token.span().start, true);
-                    }
-                    Some(_) => {}
+            // A row is a line, as the parsers read them; the first is the
+            // header.
+            let mut lines = split::Lines::new(level);
+            let first = lines.next();
+            for line in lines {
+                let at = line.position();
+                if header.is_none() {
+                    header = first.map(|first| (first.position(), first.end()));
                 }
+                chunker.item(at, line.raw(at).span().start, true);
             }
         }
         CollectionKind::Tensor => {

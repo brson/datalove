@@ -39,7 +39,7 @@ escaped       = "\", ? any character ? ;   (* what it means is the parser's: D03
 
 whitespace    = space, { space } ;
 space         = ? a Unicode whitespace character but "\n" ? ;
-newline       = "\n" | ";" ;               (* a ";" is a line break *)
+newline       = "\n" ;
 comment       = line_comment | block_comment ;
 line_comment  = "//", { ? any character except "\n" ? } ;
 block_comment = "/*", { block_comment | comment_char }, "*/" ;   (* nests *)
@@ -52,7 +52,8 @@ sigil         = "+?=" | "-?=" | "*?=" | "/?=" | "+!=" | "-!=" | "*!=" | "/!="
               | ":-" | "->" | "+?" | "-?" | "*?" | "/?" | "+!" | "-!" | "*!" | "/!"
               | "+=" | "-=" | "*=" | "/=" | ".." | ".<" | ".>" | "<=" | ">=" | "==" | "!="
               | "." | "," | "+" | "-" | "*" | "/" | "=" | "<" | ">" | "|" | "?" | "!"
-              | ":" | "#" | "@" | "%" | "(" | ")" | "{" | "}" | "[" | "]" | "$" | "~" ;
+              | ":" | "#" | "@" | "%" | "(" | ")" | "{" | "}" | "[" | "]" | "$" | "~"
+              | ";" ;
 
 (* ===== Errors ===== *)
 error         = stray, { stray }
@@ -70,7 +71,7 @@ Longest match decides what the grammar alone leaves open:
   one word: `truefalse` is one word, and `12` one, not `1` and `2`.
 - **Comments are whole.** A `/` followed by `/` or `*` begins a comment, never
   a sigil, so `: u8 //1` has no `/` token after `u8`. A line comment runs to
-  the end of its line, and a `;` in it is part of it. A block comment nests:
+  the end of its line. A block comment nests:
   `/* /* */ */` is one comment.
 - **A string or comment never closed is an error token** running to the end of
   the source, `error`'s second and third forms; a closed one is longer than

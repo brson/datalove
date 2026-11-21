@@ -49,8 +49,8 @@ impl Written {
 
 /// The lines of a cursor's tokens, the blank ones left out.
 ///
-/// A token begins a new line if a line break came before it: a newline
-/// outside a comment, or a `;`, which the lexer takes for one. Each line is a
+/// A token begins a new line if a newline outside a comment came before it,
+/// and a `;` of this level ends one, belonging to neither. Each line is a
 /// cursor over its part of the level, so a source's lines are found rather
 /// than collected.
 #[derive(Clone)]
@@ -71,22 +71,37 @@ impl<'db> Iterator for Lines<'db> {
 
     fn next(&mut self) -> Option<Cursor<'db>> {
         loop {
-            let Some((_, broke)) = self.rest.next_index_after_break() else {
+            let mut rest = self.rest;
+            let Some((index, broke)) = rest.next_index_after_break() else {
                 let line = self.rest.between(self.start, self.rest.end());
                 self.start = self.rest.end();
                 return (!line.is_empty()).then_some(line);
             };
             // A line begins at its break, which a stray close passed over
-            // may carry for the token after it.
-            if let Some(at) = broke {
+            // may carry for the token after it. The cursor stays before the
+            // token, so a `;` it may be is read on the next call.
+            if let Some(at) = broke.filter(|&at| at > self.start) {
                 let line = self.rest.between(self.start, at);
                 self.start = at;
                 if !line.is_empty() {
                     return Some(line);
                 }
             }
+            self.rest = rest;
+            if is_semicolon(&rest, index) {
+                let line = rest.between(self.start, index);
+                self.start = rest.position();
+                if !line.is_empty() {
+                    return Some(line);
+                }
+            }
         }
     }
+}
+
+/// Whether the level hands out a `;` at `index`.
+pub fn is_semicolon(tokens: &Cursor<'_>, index: u32) -> bool {
+    tokens.is_plain(index) && tokens.raw(index).kind == TokenKind::Sigil(Sigil::Semicolon)
 }
 
 /// Whether the level hands out a comma at `index`.

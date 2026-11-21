@@ -114,6 +114,7 @@ pub enum Sigil {
     BracketClose,
     Dollar,
     Tilde,
+    Semicolon,
 }
 
 /// Which sigils can begin with each byte, and whether any can.
@@ -156,8 +157,7 @@ impl SigilTable {
             let ch = byte as char;
             match () {
                 _ if !byte.is_ascii() => Class::NonAscii,
-                // A `;` is a line break written on the line, and nothing else.
-                _ if byte == b'\n' || byte == b';' => Class::Newline,
+                _ if byte == b'\n' => Class::Newline,
                 _ if ch.is_whitespace() => Class::Space,
                 _ if ch.is_ascii_alphanumeric() || byte == b'_' => Class::Word,
                 _ if byte == b'"' => Class::Quote,
@@ -371,8 +371,7 @@ impl<'db> Tokenizer<'db, '_> {
 
     fn token_start(ch: char) -> NextToken {
         match ch {
-            // A `;` is a line break, so it ends whatever ran up to it.
-            _ if ch.is_whitespace() || ch == ';' => NextToken::Whitespace,
+            _ if ch.is_whitespace() => NextToken::Whitespace,
             _ if Self::is_word_start(ch) => NextToken::Word,
             _ if Self::is_sigil_start(ch) => NextToken::Sigil,
             '"' => NextToken::Quote,
@@ -679,6 +678,7 @@ impl Sigil {
             Sigil::BracketClose => "]",
             Sigil::Dollar => "$",
             Sigil::Tilde => "~",
+            Sigil::Semicolon => ";",
         }
     }
 

@@ -18,8 +18,8 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Tensor axis separators: `,` between rows, `,,` between slabs, and so on
 
 - `;` - Semicolon
-  - A line break written on the line: the lexer takes it for a newline, so it
-    separates statements and table rows as one does
+  - A line break written on the line: it separates statements and table rows
+    as a newline does, and is an error anywhere else
 
 ### Adapt
 - `@` - At

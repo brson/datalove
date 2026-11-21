@@ -42,8 +42,9 @@ are D049, the comment having taken the hint's `/`. Brackets are matched
 before parsing.
 
 A newline means nothing but in a table, where it is the token `newline` and
-breaks a row. A type reads it as whitespace, so a table type may be written
-over several lines.
+breaks a row, as a `;` does. A type reads a newline as whitespace, so a table
+type may be written over several lines, but a `;` in one is an error. A `;`
+outside a table is a token no rule takes.
 
 The rules under `(* Written in characters *)` describe the text of one glued
 run of tokens, character by character, as the lexical grammar does: a
@@ -129,10 +130,11 @@ tensor_body    = tensor_row, { comma_run, tensor_row } ;
 tensor_row     = full_expr, { full_expr } ;
 comma_run      = ",", { "," } ;
 
-(* Table. A newline token breaks a row. *)
-table_expr     = "{|", { newline },
-                 [ table_header, { newline, { newline }, table_row } ],
-                 { newline }, "|}" ;
+(* Table. A newline or a ";" breaks a row. *)
+table_expr     = "{|", { row_break },
+                 [ table_header, { row_break, { row_break }, table_row } ],
+                 { row_break }, "|}" ;
+row_break      = newline | ";" ;
 table_header   = NAME, { ",", NAME }, [ "," ] ;    (* D031, D034, D038 *)
 table_row      = full_expr, { ",", full_expr }, [ "," ] ;  (* D030 *)
 
@@ -205,8 +207,9 @@ it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
   either flat, as many elements as the product of the extents, or shaped
   exactly as the header says (D041); zero extents are allowed, `[| 0 3 | |]`.
   A hint covers one element: `[| : u8 / 1 2 |]` is two elements.
-- **Table rows.** A `;` is a line break, so a run of them is blank rows,
-  which are free. A `,` with nothing before it is D033, a trailing one is
+- **Table rows.** A `;` breaks a row as a newline does, so a run of them is
+  blank rows, which are free. It does nothing else: `[1; 2]` is D021, and a
+  `;` in a table type is D022. A `,` with nothing before it is D033, a trailing one is
   fine. Every row has one cell per column (D030); each cell is one
   `full_expr`, so `{| x, y; 1 2, 3 |}` is D021. A header cell is one name
   (D031, D034), and names are unique (D038). The header is optional: `{||}`
@@ -245,6 +248,10 @@ ok         [| 1 -2 |]
 D050       [| 1 - 2 |]
 D023       [| 1 2, 3 |]
 D033       [| , 1 |]
+ok         {| x, y;; 1, 2; |}
+D021       [1; 2]
+D021       1;
+D022       : {| a: int; b: int |} {||}
 ok         [| 0 3 | |]
 D041       [| 2 2 | 1 2 3 |]
 ok         [| : u8 / 1 2 |]

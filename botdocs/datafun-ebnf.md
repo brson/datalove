@@ -37,10 +37,11 @@ alone cannot:
   ([spec Section 2.4](botspec.md#user-content-24-spacing)), and `~` is where it
   does. A `~` with nothing after it, as in `[ "-", ~ ], dec_number`, says the
   next token is glued to the one before it.
-- `EOL` is a statement break: a newline before a token at bracket depth 0. A
-  `;` is lexed as a newline, so it is one too. Inside any bracket pair a
-  newline is not an `EOL`, nor is one inside a block comment. `EOLS` is one or
-  more; blank lines are free.
+- `EOL` is a statement break: a newline before a token at bracket depth 0.
+  Inside any bracket pair a newline is not an `EOL`, nor is one inside a block
+  comment. `EOLS` is one or more `EOL`s and `;`s, so a `;` breaks a statement
+  as a newline does; blank lines are free. A `;` anywhere else is a token no
+  rule takes.
 - `end_line(k)` is a rule with a parameter, written once for every block's
   closing line: `end_line("fun")` is `"end", "fun"` on a line of its own.
 - `newline` is a table's row break, and the rules under
@@ -212,7 +213,7 @@ type          = ? as in the datalit grammar ? ;
                    function types and no type application. *)
 
 (* ===== Tokens  (lexical-grammar.md) ===== *)
-EOLS          = EOL, { EOL } ;
+EOLS          = ( EOL | ";" ), { EOL | ";" } ;
 EOL           = ? a newline outside brackets ? ;
 newline       = ? a newline in a table, outside brackets nested in it ? ;
 NAME          = ? an ASCII word not beginning with a digit ? ;   (* non-ASCII: D043 *)
@@ -248,7 +249,8 @@ derive, and everything it accepts, the grammar does. A test checks this (see
 
 - A statement ends at an `EOL`, so `let x = 1 +` then `2` on the next line is
   P081 and then P001, while the same split inside `(1 +` ... `2)` is one
-  statement. A `;` is a line break, so a run of them is blank lines.
+  statement. A `;` at bracket depth 0 is a line break, so a run of them is
+  blank lines; inside brackets it is an error, as in `f(1; 2)`, P021.
 - `end`, `else` and `case` are recognised only at the start of a line. An
   `end fun` inside an open `if` closes both, and the `if`, which lost its
   `end`, is P034 (see [Recovery](#user-content-recovery)).
@@ -270,6 +272,7 @@ P081,P001  let y = 1 +
 ok         let y = (1 +
              2)
 ok         let y = 1;;; let z = 2
+P021       let y = f(1; 2)
 P034       fun f()
              if a
              end fun

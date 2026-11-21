@@ -458,7 +458,7 @@ const NAMES: &[&str] = &["x", "y", "f", "go", "a1", "T", "_z", "xs", "none", "in
 pub fn sample(g: &TokenGrammar, char_sample: &dyn Fn(&str, &mut SeededRng) -> String, text: &str, rng: &mut SeededRng) -> String {
     match text {
         EOL => "\n".S(),
-        ROW_NEWLINE => if rng.random_bool(0.5) { "\n" } else { ";" }.S(),
+        ROW_NEWLINE => "\n".S(),
         NAME => NAMES[rng.random_range(0..NAMES.len())].S(),
         NUMBER_END => String::new(),
         t if t.starts_with(ISLAND) => {
@@ -494,7 +494,7 @@ pub fn join_tokens(pieces: &[Piece], rng: &mut SeededRng) -> String {
             Piece::Mark(m) => panic!("no assertion {m} is in the rules over tokens"),
             Piece::Text(t) if t.is_empty() => {}
             Piece::Text(t) => {
-                let newline = t == "\n" || t == ";" || text.ends_with('\n') || text.is_empty();
+                let newline = t == "\n" || text.ends_with('\n') || text.is_empty();
                 if !glue && !newline && (merges(&last, t) || rng.random_bool(0.5)) {
                     text.push(' ');
                 }

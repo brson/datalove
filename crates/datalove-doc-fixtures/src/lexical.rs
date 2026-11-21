@@ -45,7 +45,7 @@ fn is_word_char(c: char) -> bool {
 
 fn stray(c: char) -> bool {
     let sigil = SIGIL_STARTS.get().expect("the sigils are read with the grammar").contains(&c);
-    !(c.is_whitespace() || c == ';' || c == '"' || is_word_char(c) || sigil)
+    !(c.is_whitespace() || c == '"' || is_word_char(c) || sigil)
 }
 
 /// What each special sequence means, at a position.

@@ -471,9 +471,10 @@ Table literals use a line-oriented syntax:
 |}
 ```
 
-Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`. A `;` is a
-line break written on the line, here and between two statements alike, so a
-run of them is a blank line and not an error. A `,` between table columns goes
+Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`. A `;` breaks
+a line as a newline does, here and between two statements alike, so a run of
+them is a blank line and not an error. It does nothing else: one inside other
+brackets, as in `[1; 2]`, or in a table type, is an error. A `,` between table columns goes
 between two things, so one with nothing before it is an error (D033,
 `{| x,, y |}`); a trailing one closes what it follows and is fine. A list,
 struct or tuple takes a trailing comma as well.
