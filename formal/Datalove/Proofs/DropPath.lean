@@ -21,50 +21,52 @@ namespace Datalove.Fun
 
 /-- A binding the path holds and the walk has moved: owned, found perhaps
 held and tracked by the end of the function's walk (`F`), and held already
-at `st` or made before the innermost loop the path is in, whose bindings
-are numbered from `U`. -/
-def Div (F st : DSt) (U : Nat) (v : MVar) : Prop :=
-  v.owns = true ∧ v.uid ∈ F.held ∧ v.uid ∈ F.tracked ∧ (v.uid ∈ st.held ∨ v.uid < U)
+at `st` or one `H` says may diverge, made before a loop the path is in. -/
+def Div (F st : DSt) (H : Nat → Prop) (v : MVar) : Prop :=
+  v.owns = true ∧ v.uid ∈ F.held ∧ v.uid ∈ F.tracked ∧ (v.uid ∈ st.held ∨ H v.uid)
 
 /-- The walk's state and a path's, lined up: what the walk has live the
-path holds, and what the path holds the walk has live, or it diverges. -/
-inductive Rel (F st : DSt) (U : Nat) : MSt → List Bool → Prop where
-  | nil : Rel F st U [] []
+path holds, and an owned binding the path holds the walk has live, or it
+diverges. -/
+inductive Rel (F st : DSt) (H : Nat → Prop) : MSt → List Bool → Prop where
+  | nil : Rel F st H [] []
   | cons {v : MVar} {p : Bool} {σ : MSt} {π : List Bool} :
-      (v.live = true → p = true) → (p = true → v.live = true ∨ Div F st U v) → Rel F st U σ π →
-      Rel F st U (v :: σ) (p :: π)
+      (v.live = true → p = true) → (p = true → v.owns = true → v.live = true ∨ Div F st H v) →
+      Rel F st H σ π → Rel F st H (v :: σ) (p :: π)
 
-theorem Rel.length {F st : DSt} {U : Nat} : ∀ {σ : MSt} {π : List Bool}, Rel F st U σ π → π.length = σ.length
+theorem Rel.length {F st : DSt} {H : Nat → Prop} : ∀ {σ : MSt} {π : List Bool}, Rel F st H σ π →
+    π.length = σ.length
   | [], [], .nil => rfl
   | _ :: _, _ :: _, .cons _ _ t => by simp [Rel.length t]
 
-theorem Div.mono {F st st' : DSt} {U U' : Nat} {v : MVar} (h : Div F st U v)
-    (hs : ∀ u, u ∈ st.held → u ∈ st'.held) (hu : U ≤ U') : Div F st' U' v :=
-  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.imp (hs _) (fun l => Nat.lt_of_lt_of_le l hu)⟩
+theorem Div.mono {F st st' : DSt} {H H' : Nat → Prop} {v : MVar} (h : Div F st H v)
+    (hs : ∀ u, u ∈ st.held → u ∈ st'.held) (hH : ∀ u, H u → H' u) : Div F st' H' v :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.imp (hs _) (hH _)⟩
 
-theorem Rel.mono {F st st' : DSt} {U U' : Nat} (hs : ∀ u, u ∈ st.held → u ∈ st'.held) (hu : U ≤ U') :
-    ∀ {σ : MSt} {π : List Bool}, Rel F st U σ π → Rel F st' U' σ π
+theorem Rel.mono {F st st' : DSt} {H H' : Nat → Prop} (hs : ∀ u, u ∈ st.held → u ∈ st'.held)
+    (hH : ∀ u, H u → H' u) : ∀ {σ : MSt} {π : List Bool}, Rel F st H σ π → Rel F st' H' σ π
   | [], [], .nil => .nil
-  | _ :: _, _ :: _, .cons a b t => .cons a (fun hp => (b hp).imp id (fun d => d.mono hs hu)) (Rel.mono hs hu t)
+  | _ :: _, _ :: _, .cons a b t =>
+    .cons a (fun hp ho => (b hp ho).imp id (fun d => d.mono hs hH)) (Rel.mono hs hH t)
 
-theorem Rel.drop {F st : DSt} {U : Nat} (n : Nat) : ∀ {σ : MSt} {π : List Bool}, Rel F st U σ π →
-    Rel F st U (σ.drop n) (π.drop n)
+theorem Rel.drop {F st : DSt} {H : Nat → Prop} (n : Nat) : ∀ {σ : MSt} {π : List Bool}, Rel F st H σ π →
+    Rel F st H (σ.drop n) (π.drop n)
   | [], [], .nil => by simp; exact .nil
   | _ :: _, _ :: _, .cons a b t => by
     cases n with
     | zero => exact .cons a b t
     | succ n => simpa using Rel.drop n t
 
-theorem Rel.take {F st : DSt} {U : Nat} (n : Nat) : ∀ {σ : MSt} {π : List Bool}, Rel F st U σ π →
-    Rel F st U (List.take n σ) (List.take n π)
+theorem Rel.take {F st : DSt} {H : Nat → Prop} (n : Nat) : ∀ {σ : MSt} {π : List Bool}, Rel F st H σ π →
+    Rel F st H (List.take n σ) (List.take n π)
   | [], [], .nil => by simp; exact .nil
   | _ :: _, _ :: _, .cons a b t => by
     cases n with
     | zero => simp; exact .nil
     | succ n => simpa using .cons a b (Rel.take n t)
 
-theorem Rel.append {F st : DSt} {U : Nat} {σ1 σ2 : MSt} {π1 π2 : List Bool}
-    (h1 : Rel F st U σ1 π1) (h2 : Rel F st U σ2 π2) : Rel F st U (σ1 ++ σ2) (π1 ++ π2) := by
+theorem Rel.append {F st : DSt} {H : Nat → Prop} {σ1 σ2 : MSt} {π1 π2 : List Bool}
+    (h1 : Rel F st H σ1 π1) (h2 : Rel F st H σ2 π2) : Rel F st H (σ1 ++ σ2) (π1 ++ π2) := by
   induction h1 with
   | nil => exact h2
   | cons a b _ ih => exact .cons a b ih
@@ -78,8 +80,8 @@ def delta : MSt → MSt → List Bool → List Bool
 
 /-- A step of an expression keeps what `Rel` says: what it leaves is below
 what it was given. -/
-theorem Rel.step {F st st' : DSt} {U : Nat} (hs : ∀ u, u ∈ st.held → u ∈ st'.held) :
-    ∀ {σ σ' : MSt} {π : List Bool}, Rel F st U σ π → σ'.Below σ → Rel F st' U σ' (delta σ σ' π)
+theorem Rel.step {F st st' : DSt} {H : Nat → Prop} (hs : ∀ u, u ∈ st.held → u ∈ st'.held) :
+    ∀ {σ σ' : MSt} {π : List Bool}, Rel F st H σ π → σ'.Below σ → Rel F st' H σ' (delta σ σ' π)
   | [], [], [], .nil, .nil => .nil
   | v :: σ, w :: σ', p :: π, .cons a b t, .cons bw bt => by
     simp only [delta]
@@ -87,10 +89,10 @@ theorem Rel.step {F st st' : DSt} {U : Nat} (hs : ∀ u, u ∈ st.held → u ∈
     · intro hw
       have hv := bw.2.2.2.2.2.2.2.2 hw
       simp [hv, hw, a hv]
-    · intro hp
+    · intro hp ho
       split at hp
       · next e =>
-        rcases b hp with h | d
+        rcases b hp (bw.2.2.1 ▸ ho) with h | d
         · left; simp only [beq_iff_eq] at e; rw [← e]; exact h
         · right
           have u := bw.2.1; have o := bw.2.2.1

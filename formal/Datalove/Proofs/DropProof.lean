@@ -144,10 +144,10 @@ end
 says: on to what follows, with what it carries; at a `break` or a
 `continue`, with what it carries at one of the walk's; or out of the
 function. -/
-def OutOk (F st : DSt) (U base : Nat) (r : MOut) : POut → Prop
-  | .norm π => Inv F st U base r.1 π
-  | .brk π => ∃ τ, τ ∈ r.2.1 ∧ Inv F st U base τ π
-  | .cont π => ∃ τ, τ ∈ r.2.2 ∧ Inv F st U base τ π
+def OutOk (F st : DSt) (U : Nat) (H : Nat → Prop) (base : Nat) (r : MOut) : POut → Prop
+  | .norm π => Inv F st U H base r.1 π
+  | .brk π => ∃ τ, τ ∈ r.2.1 ∧ Inv F st U H base τ π
+  | .cont π => ∃ τ, τ ∈ r.2.2 ∧ Inv F st U H base τ π
   | .exit => True
 
 theorem MoveM.det {α} {m : MoveM α} {st : DSt} {a b : α × DSt} (h1 : m.run st = .ok a) (h2 : m.run st = .ok b) :
@@ -188,8 +188,9 @@ variable (sigs : List (String × Sig)) (env : InferEnv)
 
 theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DSt} {π : List Bool} {out : POut}
     {evs : List Ev} (hp : PStmt sigs env n Γ σ base s st π out evs) {r : MOut} {st' F : DSt} {U : Nat}
-    (hw : (mStmt sigs env n Γ σ base s).run st = .ok (r, st')) (w : st.WF) (inv : Inv F st U base σ π)
-    (hF : SchedExt st' F) : (∀ ev, ev ∈ evs → ev.Good F) ∧ OutOk F st' U base r out := by
+    {H : Nat → Prop} (hw : (mStmt sigs env n Γ σ base s).run st = .ok (r, st')) (w : st.WF)
+    (inv : Inv F st U H base σ π) (hF : SchedExt st' F) :
+    (∀ ev, ev ∈ evs → ev.Good F) ∧ OutOk F st' U H base r out := by
   cases hp with
   | let_fin hid h2 h3 =>
     unfold mStmt at hw
@@ -426,7 +427,8 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     refine ⟨fun ev hev => ?_, ⟨_, .head _, (inv.ext x1).ext x3⟩⟩
     simp only [List.mem_singleton] at hev
     subst hev
-    exact recEv_good h3 hF x1.wf (inv.rel.take _) x1.held (.inr inv.scope)
+    exact recEv_good h3 hF x1.wf (inv.rel.take _) x1.held
+      (.inr fun v hv ho hH => absurd (inv.hU _ hH) (Nat.not_lt.mpr (inv.scope v hv ho)))
   | cont hid h2 h3 =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
@@ -444,7 +446,8 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     refine ⟨fun ev hev => ?_, ⟨_, .head _, (inv.ext x1).ext x3⟩⟩
     simp only [List.mem_singleton] at hev
     subst hev
-    exact recEv_good h3 hF x1.wf (inv.rel.take _) x1.held (.inr inv.scope)
+    exact recEv_good h3 hF x1.wf (inv.rel.take _) x1.held
+      (.inr fun v hv ho hH => absurd (inv.hU _ hH) (Nat.not_lt.mpr (inv.scope v hv ho)))
   | @set_fin _ _ _ _ x steps op e _ _ id st1 st1a st1b σ1 st2 σ2 st3 hid ha hb h1 h2 =>
     unfold mStmt at hw
     obtain ⟨id', st1', hid', hw⟩ := MoveM.bind_ok hw
