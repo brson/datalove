@@ -1,0 +1,19 @@
+// An `out` argument that is a field of a `var` never given a value is a read
+// of the var before it is set, as a `set` of the field and a `mut` argument
+// of it are: the rest of the struct has to be there for the field to be
+// written into it.
+//
+// The check of a field passed `out` asked only whether its struct had been
+// moved away. One never there went unchecked, and the call wrote into a
+// struct that did not exist, which the leak check caught as a read of a slot
+// holding nothing.
+type P = {xs: [string], n: u8}
+fun fill(out x: [string])
+  set x = ["filled"]
+end fun
+fun go(): u8
+  var p: P
+  call fill(out p.xs)
+  ret 1
+end fun
+debuglog go()

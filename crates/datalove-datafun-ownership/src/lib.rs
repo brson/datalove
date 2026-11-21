@@ -1327,10 +1327,19 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                         // (`analyze_set`): its root has to hold a value, and
                         // its keys are read. Unchecked, a field of a struct
                         // moved away had its old value dropped before the
-                        // call, out of the struct that now held it.
+                        // call, out of the struct that now held it, and a
+                        // field of a `var` never given a value was written
+                        // into a struct that was not there.
                         if let ExprFunKind::Place(place) = arg.kind() && !place.steps.is_empty() {
                             if let Some(id) = self.expr_to_place_root(*arg) {
-                                self.check_not_moved(id, arg.key());
+                                if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized)
+                                    && !self.note_external_read(id)
+                                {
+                                    let name = self.bindings[id.0 as usize].name.C();
+                                    self.errors.push(AnalysisError::ReadUninitialized { expr_key: arg.key(), name });
+                                } else {
+                                    self.check_not_moved(id, arg.key());
+                                }
                             }
                             for step in &place.steps {
                                 if let PlaceStep::Index(idx) = step {

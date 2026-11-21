@@ -726,8 +726,14 @@ Four things are proved of it:
   inside an expression against what the whole expression wrote, so that
   `o? + get(out p)` returned without writing `p` and the caller read an
   unset string; the analysis now checks at each such operator as it reaches
-  it (error fixture 152), as the model does. The analysis refuses a call
-  to a function it has no signature for, which under a script's signatures
+  it (error fixture 152), as the model does. Reading the two side by side
+  found an `out` argument through a field of a `var` never given a value go
+  unchecked: the analysis asked only whether the var had been moved away,
+  so `call fill(out p.xs)` wrote into a struct that was not there, which
+  the leak check caught as a read of a slot holding nothing; it is O005
+  now (error fixture 154), as `initPlace` and `mPlace` have it. The
+  analysis refuses a call to a function it has no signature for, which
+  under a script's signatures
   only a script the checker refuses makes, and the next result uses.
 - **Nor do its consts** (`Fun.runScript_noUninit`, in
   `Proofs/ConstSound.lean`, of F089 as `FunConsts.lean` models it). A const
