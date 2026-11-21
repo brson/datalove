@@ -415,7 +415,8 @@ def leaving (id : Nat) (σ : MSt) (e : Expr) (m : MoveM MSt) : MoveM MSt :=
   else m
 
 /-- `set x … = e` or `set x … ⊕= e` of statement `id`: not to what a `for`
-walks (O015), then the value, then the keys, then the place. A return from
+walks (O015), to what may be changed (O004, O011, which typechecking
+refuses first), then the value, then the keys, then the place. A return from
 the value, a key or a checked or optional operator drops what is owned once
 the value and the keys have run, and what they moved on the way apart, for a
 return before the move; one from a failed `?` or `!` on the way to the place
@@ -423,6 +424,9 @@ what is owned once the keys have run. -/
 def mSet (sigs : List (String × Sig)) (Γ : Ctx) (id : Nat) (σ : MSt) (x : String) (steps : List Step)
     (op : Option BinOp) (e : Expr) : MoveM MSt := do
   unwalkedM σ x
+  -- What typechecking lets a `set` write, a `var` or a `mut` or `out`
+  -- parameter, which the analysis needs to know of what it gives a value.
+  writableM σ x
   let before ← ownedIn σ
   -- The keys are filed before the value, which runs first.
   let keys ← exprAt

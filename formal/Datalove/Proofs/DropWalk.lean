@@ -53,8 +53,10 @@ theorem mSet_made {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String} {steps : Lis
     (h : (mSet sigs Γ id σ x steps op e).run st = .ok (σ', st')) (md : Made σ st) :
     Made σ' st' ∧ SchedExt st st' := by
   unfold mSet at h
+  obtain ⟨_, st0, h0, h⟩ := MoveM.bind_ok h
+  have x0 := SchedGrows.keepsSched (KeepsSched.unwalkedM σ x) st _ st0 w h0
   obtain ⟨_, st1, h1, h⟩ := MoveM.bind_ok h
-  have x1 := SchedGrows.keepsSched (KeepsSched.unwalkedM σ x) st _ st1 w h1
+  have x1 := x0.trans (SchedGrows.keepsSched (KeepsSched.writableM σ x) st0 _ st1 x0.wf h1)
   obtain ⟨_, st2, h2, h⟩ := MoveM.bind_ok h
   have x2 := SchedGrows.ownedIn σ st1 _ st2 x1.wf h2
   obtain ⟨_, st3, h3, h⟩ := MoveM.bind_ok h
