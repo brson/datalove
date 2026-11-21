@@ -178,4 +178,31 @@ theorem record_last {kind : String} {stmt : Nat} {arm : Option Nat} {drops : Lis
     · simp_all
     · simp_all
 
+/-- How a path through a statement or a block ends: on to what follows,
+with what it holds; at a `break` or a `continue`, with what it holds there;
+or out of the function. -/
+inductive POut where
+  | norm (π : List Bool)
+  | brk (π : List Bool)
+  | cont (π : List Bool)
+  | exit
+
+/-- A return from partway along a step `leavingIf` scheduled, from `st` to
+`st'`: the point it recorded last, the one before it if it recorded what
+the step moved apart, and the variables, with what the path holds. -/
+def tryEv (st st' : DSt) (σ : MSt) (πk : List Bool) : Ev :=
+  { idx := some (st'.out.length - 1),
+    nym := if st'.out.length = st.out.length + 2 then some st.out.length else none,
+    vars := σ.zip πk }
+
+/-- The point `record` added from `st` to `st'`, if it added one, leaving
+the variables `vs`, with what the path holds. -/
+def recEv (st st' : DSt) (vs : MSt) (πs : List Bool) : Ev :=
+  { idx := if st'.out.length = st.out.length + 1 then some st.out.length else none,
+    nym := none,
+    vars := vs.zip πs }
+
+/-- The flags of new bindings, put before what the path holds. -/
+def newFlags (σ σ' : MSt) : List Bool := (scopeOwn σ σ').map (·.live)
+
 end Datalove.Fun
