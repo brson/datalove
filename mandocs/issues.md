@@ -1,3 +1,8 @@
+## 2026/11/20 bcts chunk.rs is datalove-specific
+
+It doesn't belong there.
+
+
 ## 2026/10/26 std rider code is horrific
 
 Missing types, magic numbers, unsafe everything.
