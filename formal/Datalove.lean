@@ -46,4 +46,6 @@ import Datalove.FunConsts
 import Datalove.FunMove
 import Datalove.FunDrop
 import Datalove.Proofs.InitSound
+import Datalove.Proofs.DropShrink
+import Datalove.Proofs.DropSched
 import Datalove.Proofs.ConstSound
