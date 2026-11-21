@@ -16,9 +16,13 @@ a test holds the lexer to it (see
 
 ## Notation
 
-The EBNF is as in the [datalit grammar](datalit-ebnf.md#user-content-notation),
-over characters. One rule is not in it: **the lexer takes the longest lexeme
-that matches**, starting where the last one ended. So a word is never two
+ISO 14977 EBNF, written as the
+[datalit grammar's notation](datalit-ebnf.md#user-content-notation) says.
+This grammar is over characters: a terminal matches the characters it
+spells, where the datalit and datafun grammars, written over the tokens this
+one makes, match a terminal against a token. One rule is not in the EBNF:
+**the lexer takes the longest lexeme that matches**, starting where the last
+one ended. So a word is never two
 words, `->` is one sigil and not `-` and `>`, and `//` begins a comment, not
 two `/`s. Whitespace, newlines and comments are lexemes but not tokens: the
 lexer drops them.
