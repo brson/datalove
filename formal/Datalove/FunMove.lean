@@ -167,12 +167,14 @@ abbrev MoveM := StateT DSt (Except Lit.Code)
 def stmtId : MoveM Nat := modifyGet fun s => (s.next, { s with next := s.next + 1 })
 
 /-- Bind `x`, a binding of its own, owned where its type in `Γ'`, the
-context the statement leaves, is not copy and it is neither borrowed nor a
-const. -/
-def bindOne (Γ' : Ctx) (konst : Bool) (init lent writable byRef : Bool) (σ : MSt) (x : String) :
+context the statement leaves, is not copy and it is not borrowed. A const
+declared in a body is owned as a `let` is, as the Rust's `alloc_const_binding`
+has it: nothing moves out of one (O016), so it is dropped where its scope
+ends, and lowering drops it there until promotion makes a static of it. -/
+def bindOne (Γ' : Ctx) (init lent writable byRef : Bool) (σ : MSt) (x : String) :
     MoveM MSt := do
   let s ← get
-  let owns := !lent && !konst && match Γ'.lookup x with
+  let owns := !lent && match Γ'.lookup x with
     | some (t, _) => !t.isCopy
     | none => false
   set { s with uid := s.uid + 1, names := (s.uid, x) :: s.names, madeAt := (s.uid, s.next) :: s.madeAt }
@@ -180,8 +182,8 @@ def bindOne (Γ' : Ctx) (konst : Bool) (init lent writable byRef : Bool) (σ : M
 
 /-- Names bound in order, each innermost of those before it. -/
 def bindM (Γ' : Ctx) (σ : MSt) (xs : List String) (init : Bool) (writable : Bool := false)
-    (konst : Bool := false) : MoveM MSt :=
-  xs.foldlM (bindOne Γ' konst init false writable false) σ
+    : MoveM MSt :=
+  xs.foldlM (bindOne Γ' init false writable false) σ
 
 /-- What of `vs` is dropped where it is: owned, and live or perhaps holding a
 value (the Rust's `owned_here`). -/
@@ -644,7 +646,7 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
     | .call e => pure (← leaving id σ e (mE sigs Γ false σ e), [], [])
     | .const_ x _ e =>
       let σ ← leaving id σ e (mE sigs { Γ with constExpr := true } false σ e)
-      pure (← bindM after σ [x] true (konst := true), [], [])
+      pure (← bindM after σ [x] true, [], [])
     | .type_ _ _ => pure (σ, [], [])
     | .match_ e cases dflt =>
       let σc ← leaving id σ e (mE sigs Γ false σ e)
@@ -666,7 +668,7 @@ def mStmt (sigs : List (String × Sig)) (env : InferEnv) : Nat → Ctx → MSt �
         | none => σc
       let Γf := forCtx env n Γ names coll
       let σb ← (names.zip (forRefs env n Γ names coll)).foldlM
-        (fun σ (x, r) => bindOne Γf false true true false r σ x) σw
+        (fun σ (x, r) => bindOne Γf true true false r σ x) σw
       let r ← mBlock sigs env n Γf σb σc.length body
       loopHeld σc body r
       record "loop_body_end" id none (← ownedIn (scopeOwn σc r.1))
@@ -718,7 +720,7 @@ def mFun (sigs : List (String × Sig)) (env : InferEnv) (aliases : Aliases) (con
       let consts : MSt := cmarks.map fun (x, s) =>
         { name := x, init := s, live := true, back := false, lent := false, writable := false, byRef := false }
       let σ0 ← params.foldlM (fun σ (m, x, _) => do
-          let σ ← bindOne Γ false (m != .out) (m == .ref || m == .mut || m == .out) (m == .mut || m == .out)
+          let σ ← bindOne Γ (m != .out) (m == .ref || m == .mut || m == .out) (m == .mut || m == .out)
             (m == .ref) σ x
           pure (match σ with
             | v :: rest => { v with back := m == .out || m == .mut } :: rest

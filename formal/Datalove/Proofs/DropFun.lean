@@ -17,7 +17,7 @@ namespace Datalove.Fun
 one, a `ref`, `mut` or `out` one borrowed, and a `mut` or `out` one read
 back by the caller. -/
 def paramStep (Γ : Ctx) : MSt → Mode × String × Hint → MoveM MSt := fun σ (m, x, _) => do
-  let σ ← bindOne Γ false (m != .out) (m == .ref || m == .mut || m == .out) (m == .mut || m == .out)
+  let σ ← bindOne Γ (m != .out) (m == .ref || m == .mut || m == .out) (m == .mut || m == .out)
     (m == .ref) σ x
   pure (match σ with
     | v :: rest => { v with back := m == .out || m == .mut } :: rest
@@ -39,7 +39,7 @@ theorem paramStep_spec (Γ : Ctx) (p : Mode × String × Hint) {σ σ' : MSt} {s
   obtain ⟨m, x, _⟩ := p
   simp only [paramStep] at h
   obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok h
-  have x1 := SchedGrows.bindOne Γ false _ _ _ _ σ x st σ1 st1 w h1
+  have x1 := SchedGrows.bindOne Γ _ _ _ _ σ x st σ1 st1 w h1
   have m1 := bindOne_made h1 md
   have mn1 : MadeNext st1 := by
     simp only [bindOne, MoveM.run_bind] at h1

@@ -881,7 +881,8 @@ Four things are proved of it:
   every one in order, each before what it holds, dead ones too
   (`stmtKinds`, in `FunDrop.lean`, says what that numbering is), and gives
   each binding an identity of its own, as a `BindingId` is. What is dropped
-  is what is owned -- not copy, not borrowed, not a const -- and live, or
+  is what is owned -- not copy and not borrowed, a const declared in the body
+  among it, as `alloc_const_binding` has it -- and live, or
   perhaps holding a value: a `var` moved before a loop that the loop gives a
   value again holds one from then on, and joins every way out of the
   function scheduled from where it was made on, its tracking byte saying

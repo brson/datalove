@@ -216,7 +216,7 @@ theorem sameLive_walk (x : String) : ∀ (σ : MSt), (σ.walk x).SameLive σ
 /-- What a `for` binds each pass: names before what it was given, each
 holding a value and owning nothing, as each element is lent. -/
 theorem bindFor_spec {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MSt} {st st' : DSt},
-    (xs.foldlM (fun σ (x, r) => bindOne Γf false true true false r σ x) σ).run st = .ok (σ', st') →
+    (xs.foldlM (fun σ (x, r) => bindOne Γf true true false r σ x) σ).run st = .ok (σ', st') →
     ∃ new, σ' = new ++ σ ∧ ∀ v, v ∈ new → v.live = true ∧ v.owns = false
   | [], _, _, _, _, h => by cases h; exact ⟨[], rfl, fun _ h => by cases h⟩
   | (x, r) :: xs, σ, σ', st, st', h => by

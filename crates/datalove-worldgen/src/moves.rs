@@ -6,8 +6,9 @@
 //! across nested `if`s, `match`es, `for`s over either list, counted `loop`s
 //! and an option's binding. It
 //! declares variables with no value for an `out` argument or a `set` to give
-//! one, leaves by `ret`, `?`, `break` and `continue` at any depth, and
-//! sometimes writes on past a way out, where nothing runs.
+//! one, and consts, which it reads and clones but never moves, leaves by
+//! `ret`, `?`, `break` and `continue` at any depth, and sometimes writes on
+//! past a way out, where nothing runs.
 //!
 //! The generator tracks what it moved and what holds nothing, so that a
 //! script mostly does what the ownership pass lets through. At a chaos rate
@@ -78,7 +79,8 @@ struct Scope {
     /// Those of `owned` that hold nothing here: moved, or declared with no
     /// value and not given one yet.
     empty: BTreeSet<String>,
-    /// Borrowed strings in scope, the elements a `for` walks.
+    /// Borrowed strings in scope: the elements a `for` walks, and the
+    /// consts, which nothing moves out of.
     borrowed: Vec<String>,
     in_loop: bool,
     depth: usize,
@@ -276,10 +278,19 @@ impl Gen {
             let line = match self.rng.random_range(0..if nested { 30 } else { 21 }) {
                 0 | 1 => fmt!("debuglog {}", self.string(&mut scope, false)),
                 2 | 3 => {
-                    let v = self.fresh("v");
-                    let line = fmt!("let {v} = {}", self.string(&mut scope, true));
-                    scope.declare(&v, Kind::Str, false, true);
-                    line
+                    // A const is read and cloned as a borrowed string is,
+                    // and never moved (O016); the schedule drops it as a
+                    // `let`, and promotion makes a static of it after.
+                    if self.chance(0.2) {
+                        let k = self.fresh("k");
+                        scope.borrowed.push(k.C());
+                        fmt!("const {k}: string = \"k\"")
+                    } else {
+                        let v = self.fresh("v");
+                        let line = fmt!("let {v} = {}", self.string(&mut scope, true));
+                        scope.declare(&v, Kind::Str, false, true);
+                        line
+                    }
                 }
                 4 | 5 => {
                     let value = self.string(&mut scope, true);

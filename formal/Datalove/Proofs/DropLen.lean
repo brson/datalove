@@ -78,8 +78,8 @@ theorem joinAll_length {code : Lit.Code} {σ r : MSt} {k : Nat} : ∀ {L : List 
 termination_by L => L.length
 
 
-theorem bindM_len {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
-    ∀ {σ σ' : MSt} {st st' : DSt}, (bindM Γ' σ xs init writable konst).run st = .ok (σ', st') →
+theorem bindM_len {Γ' : Ctx} {xs : List String} {init writable : Bool} :
+    ∀ {σ σ' : MSt} {st st' : DSt}, (bindM Γ' σ xs init writable).run st = .ok (σ', st') →
       σ.length ≤ σ'.length := by
   induction xs with
   | nil => intro σ σ' st st' h; cases h; exact Nat.le_refl _
@@ -93,7 +93,7 @@ theorem bindM_len {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
     exact Nat.le_trans (Nat.le_succ _) (ih h2)
 
 theorem bindFor_len {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MSt} {st st' : DSt},
-    (xs.foldlM (fun σ (x, r) => bindOne Γf false true true false r σ x) σ).run st = .ok (σ', st') →
+    (xs.foldlM (fun σ (x, r) => bindOne Γf true true false r σ x) σ).run st = .ok (σ', st') →
     σ.length ≤ σ'.length
   | [], _, _, _, _, h => by cases h; exact Nat.le_refl _
   | (x, r) :: xs, σ, σ', st, st', h => by
@@ -515,8 +515,8 @@ theorem MSt.Ids.sfx (k : Nat) {a b : MSt} (h : MSt.Ids a b) : MSt.Ids (Datalove.
 theorem back_eq_sfx (σ τ : MSt) : σ.back τ = sfx σ.length τ := rfl
 
 
-theorem bindM_shape {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
-    ∀ {σ σ' : MSt} {st st' : DSt}, (bindM Γ' σ xs init writable konst).run st = .ok (σ', st') →
+theorem bindM_shape {Γ' : Ctx} {xs : List String} {init writable : Bool} :
+    ∀ {σ σ' : MSt} {st st' : DSt}, (bindM Γ' σ xs init writable).run st = .ok (σ', st') →
       ∃ new, σ' = new ++ σ := by
   induction xs with
   | nil => intro σ σ' st st' h; cases h; exact ⟨[], rfl⟩
@@ -533,7 +533,7 @@ theorem bindM_shape {Γ' : Ctx} {xs : List String} {init writable konst : Bool} 
     exact ⟨new ++ [v], by rw [e]; simp⟩
 
 theorem bindFor_shape {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MSt} {st st' : DSt},
-    (xs.foldlM (fun σ (x, r) => bindOne Γf false true true false r σ x) σ).run st = .ok (σ', st') →
+    (xs.foldlM (fun σ (x, r) => bindOne Γf true true false r σ x) σ).run st = .ok (σ', st') →
     ∃ new, σ' = new ++ σ
   | [], _, _, _, _, h => by cases h; exact ⟨[], rfl⟩
   | (x, r) :: xs, σ, σ', st, st', h => by

@@ -98,13 +98,13 @@ theorem mSet_made {Γ : Ctx} {id : Nat} {σ σ' : MSt} {x : String} {steps : Lis
   · exact m4
 
 theorem bindFor_made {Γf : Ctx} : ∀ (xs : List (String × Bool)) {σ σ' : MSt} {st st' : DSt}, st.WF →
-    (xs.foldlM (fun σ (x, r) => bindOne Γf false true true false r σ x) σ).run st = .ok (σ', st') →
+    (xs.foldlM (fun σ (x, r) => bindOne Γf true true false r σ x) σ).run st = .ok (σ', st') →
     Made σ st → Made σ' st' ∧ SchedExt st st'
   | [], σ, σ', st, st', w, h, m => by cases h; exact ⟨m, SchedExt.refl w⟩
   | (x, r) :: xs, σ, σ', st, st', w, h, m => by
     simp only [List.foldlM] at h
     obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok h
-    have x1 := SchedGrows.bindOne Γf false true true false r σ x st σ1 st1 w h1
+    have x1 := SchedGrows.bindOne Γf true true false r σ x st σ1 st1 w h1
     obtain ⟨m2, x2⟩ := bindFor_made xs x1.wf h2 (bindOne_made h1 m)
     exact ⟨m2, x1.trans x2⟩
 

@@ -128,6 +128,11 @@ Rust refuses and this proof assumes; see what it leaves out.
   noted. And a `?` drops a binding whose place has been lowered but not yet
   taken as one of the call's pending arguments, the half of
   `try_return_not_yet_moved` lowering keeps itself (`compiler-guide.md`).
+  A const declared in a body is owned and scheduled as a `let` is, on both
+  sides, and lowering drops it so; `promote_function_consts` then makes a
+  static of one of a non-copy type whose value const inlining folded, and
+  deletes its drops, which is the IR's drop check's and the leak check's to
+  see (`plan-static-consts.md`).
   The IR's drop check (`ir.md`, "The drop check") holds the result to its
   own consistency in a debug build.
 - **A `set` to a binding that is not a `var`.** The move analysis refuses

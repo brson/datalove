@@ -441,8 +441,8 @@ theorem stmtId_eq {st st1 : DSt} {id : Nat} (h : stmtId.run st = .ok (id, st1)) 
 
 /-- What `bindM` makes: new bindings before the old, each live, numbered
 from where the walk was, and made at the statement it is in. -/
-theorem bindM_spec {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
-    ∀ {σ σ' : MSt} {st st' : DSt}, st.WF → (bindM Γ' σ xs init writable konst).run st = .ok (σ', st') →
+theorem bindM_spec {Γ' : Ctx} {xs : List String} {init writable : Bool} :
+    ∀ {σ σ' : MSt} {st st' : DSt}, st.WF → (bindM Γ' σ xs init writable).run st = .ok (σ', st') →
       ∃ new, σ' = new ++ σ ∧
         (∀ v, v ∈ new → v.live = true ∧ st.uid ≤ v.uid ∧ v.uid < st'.uid ∧
           st'.madeAt.lookup v.uid = some st.next) ∧
@@ -459,8 +459,8 @@ theorem bindM_spec {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
     unfold bindM at h
     simp only [List.foldlM] at h
     obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok h
-    have x1 := SchedGrows.bindOne Γ' konst init false writable false σ x st σ1 st1 w h1
-    have x2 := SchedGrows.bindM Γ' σ1 xs init writable konst st1 σ' st' x1.wf h2
+    have x1 := SchedGrows.bindOne Γ' init false writable false σ x st σ1 st1 w h1
+    have x2 := SchedGrows.bindM Γ' σ1 xs init writable st1 σ' st' x1.wf h2
     have e1 : ∃ v, σ1 = v :: σ ∧ v.live = true ∧ v.uid = st.uid ∧ st1.uid = st.uid + 1 ∧
         st1.next = st.next ∧ st1.madeAt.lookup st.uid = some st.next ∧ st1.out = st.out ∧
         st1.held = st.held ∧ st1.tracked = st.tracked := by
@@ -480,11 +480,11 @@ theorem bindM_spec {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
 
 /-- Bindings made: the path holds each, and keeps what it carries. -/
 theorem Inv.bind {F st st' : DSt} {U : Nat} {H : Nat → Prop} {base : Nat} {σ σ' : MSt} {π : List Bool} {Γ' : Ctx}
-    {xs : List String} {init writable konst : Bool} (h : Inv F st U H base σ π) (w : st.WF)
-    (hb : (bindM Γ' σ xs init writable konst).run st = .ok (σ', st')) :
+    {xs : List String} {init writable : Bool} (h : Inv F st U H base σ π) (w : st.WF)
+    (hb : (bindM Γ' σ xs init writable).run st = .ok (σ', st')) :
     Inv F st' U H base σ' (newFlags σ σ' ++ π) := by
   obtain ⟨new, e, hn, nx, _, nh, _, nu⟩ := bindM_spec w hb
-  have x := SchedGrows.bindM Γ' σ xs init writable konst st σ' st' w hb
+  have x := SchedGrows.bindM Γ' σ xs init writable st σ' st' w hb
   have h' := h.ext x
   subst e
   have flags : newFlags σ (new ++ σ) = new.map (·.live) := by

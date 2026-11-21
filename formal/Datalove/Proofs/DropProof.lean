@@ -134,7 +134,7 @@ inductive PStmt : Nat → Ctx → MSt → Nat → Stmt → DSt → List Bool →
   | const_fin {n Γ σ base x t e st π id st1 σ1 st2 σ2 st3} :
       stmtId.run st = .ok (id, st1) →
       (leaving id σ e (mE sigs { Γ with constExpr := true } false σ e)).run st1 = .ok (σ1, st2) →
-      (bindM ((checkStmtF env n Γ (.const_ x t e)).run #[]).1 σ1 [x] true (konst := true)).run st2 = .ok (σ2, st3) →
+      (bindM ((checkStmtF env n Γ (.const_ x t e)).run #[]).1 σ1 [x] true).run st2 = .ok (σ2, st3) →
       PStmt (n + 1) Γ σ base (.const_ x t e) st π (.norm (newFlags σ1 σ2 ++ delta σ σ1 π)) []
   | const_exit {n Γ σ base x t e st π id st1 σ1 st2 πk} :
       stmtId.run st = .ok (id, st1) →
@@ -203,7 +203,7 @@ inductive PStmt : Nat → Ctx → MSt → Nat → Stmt → DSt → List Bool →
       stmtId.run st = .ok (id, st1) →
       (leaving id σ coll (mE sigs Γ true σ coll)).run st1 = .ok (σc, st2) →
       ((names.zip (forRefs env n Γ names coll)).foldlM
-        (fun σ (x, r) => bindOne (forCtx env n Γ names coll) false true true false r σ x)
+        (fun σ (x, r) => bindOne (forCtx env n Γ names coll) true true false r σ x)
         (match placeOf coll with
           | some (x, _) => σc.walk x
           | none => σc)).run st2 = .ok (σb, st2b) →
@@ -560,7 +560,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨rfl, rfl⟩ := hw
     have x1 := SchedGrows.stmtId st _ _ w hid
     have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ _)) _ _ _ x1.wf h2
-    have x3 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ x2.wf h3'
+    have x3 := SchedGrows.bindM _ _ _ _ _ _ _ _ x2.wf h3'
     obtain ⟨rfl, _⟩ := stmtId_eq hid
     refine ⟨fun ev hev => ?_, trivial⟩
     simp only [List.mem_singleton] at hev
@@ -597,7 +597,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨rfl, rfl⟩ := hw
     have x1 := SchedGrows.stmtId st _ _ w hid
     have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs Γ false σ _)) _ _ _ x1.wf h2
-    have x3 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ x2.wf h3'
+    have x3 := SchedGrows.bindM _ _ _ _ _ _ _ _ x2.wf h3'
     have xF := x3.trans hF
     obtain ⟨rfl, _⟩ := stmtId_eq hid
     refine ⟨fun ev hev => ?_, trivial⟩
@@ -703,7 +703,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     obtain ⟨rfl, rfl⟩ := hw
     have x1 := SchedGrows.stmtId st _ _ w hid
     have x2 := SchedGrows.leaving _ σ _ (SchedGrows.shr (mE_shr sigs _ false σ _)) _ _ _ x1.wf h2
-    have x3 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ x2.wf h3'
+    have x3 := SchedGrows.bindM _ _ _ _ _ _ _ _ x2.wf h3'
     have xF := x3.trans hF
     obtain ⟨rfl, _⟩ := stmtId_eq hid
     refine ⟨fun ev hev => ?_, trivial⟩
@@ -726,7 +726,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     simp only [MoveM.run_pure, Except.ok.injEq, Prod.mk.injEq] at hw
     obtain ⟨rfl, rfl⟩ := hw
     have x1 := SchedGrows.stmtId st _ _ w hid
-    have x2 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ x1.wf h2
+    have x2 := SchedGrows.bindM _ _ _ _ _ _ _ _ x1.wf h2
     refine ⟨(fun _ h => by cases h), ?_⟩
     exact ((inv.ext x1).bind x1.wf h2).ext (SchedExt.addTracked x2.wf _)
   | var_none =>
@@ -1033,7 +1033,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     have invc := inv.same (x1.trans x2) (MSt.Same.of_below (leavingIf_below (mE_shr sigs Γ true σ _) h2))
     obtain ⟨σw, slw, h3w⟩ : ∃ σw, σw.SameLive σc ∧
         ((names.zip (forRefs env m Γ names coll)).foldlM
-          (fun σ (x, r) => bindOne (forCtx env m Γ names coll) false true true false r σ x) σw).run st2
+          (fun σ (x, r) => bindOne (forCtx env m Γ names coll) true true false r σ x) σw).run st2
           = .ok (σb, st3) := by
       split at h3
       · exact ⟨_, sameLive_walk _ _, h3⟩
@@ -1077,7 +1077,7 @@ theorem stmt_ok {n : Nat} {Γ : Ctx} {σ : MSt} {base : Nat} {s : Stmt} {st : DS
     have invc := inv.same (x1.trans x2) (MSt.Same.of_below (leavingIf_below (mE_shr sigs Γ true σ _) h2))
     obtain ⟨σw, slw, h3w⟩ : ∃ σw, σw.SameLive σc ∧
         ((names.zip (forRefs env m Γ names coll)).foldlM
-          (fun σ (x, r) => bindOne (forCtx env m Γ names coll) false true true false r σ x) σw).run st2
+          (fun σ (x, r) => bindOne (forCtx env m Γ names coll) true true false r σ x) σw).run st2
           = .ok (σb, st2b) := by
       split at h3
       · exact ⟨_, sameLive_walk _ _, h3⟩
@@ -1499,7 +1499,7 @@ theorem branch_ok {n : Nat} {Γb : Ctx} {σc : MSt} {binds : List String} {base 
     obtain ⟨_, st4', hb4', hw⟩ := MoveM.bind_ok hw
     obtain ⟨-, rfl⟩ := Prod.mk.inj (MoveM.det hb4 hb4')
     cases hw
-    have x1 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ w hb1
+    have x1 := SchedGrows.bindM _ _ _ _ _ _ _ _ w hb1
     have invb := inv.bind w hb1
     obtain ⟨xb, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x1.wf invb.toMade hb2
     have x4 := SchedGrows.record _ _ _ _ _ _ _ _ xb.wf hb4
@@ -1532,7 +1532,7 @@ theorem branch_ok {n : Nat} {Γb : Ctx} {σc : MSt} {binds : List String} {base 
     obtain ⟨ds, st3, hb3, hw⟩ := MoveM.bind_ok hw
     obtain ⟨_, st4, hb4, hw⟩ := MoveM.bind_ok hw
     cases hw
-    have x1 := SchedGrows.bindM _ _ _ _ _ _ _ _ _ w hb1
+    have x1 := SchedGrows.bindM _ _ _ _ _ _ _ _ w hb1
     have invb := inv.bind w hb1
     obtain ⟨xb, _⟩ := (walk_ext sigs env _).2.1 _ _ _ _ _ _ _ x1.wf invb.toMade hb2
     have x3 := SchedGrows.ownedIn _ _ _ _ xb.wf hb3

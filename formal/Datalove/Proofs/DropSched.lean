@@ -199,8 +199,8 @@ theorem List.lookup_mem' : ∀ {l : List (Nat × Nat)} {u m : Nat}, l.lookup u =
                 subst this; exact .head _
     · exact .tail _ (List.lookup_mem' h)
 
-theorem SchedGrows.bindOne (Γ' : Ctx) (konst init lent writable byRef : Bool) (σ : MSt) (x : String) :
-    SchedGrows (Fun.bindOne Γ' konst init lent writable byRef σ x) := fun st a st' w h => by
+theorem SchedGrows.bindOne (Γ' : Ctx) (init lent writable byRef : Bool) (σ : MSt) (x : String) :
+    SchedGrows (Fun.bindOne Γ' init lent writable byRef σ x) := fun st a st' w h => by
   simp only [Fun.bindOne] at h
   simp only [MoveM.run_bind] at h
   cases h
@@ -227,15 +227,15 @@ theorem SchedGrows.bindOne (Γ' : Ctx) (konst init lent writable byRef : Bool) (
     · obtain ⟨m, hm⟩ := w.made u (Nat.lt_of_le_of_ne (Nat.le_of_lt_succ hu) e)
       exact ⟨m, lk u m hm⟩
 
-theorem SchedGrows.bindM (Γ' : Ctx) (σ : MSt) (xs : List String) (init writable konst : Bool) :
-    SchedGrows (Fun.bindM Γ' σ xs init writable konst) := by
+theorem SchedGrows.bindM (Γ' : Ctx) (σ : MSt) (xs : List String) (init writable : Bool) :
+    SchedGrows (Fun.bindM Γ' σ xs init writable) := by
   unfold Fun.bindM
   generalize σ = σ0
   induction xs generalizing σ0 with
   | nil => exact SchedGrows.pure σ0
   | cons x xs ih =>
     simp only [List.foldlM]
-    exact SchedGrows.bind (SchedGrows.bindOne _ _ _ _ _ _ σ0 x) (fun σ1 => ih σ1)
+    exact SchedGrows.bind (SchedGrows.bindOne _ _ _ _ _ σ0 x) (fun σ1 => ih σ1)
 
 /-- A point recorded: put before every other. -/
 theorem SchedExt.prepend {st st' : DSt} (w : st.WF) (es : List Entry) (o : st'.out = es ++ st.out)
@@ -607,15 +607,15 @@ theorem Made.cons {v : MVar} {σ : MSt} {st : DSt} (hv : v.owns = true → v.uid
   | head => exact hv ho
   | tail _ hw => exact h w hw ho
 
-theorem bindOne_made {Γ' : Ctx} {konst init lent writable byRef : Bool} {σ σ' : MSt} {x : String}
-    {st st' : DSt} (h : (bindOne Γ' konst init lent writable byRef σ x).run st = .ok (σ', st'))
+theorem bindOne_made {Γ' : Ctx} {init lent writable byRef : Bool} {σ σ' : MSt} {x : String}
+    {st st' : DSt} (h : (bindOne Γ' init lent writable byRef σ x).run st = .ok (σ', st'))
     (m : Made σ st) : Made σ' st' := by
   simp only [bindOne, MoveM.run_bind] at h
   cases h
   exact Made.cons (fun _ => Nat.lt_succ_self _) (fun v hv ho => Nat.lt_succ_of_lt (m v hv ho))
 
-theorem bindM_made {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
-    ∀ {σ σ' : MSt} {st st' : DSt}, st.WF → (bindM Γ' σ xs init writable konst).run st = .ok (σ', st') →
+theorem bindM_made {Γ' : Ctx} {xs : List String} {init writable : Bool} :
+    ∀ {σ σ' : MSt} {st st' : DSt}, st.WF → (bindM Γ' σ xs init writable).run st = .ok (σ', st') →
       Made σ st → Made σ' st' ∧ SchedExt st st' := by
   unfold bindM
   induction xs with
@@ -624,7 +624,7 @@ theorem bindM_made {Γ' : Ctx} {xs : List String} {init writable konst : Bool} :
     intro σ σ' st st' w h m
     simp only [List.foldlM] at h
     obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok h
-    have x1 := SchedGrows.bindOne Γ' konst init false writable false σ x st σ1 st1 w h1
+    have x1 := SchedGrows.bindOne Γ' init false writable false σ x st σ1 st1 w h1
     obtain ⟨m2, x2⟩ := ih x1.wf h2 (bindOne_made h1 m)
     exact ⟨m2, x1.trans x2⟩
 
