@@ -367,10 +367,10 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D021 | Tokens left after an expression | `state.rs:286` |
 | D022 | Tokens left inside a type's brackets | `state.rs:275` |
 | D023 | Tensor groups of different shapes | `expr.rs:541`, `chunk.rs:334` |
-| D030 | Table row with the wrong number of cells | `expr.rs:583`, `chunk.rs:183` |
+| D030 | Table row with the wrong number of cells | `expr.rs:583`, `chunk.rs:184` |
 | D031 | A table header cell that is not a name | `expr.rs:610` |
 | D032 | `enum` type without `{` | `type_hint.rs:159` |
-| D033 | A `,` with nothing before it, in a table or tensor | `expr.rs:450,518`, `chunk.rs:199` |
+| D033 | A `,` with nothing before it, in a table or tensor | `expr.rs:450,518`, `chunk.rs:200` |
 | D034 | An extra token in a table header cell | `expr.rs:629` |
 | D035 | `atom` with no name | `expr.rs:191` |
 | D036 | `term` with no name | `expr.rs:203` |

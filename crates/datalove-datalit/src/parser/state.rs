@@ -14,7 +14,7 @@ use bct::{
 
 use crate::ast;
 use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use bct::chunk::PlannedCollection;
+use crate::chunk_plan::PlannedCollection;
 use bct::diagnostic::DiagnosticBuilder;
 
 /// Where a parser reads its tokens: a cursor over a bracket or a part of
@@ -78,7 +78,7 @@ pub(super) struct Parser<'db> {
     /// The same text as a string, which the tokens' spans index.
     text: &'db str,
     interned: Interned<'db>,
-    /// The collections of the source to parse in chunks; see `bct::chunk`.
+    /// The collections of the source to parse in chunks; see `crate::chunk_plan`.
     /// Empty but for the parse of a whole source and the parsers it makes.
     pub(super) plan: &'db [PlannedCollection],
     pub(super) sink: Sink,

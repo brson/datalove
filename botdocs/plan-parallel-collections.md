@@ -101,7 +101,9 @@ it, since data that big belongs in a `.dlt`.
 tree is walked without looking inside its brackets: `Cursor::next_index` steps
 over a whole `{...}` in one move. So finding the candidates and their chunk
 boundaries is a pass over the token layout, before any parse, and it is the
-same pass for both languages. It goes in `bcts`, next to the bracer:
+same pass for both languages. The walk and the chunking go in `bcts`, next to
+the bracer (`bct::chunk::plan`), and what makes a bracket a collection and
+where each kind's elements begin in `datalit::chunk_plan`:
 
 - `collection_plan(lexed, policy) -> Vec<PlannedCollection>`, tracked. Each
   entry is the token index of a collection's open bracket, its sigil, and its
@@ -298,7 +300,8 @@ decides how much each one is worth.
 parse is 59-98% of every case in both languages, and it costs more per byte as
 the collection grows, from interning every number.
 
-**Phase 1**: `bct::chunk` (the plan, the policy, the thresholds),
+**Phase 1**: `bct::chunk` (the walk, the chunker), `datalit::chunk_plan`
+(the collection kinds, the plan query, the policy, the thresholds),
 `datalit::parser::parse_chunk` and `Parser::parse_planned` in
 `crates/datalove-datalit/src/parser/chunk.rs`, the warm-up for data files
 (`data_chunks` and its `warm` in `compile_modules`,

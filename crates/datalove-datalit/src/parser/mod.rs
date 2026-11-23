@@ -55,7 +55,7 @@ fn parse_bracer<'db>(
 ) -> ast::ParseResult<'db> {
     let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
     parser.sink = sink;
-    parser.plan = bct::chunk::collection_plan(db, bracer.lexed(db));
+    parser.plan = crate::chunk_plan::collection_plan(db, bracer.lexed(db));
     let expr = parser.parse_expr_full();
     // A document is one expression, so anything after it was written by
     // mistake rather than left for a caller to read.

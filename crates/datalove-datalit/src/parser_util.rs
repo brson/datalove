@@ -101,7 +101,7 @@ impl<'db> SeenNames<'db> {
     /// Take a name, or say what to report if it was taken already.
     ///
     /// The report is handed back rather than filed, so that a parser that
-    /// keeps its diagnostics (a chunk's; see `bct::chunk`) keeps this one too.
+    /// keeps its diagnostics (a chunk's; see `crate::chunk_plan`) keeps this one too.
     #[must_use]
     pub fn take_reported(
         &mut self,
@@ -204,6 +204,70 @@ pub fn type_name_suggestion(word: &str) -> Option<String> {
         _ => return None,
     };
     Some(rmx::std::format!("a {lower} type is written `{spelled}`"))
+}
+
+/// A tensor literal's shape header, read off the front of its tokens.
+pub struct TensorHeader {
+    pub extents: Vec<u32>,
+    /// The header and the `|` that ends it.
+    pub span: rmx::core::ops::Range<usize>,
+}
+
+/// What is wrong with a tensor's shape header.
+pub struct TensorHeaderError {
+    pub span: rmx::core::ops::Range<usize>,
+    pub message: String,
+    pub label: String,
+}
+
+/// Split a tensor's tokens at the `|` that ends its shape header, if there
+/// is one, and read the header's extents.
+///
+/// What comes before the first `|` is the header: whole numbers, one per axis, of which
+/// there has to be at least one, since a tensor has at least one axis.
+pub fn split_tensor_header<'db>(
+    text: &str,
+    tokens: bct::bracer::Cursor<'db>,
+) -> (Option<Result<TensorHeader, TensorHeaderError>>, bct::bracer::Cursor<'db>) {
+    let mut rest = tokens;
+    let pipe = std::iter::from_fn(|| rest.next_index()).find(|&index| {
+        tokens.is_plain(index) && tokens.raw(index).kind == bct::lexer::TokenKind::Sigil(bct::lexer::Sigil::Pipe)
+    });
+    let Some(pipe) = pipe else {
+        return (None, tokens);
+    };
+    let header = tokens.between(tokens.position(), pipe);
+    let body = tokens.between(pipe.checked_add(1).X(), tokens.end());
+    let pipe_span = tokens.raw(pipe).span();
+
+    let start = header.first().map_or(pipe_span.start, |token| token.span().start);
+    let span = start..pipe_span.end;
+    if header.is_empty() {
+        return (Some(Err(TensorHeaderError {
+            span,
+            message: S("a tensor's shape has no extents"),
+            label: S("a tensor has at least one axis, and the shape gives each its extent"),
+        })), body);
+    }
+
+    let mut extents = vec![];
+    for token in header {
+        let extent = match &token {
+            bct::bracer::TreeToken::Token(t) => t.word_str(text)
+                .filter(|w| is_decimal_run(w))
+                .and_then(|w| strip_separators(w).parse::<u32>().ok()),
+            bct::bracer::TreeToken::Branch { .. } => None,
+        };
+        match extent {
+            Some(extent) => extents.push(extent),
+            None => return (Some(Err(TensorHeaderError {
+                span: token.span(),
+                message: S("a tensor's shape is written as whole numbers"),
+                label: S("expected the extent of an axis"),
+            })), body),
+        }
+    }
+    (Some(Ok(TensorHeader { extents, span })), body)
 }
 
 /// What is wrong with a tensor body written under a shape header, if

@@ -12,7 +12,7 @@
 //! hands the counter back when it finishes. Get that wrong and two expressions
 //! share a position, which is what these tests are watching for.
 //!
-//! A collection parsed in chunks (see `bct::chunk`) numbers each chunk in a
+//! A collection parsed in chunks (see `datalove_datalit::chunk_plan`) numbers each chunk in a
 //! range of its own, so its numbers have gaps; they still may not repeat.
 
 use rmx::prelude::*;
@@ -24,8 +24,8 @@ use datalove_datalit::Database;
 /// into chunks or not.
 fn positions_cut(src: &str, cut: bool) -> Vec<u32> {
     let db = Database::default();
-    let thresholds = if cut { bct::chunk::CUT_EVERYTHING.to_vec() } else { Vec::new() };
-    bct::chunk::ChunkPolicy::new(&db, thresholds);
+    let thresholds = if cut { datalove_datalit::chunk_plan::CUT_EVERYTHING.to_vec() } else { Vec::new() };
+    datalove_datalit::chunk_plan::ChunkPolicy::new(&db, thresholds);
     let source = Source::new(&db, src.S());
     let _ = datalove_datalit::parser::parse(&db, source);
     datalove_datalit::spans::datalit_spans(&db, source)

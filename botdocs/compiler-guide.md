@@ -1444,7 +1444,7 @@ salsa-patterns.md).
 
 **A large collection literal is parallel within itself.** A datalit list, map,
 set, table or tensor of 32-512KB or more, depending on the kind, is parsed in
-chunks, each a query of its own (`bct::chunk`, `datalit::parser::parse_chunk`),
+chunks, each a query of its own (`datalit::chunk_plan`, `datalit::parser::parse_chunk`),
 and in a parallel compile the compiler parses the data files' chunks on
 rayon before the typecheck that asks for them. A chunked parse is the whole
 parse, which `just test-cut` holds the suite to. A datafun literal is not

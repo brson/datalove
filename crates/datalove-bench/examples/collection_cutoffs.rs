@@ -20,7 +20,7 @@
 //! after another and on rayon pools of 1, 2 and 4 threads, and says for each
 //! shape the smallest size from which cutting is the faster by 5% at every
 //! size measured, and with what chunks at that size. Those are what
-//! `bct::chunk::DEFAULT_THRESHOLDS` should say.
+//! `datalove_datalit::chunk_plan::DEFAULT_THRESHOLDS` should say.
 //!
 //! With `--defaults`, it times the same cases whole and as
 //! `DEFAULT_THRESHOLDS` cuts them, in turn and on four threads: the check
@@ -29,7 +29,8 @@
 use rmx::prelude::*;
 use std::time::{Duration, Instant};
 
-use bct::chunk::{ChunkPolicy, CollectionKind, Thresholds};
+use bct::chunk::Thresholds;
+use datalove_datalit::chunk_plan::{ChunkPolicy, CollectionKind};
 use bct::input::Source;
 use bct::module_graph::{Module, ModuleId};
 use datalove_datafun as datafun;
@@ -225,7 +226,7 @@ fn parse_once(shape: &Shape, text: &str, config: Config, pools: &[(usize, rmx::r
     let db = datafun::Database::default();
     let thresholds = match config {
         Config::Whole => Vec::new(),
-        Config::Default(_) => bct::chunk::DEFAULT_THRESHOLDS.to_vec(),
+        Config::Default(_) => datalove_datalit::chunk_plan::DEFAULT_THRESHOLDS.to_vec(),
         Config::Cut(chunk_bytes) | Config::CutParallel(chunk_bytes, _) => {
             let kind = match shape.kind {
                 "list" => CollectionKind::List,
@@ -244,7 +245,7 @@ fn parse_once(shape: &Shape, text: &str, config: Config, pools: &[(usize, rmx::r
     let _ = bct::bracer::bracer(&db, lexed);
 
     let t = Instant::now();
-    let plan = bct::chunk::collection_plan(&db, lexed);
+    let plan = datalove_datalit::chunk_plan::collection_plan(&db, lexed);
     let threads = match config {
         Config::CutParallel(_, threads) | Config::Default(Some(threads)) => Some(threads),
         _ => None,
@@ -252,7 +253,7 @@ fn parse_once(shape: &Shape, text: &str, config: Config, pools: &[(usize, rmx::r
     if let Some(threads) = threads.filter(|_| !plan.is_empty()) {
         let pool = &pools.iter().find(|(n, _)| *n == threads).expect("a pool of that size").1;
         let work: Vec<_> = plan.iter().enumerate()
-            .flat_map(|(collection, planned)| (0..planned.chunks.len()).map(move |chunk| (collection as u32, chunk as u32)))
+            .flat_map(|(collection, planned)| (0..planned.cuts.chunks.len()).map(move |chunk| (collection as u32, chunk as u32)))
             .map(|(collection, chunk)| (db.C(), collection, chunk))
             .collect();
         pool.install(|| work.into_par_iter().for_each(|(db, collection, chunk)| {

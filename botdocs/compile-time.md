@@ -368,7 +368,7 @@ not interning numbers at all would remove the cost in every mode, and is worth
 doing on its own.
 
 **Cut into chunks** (phase 1), a datalit list, map or set parses as
-`bct::chunk::DEFAULT_THRESHOLDS` says: from 32KB and 16 elements, in chunks of
+`datalit::chunk_plan::DEFAULT_THRESHOLDS` says: from 32KB and 16 elements, in chunks of
 at least 8KB and about 64 to a collection. `collection_cutoffs --cutoffs` chose
 those: with two or more threads, cutting wins by 5% or more from 16KB for every
 shape, and with one only from 32KB to 2MB depending on the shape, which is

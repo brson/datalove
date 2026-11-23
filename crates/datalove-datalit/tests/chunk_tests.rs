@@ -4,12 +4,12 @@
 //! one whose policy cuts every collection that can be cut after every element,
 //! and the two are compared: the trees, less the numbers a parse gives its
 //! expressions; the spans, as byte ranges; the parse diagnostics, in order;
-//! and the type and the type diagnostics. See `bct::chunk`.
+//! and the type and the type diagnostics. See `datalove_datalit::chunk_plan`.
 
 use rmx::prelude::*;
 use rmx::serde_json::{Value, json};
 
-use bct::chunk::{ChunkPolicy, CUT_EVERYTHING};
+use datalove_datalit::chunk_plan::{ChunkPolicy, CUT_EVERYTHING};
 use bct::input::Source;
 use datalove_datalit::{Database, ast_serde, parser, resolve, tycheck};
 use datalove_diagnostic::{ParseDiagnostic, TypeDiagnostic};
@@ -22,7 +22,7 @@ fn analyze(text: &str, cut: bool) -> (Value, usize) {
     ChunkPolicy::new(&db, thresholds);
 
     let source = Source::new(&db, text.S());
-    let planned = bct::chunk::collection_plan(&db, bct::lexer::lex(&db, source)).len();
+    let planned = datalove_datalit::chunk_plan::collection_plan(&db, bct::lexer::lex(&db, source)).len();
     let parsed = parser::parse(&db, source);
     let expr = parsed.expr(&db);
 

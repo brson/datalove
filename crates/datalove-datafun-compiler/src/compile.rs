@@ -203,9 +203,9 @@ fn data_chunks<'db>(
 ) -> Vec<(bct::input::Source, u32, u32)> {
     let mut chunks = Vec::new();
     for source in graph.data(db).values() {
-        let plan = bct::chunk::collection_plan(db, bct::lexer::lex(db, *source));
+        let plan = datalove_datalit::chunk_plan::collection_plan(db, bct::lexer::lex(db, *source));
         for (collection, planned) in plan.iter().enumerate() {
-            for chunk in 0..planned.chunks.len() {
+            for chunk in 0..planned.cuts.chunks.len() {
                 chunks.push((*source, u32::try_from(collection).X(), u32::try_from(chunk).X()));
             }
         }

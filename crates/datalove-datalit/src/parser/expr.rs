@@ -329,19 +329,19 @@ impl<'db> Parser<'db> {
                 ast::Expr::AnonStruct(ast::ExprAnonStruct { fields })
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, open, .. })
-                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+                if let Some((index, _)) = crate::chunk_plan::planned_at(self.plan, open.span().start) =>
             {
                 let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
                 ast::Expr::List(ast::ExprList { elements: self.parse_planned(index, inner).into_exprs() })
             }
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, open, .. })
-                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+                if let Some((index, _)) = crate::chunk_plan::planned_at(self.plan, open.span().start) =>
             {
                 let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
                 ast::Expr::Map(ast::ExprMap { entries: self.parse_planned(index, inner).into_entries() })
             }
             Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, open, .. })
-                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+                if let Some((index, _)) = crate::chunk_plan::planned_at(self.plan, open.span().start) =>
             {
                 let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
                 ast::Expr::Set(ast::ExprSet { elements: self.parse_planned(index, inner).into_exprs() })
@@ -384,13 +384,13 @@ impl<'db> Parser<'db> {
                 ast::Expr::Set(ast::ExprSet { elements })
             }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, open, .. })
-                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+                if let Some((index, _)) = crate::chunk_plan::planned_at(self.plan, open.span().start) =>
             {
                 let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
                 self.parse_planned_table(index, inner)
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, open, .. })
-                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+                if let Some((index, _)) = crate::chunk_plan::planned_at(self.plan, open.span().start) =>
             {
                 let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
                 self.parse_planned_tensor(index, inner)
@@ -494,7 +494,7 @@ impl<'db> Parser<'db> {
     /// `,,` separates slabs (3rd axis).
     /// `,,,` separates blocks (4th axis), etc.
     fn parse_tensor_expr(&mut self, iter: Cursor<'db>) -> ast::Expr<'db> {
-        let (header, body) = split::split_tensor_header(self.text(), iter);
+        let (header, body) = parser_util::split_tensor_header(self.text(), iter);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),

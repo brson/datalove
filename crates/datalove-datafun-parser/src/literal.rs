@@ -248,7 +248,7 @@ impl<'db> Parser<'db> {
         &mut self,
         iter: Cursor<'db>,
     ) -> ast::ExprFunKind<'db> {
-        let (header, body) = split::split_tensor_header(self.text(), iter);
+        let (header, body) = parser_util::split_tensor_header(self.text(), iter);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),

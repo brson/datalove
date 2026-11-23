@@ -1,6 +1,6 @@
 //! A collection parsed in chunks, each a query of its own.
 //!
-//! [`bct::chunk::collection_plan`] says which of a source's collections to
+//! [`crate::chunk_plan::collection_plan`] says which of a source's collections to
 //! parse this way and where their chunks are. A chunk is parsed by the parser
 //! a collection makes for its contents, over the chunk's run of elements, and
 //! comes back with everything that parser would have left behind: its
@@ -22,7 +22,7 @@ use rmx::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bct::chunk::{CollectionKind, chunk_number_base, CHUNK_NUMBERS};
+use bct::chunk::{chunk_number_base, CHUNK_NUMBERS};
 use bct::diagnostic::StoredDiagnostic;
 use bct::input::Source;
 use bct::text::TextSpan;
@@ -30,6 +30,7 @@ use bct::bracer::Cursor;
 use bct::{bracer, lexer};
 
 use crate::ast;
+use crate::chunk_plan::{CollectionForm, CollectionKind};
 use crate::parser_util::{TokenStream, TokenStreamExt};
 use super::state::{EmitTo, Parser, emit_stored, not_exhausted_error};
 
@@ -120,11 +121,11 @@ pub fn parse_chunk<'db>(
     chunk: u32,
 ) -> ChunkParse<'db> {
     let lexed = lexer::lex(db, source);
-    let plan = bct::chunk::collection_plan(db, lexed);
+    let plan = crate::chunk_plan::collection_plan(db, lexed);
     let planned = &plan[collection as usize];
-    let cursor = planned.chunk_cursor(bracer::bracer(db, lexed).iter(db), chunk as usize);
+    let cursor = planned.cuts.chunk_cursor(bracer::bracer(db, lexed).iter(db), chunk as usize);
 
-    let base = chunk_number_base(planned.first_chunk + chunk);
+    let base = chunk_number_base(planned.cuts.first_chunk + chunk);
     let kept = Rc::new(RefCell::new(Vec::new()));
     let mut prelude = Vec::new();
     let mut parser = Parser::from_branch_numbering_aliases(db, cursor, source, base);
@@ -149,22 +150,21 @@ pub fn parse_chunk<'db>(
             }
         }
     };
-    let items = match planned.kind {
-        CollectionKind::List | CollectionKind::Set => {
+    let items = match planned.form {
+        CollectionForm::List | CollectionForm::Set => {
             let mut exprs = Vec::new();
             parse_items(&mut parser, &mut |p| exprs.push(p.parse_expr_full()));
             ChunkItems::Exprs(exprs)
         }
-        CollectionKind::Map => {
+        CollectionForm::Map => {
             let mut entries = Vec::new();
             parse_items(&mut parser, &mut |p| entries.push(p.parse_map_entry()));
             ChunkItems::Entries(entries)
         }
-        CollectionKind::Table => {
+        CollectionForm::Table { header: (from, to) } => {
             // The column count every row is checked against, as the header
             // makes it; what reading the header reports is the parse of the
             // whole collection's to file, so it is put aside here.
-            let (from, to) = planned.header.X();
             let header = cursor.between(from, to);
             let scratch = std::mem::replace(&mut parser.sink, Some(Rc::new(RefCell::new(Vec::new()))));
             let had_error = parser.had_error;
@@ -172,7 +172,7 @@ pub fn parse_chunk<'db>(
             parser.sink = scratch;
             parser.had_error = had_error;
 
-            let first = planned.chunks[chunk as usize].first as usize;
+            let first = planned.cuts.chunks[chunk as usize].first as usize;
             let rows = bct::split::Lines::new(cursor).enumerate()
                 .map(|(i, row)| {
                     let elements = parser.parse_table_data_row(row);
@@ -190,10 +190,10 @@ pub fn parse_chunk<'db>(
                 .collect();
             ChunkItems::Rows(rows)
         }
-        CollectionKind::Tensor => {
-            let groups = bct::split::split_commas(cursor, planned.rank as usize - 1);
+        CollectionForm::Tensor { rank } => {
+            let groups = bct::split::split_commas(cursor, rank as usize - 1);
             parser.report_stray_delimiters(&groups, "parts");
-            let last = chunk as usize + 1 == planned.chunks.len();
+            let last = chunk as usize + 1 == planned.cuts.chunks.len();
             if let Some(written) = bct::split::trailing_delimiter(&groups).filter(|_| last) {
                 parser.had_error = true;
                 bct::split::trailing_delimiter_error(db, source, &written, "parts")
@@ -203,7 +203,7 @@ pub fn parse_chunk<'db>(
             prelude = std::mem::take(&mut *kept.borrow_mut());
             let groups = bct::split::nonempty_groups(groups).into_iter()
                 .map(|group| {
-                    let (shape, elements) = parser.parse_tensor_multicomma(group, planned.rank - 1);
+                    let (shape, elements) = parser.parse_tensor_multicomma(group, rank - 1);
                     TensorGroup {
                         shape,
                         elements,
@@ -246,7 +246,7 @@ impl<'db> Parser<'db> {
     /// elements divide, and the collection is parsed whole.
     pub(super) fn parse_planned(&mut self, index: usize, inner: Cursor<'db>) -> ChunkItems<'db> {
         let planned = &self.plan[index];
-        let kind = planned.kind;
+        let kind = planned.form.kind();
         let parts = self.chunk_parts(index);
         let used = parts.iter().position(|part| part.leftover.is_some()).map_or(parts.len(), |at| at + 1);
         if parts[..used - 1].iter().any(|part| !part.ended_on_separator) {
@@ -278,8 +278,7 @@ impl<'db> Parser<'db> {
     /// A planned table, whose bracket this parser has just passed and whose
     /// contents are `inner`: the header read here, and the rows from the chunks.
     pub(super) fn parse_planned_table(&mut self, index: usize, inner: Cursor<'db>) -> ast::Expr<'db> {
-        let planned = &self.plan[index];
-        let (from, to) = planned.header.X();
+        let CollectionForm::Table { header: (from, to) } = self.plan[index].form else { bug!() };
         let header = self.parse_table_header(inner.between(from, to));
         let mut rows = Vec::new();
         for part in self.chunk_parts(index) {
@@ -300,8 +299,8 @@ impl<'db> Parser<'db> {
     /// diagnostics and, if its shape is not the first group's, the complaint
     /// about that.
     pub(super) fn parse_planned_tensor(&mut self, index: usize, inner: Cursor<'db>) -> ast::Expr<'db> {
-        let rank = self.plan[index].rank;
-        let (header, _) = bct::split::split_tensor_header(self.text(), inner);
+        let CollectionForm::Tensor { rank } = self.plan[index].form else { bug!() };
+        let (header, _) = crate::parser_util::split_tensor_header(self.text(), inner);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),
@@ -364,7 +363,7 @@ impl<'db> Parser<'db> {
     /// Every chunk of the `index`th planned collection.
     fn chunk_parts(&self, index: usize) -> Vec<&'db ChunkParse<'db>> {
         let collection = u32::try_from(index).X();
-        (0..self.plan[index].chunks.len())
+        (0..self.plan[index].cuts.chunks.len())
             .map(|chunk| parse_chunk(self.db, self.source_text(), collection, u32::try_from(chunk).X()))
             .collect()
     }

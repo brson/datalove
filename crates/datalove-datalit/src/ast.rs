@@ -434,7 +434,7 @@ pub struct ExprTable<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprTableRow<'db> {
     /// Shared, so that a row parsed in a chunk goes into the table for a
-    /// reference count rather than a copy; see `bct::chunk`.
+    /// reference count rather than a copy; see `crate::chunk_plan`.
     pub elements: Arc<[ExprFull<'db>]>,
 }
 

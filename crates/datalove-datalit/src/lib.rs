@@ -2,6 +2,7 @@ use rmx::prelude::*;
 
 pub mod ast;
 pub mod ast_serde;
+pub mod chunk_plan;
 pub mod parser;
 pub mod parser_util;
 pub mod resolve;
