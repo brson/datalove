@@ -169,6 +169,9 @@ struct TypecheckStdCommand {
 
 #[derive(clap::Args)]
 struct DocsCommand {
+    /// Build for deployment, with analytics.
+    #[arg(long)]
+    production: bool,
 }
 
 #[derive(clap::Args)]
@@ -708,12 +711,13 @@ impl DocsCommand {
         let botdocs_assets: &[&str] = &botdocs_assets.iter().map(String::as_str).collect::<Vec<_>>();
         let output_dir = project_root.join("docs");
 
+        let production = if self.production { "true" } else { "false" };
         let doc_sets = [
             DocSet {
                 input_dir: &mandocs_dir,
                 mount: "",
                 static_assets: mandocs_assets,
-                extra_context: &[("cross_link_label", "Botdocs")],
+                extra_context: &[("cross_link_label", "Botdocs"), ("production", production)],
                 link_context: &[("cross_link_url", "../botdocs/README.md")],
                 posts: Some(PostsConfig {
                     site_title: "Datalove",
@@ -731,7 +735,7 @@ impl DocsCommand {
                 input_dir: &botdocs_dir,
                 mount: "bot",
                 static_assets: botdocs_assets,
-                extra_context: &[("cross_link_label", "Mandocs")],
+                extra_context: &[("cross_link_label", "Mandocs"), ("production", production)],
                 link_context: &[("cross_link_url", "../mandocs/README.md")],
                 posts: None,
             },

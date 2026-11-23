@@ -278,6 +278,10 @@ loc:
 doc:
     cargo run -p datalove-cli -- docs
 
+# Build the docs into docs/ for deployment, with analytics.
+doc-production:
+    cargo run -p datalove-cli -- docs --production
+
 # Show module memoization test results table.
 memo-table:
     python3 scripts/memo-table.py

@@ -22,6 +22,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Vollkorn:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ path_prefix }}style.css">
     <link rel="alternate" type="application/rss+xml" title="Datalove Posts" href="{{ path_prefix }}posts.xml">
+    {% if production == "true" %}
+    <script data-goatcounter="https://datalove.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
+    {% endif %}
 </head>
 <body>
     <nav id="navbar">
