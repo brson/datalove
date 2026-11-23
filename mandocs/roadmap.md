@@ -28,17 +28,16 @@ Focus on ergonomic scripting experience and the REPL.
 - [ ] interactive CLI UX
 - [x] module and script compile reactivity
 - [x] script interpreter reactivity
+- [ ] pipeline I/O
+- [ ] multiple concurrent interactive scripts
+- [x] virtual I/O for all existing file access
 - [ ] repl error and abort semantics
 - [ ] assert statements
 - [ ] rational numbers
 - [ ] numeric ergonomics
 - [ ] ?/! polymorphism
-- [ ] enum subtyping
 - [x] filesystem workspaces
-- [ ] multiple concurrent interactive scripts
 - [ ] std docs, in-repl docs, generated docs
-- [ ] pipeline I/O
-- [x] virtual I/O for all existing file access
 
 
 
@@ -58,6 +57,7 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## Punted
 
+- enum subtyping
 - tuned generics specialization
 - lazy lowering
 - lazy lowering of consts
