@@ -54,18 +54,14 @@ pub fn resolve_package_world<'db>(
     package_world_map: PackageWorldMap<'db>,
     import_demand_map: ImportDemandMap<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
+    let module_map = package_world_map.module_map(db);
     let mut module_edges: LookupMap<PackageModule<'db>, BTreeMap<ImportDemand, ResolvedPackageModule<'db>>> = default();
     for package_world_record in package_world_map.flatten_iter(db) {
-        let PackageWorldRecord { package, package_module, .. } = package_world_record;
+        let PackageWorldRecord { package_module, .. } = package_world_record;
         let mut module_deps = BTreeMap::new();
         let import_demands = &import_demand_map.map(db)[&package_module];
         for import_demand in import_demands.iter() {
-            let module_world_map = module_world_map(db, package_world_map, package);
-            match lookup_import(
-                db,
-                module_world_map,
-                import_demand,
-            ) {
+            match lookup_import(&module_map, import_demand) {
                 Some(import_package_module) => {
                     module_deps.insert(
                         import_demand.C(), ResolvedPackageModule::Resolved(import_package_module),
@@ -88,23 +84,12 @@ pub fn resolve_package_world<'db>(
     )
 }
 
+/// The module an import names, which is `package/module` in its import space.
 fn lookup_import<'db>(
-    db: &'db dyn crate::Db,
-    module_world_map: ModuleWorldMap<'db>,
-    import_demand: &ImportDemand,
+    module_map: &BTreeMap<ImportSpace, BTreeMap<ModuleName, PackageModule<'db>>>,
+    (import_space, package_alias, module_alias): &ImportDemand,
 ) -> Option<PackageModule<'db>> {
-    let import_space = &import_demand.0;
-    let package_alias = &import_demand.1;
-    let module_alias = &import_demand.2;
-    module_world_map.map(db).get(import_space)
-        .and_then(|modules| {
-            if import_space == "pkg" {
-                modules.get(module_alias).copied()
-            } else {
-                let full_path = format!("{}/{}", package_alias, module_alias);
-                modules.get(&full_path).copied()
-            }
-        })
+    module_map.get(import_space)?.get(&format!("{package_alias}/{module_alias}")).copied()
 }
 
 fn validate_graph<'db>(
@@ -185,30 +170,6 @@ fn dfs_detect_cycle<'db>(
     visit_state.insert(node, VisitState::Visited);
 
     false
-}
-
-#[salsa::tracked(returns(copy))]
-pub fn module_world_map<'db>(
-    db: &'db dyn crate::Db,
-    package_world_map: PackageWorldMap<'db>,
-    package: Package<'db>,
-) -> ModuleWorldMap<'db> {
-    let mut module_map = package_world_map.module_map(db);
-    assert!(module_map.get("pkg").is_none());
-    module_map.insert(
-        S("pkg"),
-        package.modules(db).C(),
-    );
-    ModuleWorldMap::new(
-        db,
-        module_map,
-    )
-}
-
-#[salsa::tracked]
-struct ModuleWorldMap<'db> {
-    #[returns(ref)]
-    map: BTreeMap<ImportSpace, BTreeMap<ModuleAlias, PackageModule<'db>>>,
 }
 
 pub struct PackageWorldRecord<'db> {
@@ -315,7 +276,7 @@ fn test_map<'db>(
                             S("core"),
                             Source::new(
                                 db,
-                                S("import module pkg/u32"),
+                                S("require module sys/core/u32"),
                             ),
                         )),
                         (S("u32"), PackageModule::new(
@@ -466,7 +427,7 @@ fn test_input_cycle<'db>(
                             S("core"),
                             Source::new(
                                 db,
-                                S("import module pkg/b"),
+                                S("require module sys/core/b"),
                             ),
                         )),
                         (S("a"), PackageModule::new(
@@ -474,7 +435,7 @@ fn test_input_cycle<'db>(
                             S("a"),
                             Source::new(
                                 db,
-                                S("import module pkg/b"),
+                                S("require module sys/core/b"),
                             ),
                         )),
                         (S("b"), PackageModule::new(
@@ -482,7 +443,7 @@ fn test_input_cycle<'db>(
                             S("b"),
                             Source::new(
                                 db,
-                                S("import module pkg/a"),
+                                S("require module sys/core/a"),
                             ),
                         )),
                     ]),
@@ -498,13 +459,13 @@ fn test_input_cycle<'db>(
         db,
         [
             (module_core, vec![
-                (S("pkg"), S("core"), S("b"))
+                (S("sys"), S("core"), S("b"))
             ]),
             (module_a, vec![
-                (S("pkg"), S("core"), S("b"))
+                (S("sys"), S("core"), S("b"))
             ]),
             (module_b, vec![
-                (S("pkg"), S("core"), S("a"))
+                (S("sys"), S("core"), S("a"))
             ]),
         ].into_iter().collect(),
     );
