@@ -7,26 +7,33 @@ use rmx::std::path::{Path, PathBuf};
 use rmx::std::collections::BTreeMap;
 use datalove_vio::Fs;
 
+pub type LibraryName = String;
 pub type PackageName = String;
 pub type ModuleName = String;
+
+/// The library the standard library is, which every compile can require from.
+pub const SYSTEM_LIBRARY: &str = "sys";
+
+/// The library a workspace's own packages are, found beside what it compiles.
+pub const LOCAL_LIBRARY: &str = "local";
 
 pub struct PackageWorldConfig {
     pub dir_pkglib_system: PathBuf,
     pub dir_pkglib_local: Option<PathBuf>,
 }
 
+/// Every library a compile can require from, by name.
 pub struct PackageWorld {
-    pub pkglib_system: BTreeMap<PackageName, Package>,
-    pub pkglib_local: BTreeMap<PackageName, Package>,
+    pub libraries: BTreeMap<LibraryName, BTreeMap<PackageName, Package>>,
 }
 
 impl PackageWorld {
-    /// Collect rider sources from all packages in both libraries.
+    /// Collect rider sources from all packages in every library.
     ///
     /// Returns (rider_name, source_text) pairs for each package that has a `rider/rider.dli`.
     pub fn rider_sources(&self) -> Vec<(String, String)> {
         let mut riders = Vec::new();
-        for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
+        for pkg in self.libraries.values().flat_map(|library| library.values()) {
             if let Some(ref source) = pkg.rider_source {
                 riders.push((pkg.name.C(), source.C()));
             }
@@ -34,13 +41,13 @@ impl PackageWorld {
         riders
     }
 
-    /// Collect rider crate directories from all packages in both libraries.
+    /// Collect rider crate directories from all packages in every library.
     ///
     /// Returns (rider_name, crate_dir) pairs for each package whose rider
     /// crate has its source beside it.
     pub fn rider_crate_dirs(&self) -> Vec<(String, PathBuf)> {
         let mut dirs = Vec::new();
-        for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
+        for pkg in self.libraries.values().flat_map(|library| library.values()) {
             if let Some(ref dir) = pkg.rider_crate_dir {
                 dirs.push((pkg.name.C(), dir.C()));
             }
@@ -81,15 +88,12 @@ pub fn load_world(
     fs: &dyn Fs,
     config: PackageWorldConfig,
 ) -> AnyResult<PackageWorld> {
-    let pkglib_system = load_library_dir(fs, &config.dir_pkglib_system)?;
-    let pkglib_local = if let Some(ref dir) = config.dir_pkglib_local {
-        load_library_dir(fs, dir)?
-    } else {
-        BTreeMap::new()
-    };
-    Ok(PackageWorld {
-        pkglib_system, pkglib_local,
-    })
+    let mut libraries = BTreeMap::new();
+    libraries.insert(SYSTEM_LIBRARY.S(), load_library_dir(fs, &config.dir_pkglib_system)?);
+    if let Some(ref dir) = config.dir_pkglib_local {
+        libraries.insert(LOCAL_LIBRARY.S(), load_library_dir(fs, dir)?);
+    }
+    Ok(PackageWorld { libraries })
 }
 
 /// Load one library from its directory: every package directory in it.

@@ -15,7 +15,7 @@ use rmx::std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use datalove_datafun_pkg::package_load::{PackageWorld, Package};
+use datalove_datafun_pkg::package_load::{PackageWorld, Package, SYSTEM_LIBRARY};
 use datalove_vio::Fs;
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 
@@ -29,8 +29,11 @@ pub struct WorkspaceDescriptor {
     /// None when --no-sys.
     pub system_library: Option<PackageLibrary>,
 
-    /// User package libraries (e.g. local/).
-    /// Ordered; earlier libraries shadow later ones on name collision.
+    /// User package libraries, such as `local`.
+    ///
+    /// Each is an import space of its own, named first in a require path
+    /// (`require module local/app/main`), so modules in two libraries never
+    /// collide. Two libraries of one name are merged.
     pub user_libraries: Vec<PackageLibrary>,
 
     /// Compiler options that affect all compilation.
@@ -313,21 +316,19 @@ impl WorkspaceDescriptor {
 
     /// Build from a loaded [`PackageWorld`].
     ///
-    /// The `system` library populates `system_library`; the `local`
-    /// library is added as the first user library.
+    /// The system library populates `system_library`, and every other
+    /// library is a user library, in name order. A library with no packages
+    /// is left out.
     pub fn from_package_world(world: &PackageWorld, options: CompilerOptions) -> Self {
-        let system_library = if world.pkglib_system.is_empty() {
-            None
-        } else {
-            Some(package_library_from_map("sys", &world.pkglib_system))
-        };
-
-        let user_libraries = if world.pkglib_local.is_empty() {
-            Vec::new()
-        } else {
-            vec![package_library_from_map("local", &world.pkglib_local)]
-        };
-
+        let mut system_library = None;
+        let mut user_libraries = Vec::new();
+        for (name, packages) in world.libraries.iter().filter(|(_, packages)| !packages.is_empty()) {
+            let library = package_library_from_map(name, packages);
+            match name.as_str() {
+                SYSTEM_LIBRARY => system_library = Some(library),
+                _ => user_libraries.push(library),
+            }
+        }
         Self { system_library, user_libraries, options, work_dir: None }
     }
 

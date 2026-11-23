@@ -1,0 +1,31 @@
+----------
+module vendor/num/base
+----------
+
+fun add(x: u32, y: u32): u32
+  ret 0
+end fun
+
+----------
+module vendor/num/twice
+----------
+
+require module vendor/num/base
+
+import base.add
+
+fun twice(n: u32): u32
+  ret add(n, n)
+end fun
+
+----------
+module local/app/main
+----------
+
+require module vendor/num/twice
+
+import twice.twice
+
+fun quadruple(n: u32): u32
+  ret twice(twice(n))
+end fun

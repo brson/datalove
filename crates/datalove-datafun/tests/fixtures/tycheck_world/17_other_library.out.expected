@@ -1,0 +1,42 @@
+{
+  "diagnostics": [],
+  "modules": {
+    "base": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "add",
+          "params": [
+            "u32",
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    },
+    "main": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "quadruple",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    },
+    "twice": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "twice",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    }
+  }
+}

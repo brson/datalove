@@ -15,9 +15,9 @@ pub mod package_resolve;
 
 // Re-export key types.
 pub use datalove_pkg_manifest as manifest;
-pub use package_load::{PackageWorldConfig, load_world};
+pub use package_load::{LOCAL_LIBRARY, PackageWorldConfig, SYSTEM_LIBRARY, load_world};
 pub use package::{
     Package, PackageModule, PackageName, ModuleName,
-    PackageWorld, import_from_loader, import_with_sources, package_world_map,
+    PackageWorld, import_from_loader, import_with_sources, library_durability, package_world_map,
 };
 pub use package_resolve::{resolve_package_world_with_imports, to_module_graph, ModuleGraphWithRequires};

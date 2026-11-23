@@ -14,22 +14,32 @@ pub use bct::package2::{
 
 use crate::package_load as pl;
 
-/// Convert loaded packages to Salsa types.
+/// How likely the sources of a library are to change.
 ///
 /// The system library is the standard library, which is read once and does not
 /// change while the session runs, so its sources are marked high durability.
-/// Editing a local module then leaves salsa able to skip revalidating anything
-/// that depends only on the system library, which is most of the compiler's
-/// view of `sys/std`.
+/// Editing any other module then leaves salsa able to skip revalidating
+/// anything that depends only on the system library, which is most of the
+/// compiler's view of `sys/std`.
+pub fn library_durability(library: &str) -> Durability {
+    match library {
+        pl::SYSTEM_LIBRARY => Durability::HIGH,
+        _ => Durability::LOW,
+    }
+}
+
+/// Convert loaded packages to Salsa types.
 pub fn import_from_loader<'db>(
     db: &'db dyn salsa::Database,
     package_world_raw: pl::PackageWorld,
 ) -> PackageWorld<'db> {
-    PackageWorld::new(
-        db,
-        make_library(db, package_world_raw.pkglib_system, Durability::HIGH),
-        make_library(db, package_world_raw.pkglib_local, Durability::LOW),
-    )
+    let libraries: BTreeMap<_, _> = package_world_raw.libraries.into_iter()
+        .map(|(name, library)| {
+            let durability = library_durability(&name);
+            (name, make_library(db, library, durability))
+        })
+        .collect();
+    PackageWorld::new(db, libraries)
 }
 
 /// Build a `PackageWorld` over sources that already exist.
@@ -47,14 +57,12 @@ pub fn import_from_loader<'db>(
 /// rest: same sources, same world, nothing to redo.
 pub fn import_with_sources<'db>(
     db: &'db dyn salsa::Database,
-    pkglib_system: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
-    pkglib_local: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
+    libraries: BTreeMap<pl::LibraryName, BTreeMap<PackageName, BTreeMap<ModuleName, Source>>>,
 ) -> PackageWorld<'db> {
-    PackageWorld::new(
-        db,
-        library_from_sources(db, pkglib_system),
-        library_from_sources(db, pkglib_local),
-    )
+    let libraries: BTreeMap<_, _> = libraries.into_iter()
+        .map(|(name, library)| (name, library_from_sources(db, library)))
+        .collect();
+    PackageWorld::new(db, libraries)
 }
 
 fn library_from_sources<'db>(

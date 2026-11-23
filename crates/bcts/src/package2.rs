@@ -2,7 +2,7 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use crate::input::Source;
-use crate::package_resolve2::PackageWorldMap;
+use crate::package_resolve2::{ImportSpace, PackageWorldMap};
 
 pub type PackageName = String;
 pub type ModuleName = String;
@@ -32,7 +32,11 @@ pub struct PackageModule<'db> {
     pub text: Source,
 }
 
-/// A package world containing system and local package libraries.
+/// The libraries of packages a compile can require from.
+///
+/// A library is an import space of its own: `require module lib/pkg/mod`
+/// names package `pkg` of library `lib`. Which libraries there are, and what
+/// any of them means, is the caller's.
 ///
 /// Interned, so recompiling an unchanged world is recognised as the same
 /// world rather than a new one that happens to hold the same packages.
@@ -40,9 +44,7 @@ pub struct PackageModule<'db> {
 #[derive(Debug)]
 pub struct PackageWorld<'db> {
     #[returns(ref)]
-    pub pkglib_system: BTreeMap<PackageName, Package<'db>>,
-    #[returns(ref)]
-    pub pkglib_local: BTreeMap<PackageName, Package<'db>>,
+    pub libraries: BTreeMap<ImportSpace, BTreeMap<PackageName, Package<'db>>>,
 }
 
 /// Create a PackageWorldMap from a PackageWorld.
@@ -51,14 +53,6 @@ pub fn package_world_map<'db>(
     db: &'db dyn salsa::Database,
     package_world: PackageWorld<'db>,
 ) -> PackageWorldMap<'db> {
-    let pkglib_system = package_world.pkglib_system(db).C();
-    let pkglib_local = package_world.pkglib_local(db).C();
-    PackageWorldMap::new(
-        db,
-        BTreeMap::from([
-            (S("sys"), pkglib_system),
-            (S("local"), pkglib_local),
-        ]),
-    )
+    PackageWorldMap::new(db, package_world.libraries(db).C())
 }
 

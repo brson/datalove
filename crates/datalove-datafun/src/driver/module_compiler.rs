@@ -155,12 +155,7 @@ impl ModuleCompiler {
         source: &str,
     ) {
         let path = format!("{}/{}/{}", library, package, module);
-        // The system library is read once and does not change while a session
-        // runs, so an edit to anybody's own code should not make salsa walk it.
-        let durability = match library {
-            "sys" => salsa::Durability::HIGH,
-            _ => salsa::Durability::LOW,
-        };
+        let durability = datalove_datafun_pkg::library_durability(library);
         self.world.add_module_with_durability(db, &path, source, durability);
     }
 
@@ -174,10 +169,7 @@ impl ModuleCompiler {
         text: &str,
     ) {
         let path = format!("{}/{}/{}", library, package, name);
-        let durability = match library {
-            "sys" => salsa::Durability::HIGH,
-            _ => salsa::Durability::LOW,
-        };
+        let durability = datalove_datafun_pkg::library_durability(library);
         self.world.add_data_with_durability(db, &path, text, durability);
     }
 

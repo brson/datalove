@@ -386,30 +386,19 @@ pub fn extract_dependencies<'db>(
     // every module on every call, and a `Source` is an input, so that is a
     // whole new world each time and nothing downstream of resolution can be
     // reused - even when nothing has been edited at all.
-    let mut pkglib_system: BTreeMap<String, BTreeMap<String, Source>> = BTreeMap::new();
-    let mut pkglib_local: BTreeMap<String, BTreeMap<String, Source>> = BTreeMap::new();
-
+    let mut libraries: BTreeMap<String, BTreeMap<String, BTreeMap<String, Source>>> = BTreeMap::new();
     for (path, source) in world.sources() {
-        let parts: Vec<&str> = path.split('/').collect();
-        if parts.len() != 3 {
-            continue;
-        }
-        let library = parts[0];
-        let package_name = parts[1];
-        let module_name = parts[2];
-
-        let pkglib = match library {
-            "sys" => &mut pkglib_system,
-            "local" => &mut pkglib_local,
-            _ => continue,
+        let [library, package_name, module_name] = path.split('/').collect::<Vec<_>>()[..] else {
+            panic!("module path `{path}` is not library/package/module");
         };
-
-        pkglib.entry(package_name.S())
+        libraries.entry(library.S())
+            .or_default()
+            .entry(package_name.S())
             .or_default()
             .insert(module_name.S(), *source);
     }
 
-    let package_world = datalove_datafun_pkg::import_with_sources(db, pkglib_system, pkglib_local);
+    let package_world = datalove_datafun_pkg::import_with_sources(db, libraries);
     let roots = match roots {
         Roots::All => CompileRoots::new(db, None),
         Roots::From(paths) => CompileRoots::new(db, Some(paths.iter().cloned().collect())),
@@ -443,12 +432,10 @@ pub fn extract_dependencies_with_mode<'db>(
 }
 
 fn warm_import_demands(world: &IncrementalModuleWorld, db: &dyn DbClone, roots: &Roots, mode: ParallelMode) {
-    // The modules `dependencies_from_roots` can reach: the ones the package
-    // world is built from in `extract_dependencies`.
-    let reachable = |path: &str| {
-        let parts: Vec<&str> = path.split('/').collect();
-        parts.len() == 3 && matches!(parts[0], "sys" | "local") && world.sources().contains_key(path)
-    };
+    // The modules `dependencies_from_roots` can reach: every one the world
+    // has, which is what the package world is built from in
+    // `extract_dependencies`.
+    let reachable = |path: &str| world.sources().contains_key(path);
 
     let mut frontier: Vec<String> = match roots {
         Roots::All => world.sources().keys().filter(|p| reachable(p)).cloned().collect(),

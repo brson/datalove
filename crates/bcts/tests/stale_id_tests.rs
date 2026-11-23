@@ -188,7 +188,7 @@ fn building_the_same_package_world_twice_gives_one_world() {
         let package = Package::new(&db, "test".S(), modules);
         let mut library = BTreeMap::new();
         library.insert("test".S(), package);
-        PackageWorld::new(&db, BTreeMap::new(), library)
+        PackageWorld::new(&db, BTreeMap::from([("local".S(), library)]))
     };
 
     assert_eq!(build(source), build(source), "one world, described twice");

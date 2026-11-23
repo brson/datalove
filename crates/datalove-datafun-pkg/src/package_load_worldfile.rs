@@ -82,7 +82,8 @@ use crate::package_load::{PackageWorld, Package, PackageModule};
 
 /// A fully-qualified module path: `library/package/module`.
 ///
-/// Libraries are either `sys` (standard library) or `local` (user code).
+/// The library is `sys` for the standard library, `local` for a workspace's
+/// own packages, or any other name a worldfile gives one.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulePath {
     pub library: String,
@@ -390,17 +391,16 @@ pub fn load_worldfile_with_script(mut reader: impl Read) -> AnyResult<WorldfileW
 
     let parsed = parse_worldfile_to_sections(&content)?;
 
-    let mut pkglib_system = BTreeMap::new();
-    let mut pkglib_local = BTreeMap::new();
+    let mut libraries = BTreeMap::new();
     let mut script = None;
 
     for section in parsed {
         match section {
             WorldfileSection::Module { library, package, module, source } => {
-                insert_module(&mut pkglib_system, &mut pkglib_local, &library, &package, &module, source)?;
+                insert_module(&mut libraries, &library, &package, &module, source);
             }
             WorldfileSection::Data { library, package, name, source } => {
-                let pkg = package_entry(&mut pkglib_system, &mut pkglib_local, &library, &package)?;
+                let pkg = package_entry(&mut libraries, &library, &package);
                 pkg.data.insert(name.C(), PackageModule {
                     path: format!("{library}/{package}/{name}.dlt").into(),
                     name,
@@ -416,10 +416,7 @@ pub fn load_worldfile_with_script(mut reader: impl Read) -> AnyResult<WorldfileW
     }
 
     Ok(WorldfileWithScript {
-        package_world: PackageWorld {
-            pkglib_system,
-            pkglib_local,
-        },
+        package_world: PackageWorld { libraries },
         script,
     })
 }
@@ -461,40 +458,30 @@ pub fn write_worldfile(sections: &[WorldfileSection]) -> AnyResult<String> {
 // Internal Helpers
 // ============================================================================
 
-/// Insert a module into the appropriate package library.
+/// Insert a module into its library's package.
 fn insert_module(
-    pkglib_system: &mut BTreeMap<String, Package>,
-    pkglib_local: &mut BTreeMap<String, Package>,
+    libraries: &mut BTreeMap<String, BTreeMap<String, Package>>,
     library: &str,
     package: &str,
     module: &str,
     source: String,
-) -> AnyResult<()> {
-    let pkg = package_entry(pkglib_system, pkglib_local, library, package)?;
+) {
+    let pkg = package_entry(libraries, library, package);
     let path_str = format!("{}/{}/{}", library, package, module);
     pkg.modules.insert(module.S(), PackageModule {
         name: module.S(),
         path: path_str.C().into(),
         text: source,
     });
-
-    Ok(())
 }
 
 /// The package a section belongs to, made if this is the first to name it.
 fn package_entry<'a>(
-    pkglib_system: &'a mut BTreeMap<String, Package>,
-    pkglib_local: &'a mut BTreeMap<String, Package>,
+    libraries: &'a mut BTreeMap<String, BTreeMap<String, Package>>,
     library: &str,
     package: &str,
-) -> AnyResult<&'a mut Package> {
-    let pkglib = match library {
-        "sys" => pkglib_system,
-        "local" => pkglib_local,
-        other => bail!("unknown library '{other}' (must be 'sys' or 'local')"),
-    };
-
-    Ok(pkglib.entry(package.S())
+) -> &'a mut Package {
+    libraries.entry(library.S()).or_default().entry(package.S())
         .or_insert_with(|| Package {
             name: package.S(),
             modules: BTreeMap::new(),
@@ -505,7 +492,7 @@ fn package_entry<'a>(
             // out of one has no rider to name.
             rider_crate: None,
             rider_crate_dir: None,
-        }))
+        })
 }
 
 /// Module section header prefixes and their kinds, in order of specificity.
@@ -826,16 +813,41 @@ end fun
 
         let world = load_world_from_worldfile(worldfile.as_bytes()).X();
 
-        assert_eq!(world.pkglib_system.len(), 1);
-        assert_eq!(world.pkglib_local.len(), 1);
+        assert_eq!(world.libraries["sys"].len(), 1);
+        assert_eq!(world.libraries["local"].len(), 1);
 
-        let sys_std = world.pkglib_system.get("std").X();
+        let sys_std = world.libraries["sys"].get("std").X();
         assert_eq!(sys_std.modules.len(), 1);
         assert!(sys_std.modules.contains_key("bool"));
 
-        let local_util = world.pkglib_local.get("util").X();
+        let local_util = world.libraries["local"].get("util").X();
         assert_eq!(local_util.modules.len(), 1);
         assert!(local_util.modules.contains_key("utils"));
+    }
+
+    #[test]
+    fn test_library_of_any_name() {
+        let worldfile = r#"
+----------
+module vendor/util/strings
+----------
+
+fun foo()
+end fun
+
+----------
+data vendor/util/table
+----------
+
+1
+"#;
+
+        let world = load_world_from_worldfile(worldfile.as_bytes()).X();
+
+        assert_eq!(world.libraries.keys().collect::<Vec<_>>(), ["vendor"]);
+        let vendor_util = world.libraries["vendor"].get("util").X();
+        assert!(vendor_util.modules.contains_key("strings"));
+        assert!(vendor_util.data.contains_key("table"));
     }
 
     #[test]
@@ -858,8 +870,8 @@ end fun
 
         let world = load_world_from_worldfile(worldfile.as_bytes()).X();
 
-        assert_eq!(world.pkglib_system.len(), 1);
-        let sys_std = world.pkglib_system.get("std").X();
+        assert_eq!(world.libraries["sys"].len(), 1);
+        let sys_std = world.libraries["sys"].get("std").X();
         assert_eq!(sys_std.modules.len(), 2);
         assert!(sys_std.modules.contains_key("bool"));
         assert!(sys_std.modules.contains_key("int"));
@@ -907,17 +919,17 @@ end fun
         let world = load_world_from_worldfile(worldfile.as_bytes()).X();
 
         // Should have 2 packages in sys library.
-        assert_eq!(world.pkglib_system.len(), 2);
-        assert_eq!(world.pkglib_local.len(), 0);
+        assert_eq!(world.libraries["sys"].len(), 2);
+        assert!(!world.libraries.contains_key("local"));
 
         // Check std package has 2 modules.
-        let sys_std = world.pkglib_system.get("std").X();
+        let sys_std = world.libraries["sys"].get("std").X();
         assert_eq!(sys_std.modules.len(), 2);
         assert!(sys_std.modules.contains_key("bool"));
         assert!(sys_std.modules.contains_key("int"));
 
         // Check collections package has 3 modules.
-        let sys_collections = world.pkglib_system.get("collections").X();
+        let sys_collections = world.libraries["sys"].get("collections").X();
         assert_eq!(sys_collections.modules.len(), 3);
         assert!(sys_collections.modules.contains_key("list"));
         assert!(sys_collections.modules.contains_key("map"));
@@ -947,8 +959,8 @@ let output = add(@5, @10)
         let result = load_worldfile_with_script(worldfile.as_bytes()).X();
 
         // Check package world.
-        assert_eq!(result.package_world.pkglib_system.len(), 1);
-        let sys_std = result.package_world.pkglib_system.get("std").X();
+        assert_eq!(result.package_world.libraries["sys"].len(), 1);
+        let sys_std = result.package_world.libraries["sys"].get("std").X();
         assert_eq!(sys_std.modules.len(), 1);
         assert!(sys_std.modules.contains_key("u32"));
 
@@ -974,7 +986,7 @@ end fun
         let result = load_worldfile_with_script(worldfile.as_bytes()).X();
 
         // Check package world.
-        assert_eq!(result.package_world.pkglib_system.len(), 1);
+        assert_eq!(result.package_world.libraries["sys"].len(), 1);
 
         // Check no script.
         assert!(result.script.is_none());

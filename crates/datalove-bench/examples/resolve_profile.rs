@@ -46,20 +46,17 @@ fn one_run(modules: &[(String, String)]) -> Steps {
 
     let mut steps = Steps::default();
 
-    // Split the libraries the way `extract_dependencies` does.
-    let mut pkglib_system: BTreeMap<String, BTreeMap<String, Source>> = BTreeMap::new();
-    let mut pkglib_local: BTreeMap<String, BTreeMap<String, Source>> = BTreeMap::new();
+    // Group the modules by library the way `extract_dependencies` does.
+    let mut libraries: BTreeMap<String, BTreeMap<String, BTreeMap<String, Source>>> = BTreeMap::new();
     for (path, source) in world.sources() {
         let parts: Vec<&str> = path.split('/').collect();
-        let pkglib = match parts[0] {
-            "sys" => &mut pkglib_system,
-            _ => &mut pkglib_local,
-        };
-        pkglib.entry(parts[1].S()).or_default().insert(parts[2].S(), *source);
+        libraries.entry(parts[0].S()).or_default()
+            .entry(parts[1].S()).or_default()
+            .insert(parts[2].S(), *source);
     }
 
     let t = Instant::now();
-    let package_world = datafun::package::import_with_sources(&db, pkglib_system, pkglib_local);
+    let package_world = datafun::package::import_with_sources(&db, libraries);
     let map = datafun::package_world_map(&db, package_world);
     steps.intern = t.elapsed();
 

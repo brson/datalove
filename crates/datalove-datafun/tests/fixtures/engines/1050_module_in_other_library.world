@@ -1,0 +1,33 @@
+----------
+module vendor/util/base
+----------
+
+// A library other than sys and local is an import space of its own, and a
+// module in it requires another there as a local module does.
+fun add_one(x: int): int
+    ret x + :int/1
+end fun
+
+----------
+module vendor/util/math
+----------
+
+require module vendor/util/base
+import base.add_one
+
+fun add_two(x: int): int
+    ret add_one(add_one(x))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module vendor/util/math
+import math.add_two
+
+----------
+scriptunit-expr
+----------
+
+add_two(:int/5)
