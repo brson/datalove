@@ -7,25 +7,25 @@ says it pays. Written October 2026, after a prototype for datalit lists.
 Phases 0 to 2 and 5 are done, phase 3 was measured and set aside, and phase 4
 was built, measured and taken out again: datalit is parallel within a
 collection and datafun is not; see
-[Progress](#user-content-progress).
+[Progress](#progress).
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [What the prototype showed](#user-content-what-the-prototype-showed)
-- [Scope](#user-content-scope)
-- [The design](#user-content-the-design)
-  - [Finding the collections](#user-content-finding-the-collections)
-  - [The policy](#user-content-the-policy)
-  - [Chunks in datalit](#user-content-chunks-in-datalit)
-  - [Chunks in datafun](#user-content-chunks-in-datafun)
-  - [Running the chunks](#user-content-running-the-chunks)
-  - [After the parse](#user-content-after-the-parse)
-- [Proving it changes nothing](#user-content-proving-it-changes-nothing)
-- [The cutoff bench](#user-content-the-cutoff-bench)
-- [Phases](#user-content-phases)
-- [Progress](#user-content-progress)
-- [Open questions](#user-content-open-questions)
+- [The problem](#the-problem)
+- [What the prototype showed](#what-the-prototype-showed)
+- [Scope](#scope)
+- [The design](#the-design)
+  - [Finding the collections](#finding-the-collections)
+  - [The policy](#the-policy)
+  - [Chunks in datalit](#chunks-in-datalit)
+  - [Chunks in datafun](#chunks-in-datafun)
+  - [Running the chunks](#running-the-chunks)
+  - [After the parse](#after-the-parse)
+- [Proving it changes nothing](#proving-it-changes-nothing)
+- [The cutoff bench](#the-cutoff-bench)
+- [Phases](#phases)
+- [Progress](#progress)
+- [Open questions](#open-questions)
 
 ## The problem
 
@@ -33,14 +33,14 @@ collection and datafun is not; see
 work is one big literal gets nothing from it. The store demo is that program:
 it compiles for about 205ms, almost all of it its 4MB of data, 20,000 orders in
 one list in `orders.dlt`, and the parallel compile is slower than the
-sequential one (225ms; see [On real programs](compile-time.md#user-content-on-real-programs)).
+sequential one (225ms; see [On real programs](compile-time.md#on-real-programs)).
 
 But a big literal is almost always a collection of independent elements, and
 that is the shape that splits. What makes this a tuning problem rather than a
 transformation is that it rarely pays: most collections are a handful of
 elements, splitting one costs a database clone, a query and a rayon task per
 chunk, and work on a worker thread costs more than the same work on the main
-one (see [Parallel compilation](compile-time.md#user-content-parallel-compilation)).
+one (see [Parallel compilation](compile-time.md#parallel-compilation)).
 So it has to be off below a size that is measured, per kind of collection,
 rather than guessed.
 
@@ -88,7 +88,7 @@ separator at all, its elements being written side by side.
 
 **The parse first, in both languages; what follows it only in datalit.** In
 datalit the typing and the reading split the same way and are where the time
-goes after the parse ([After the parse](#user-content-after-the-parse)). In
+goes after the parse ([After the parse](#after-the-parse)). In
 datafun a big literal goes on to typecheck, ownership and lowering, all of
 which would want the same treatment; that waits for a real program that needs
 it, since data that big belongs in a `.dlt`.
@@ -126,7 +126,7 @@ itself goes in the bench, since every source pays it.
 `ChunkPolicy` is a salsa input, one per database, that the module compiler sets:
 
 - per collection kind, `min_bytes`, `min_elements` and `target_chunk_bytes`,
-  with defaults from [the cutoff bench](#user-content-the-cutoff-bench);
+  with defaults from [the cutoff bench](#the-cutoff-bench);
 - **disabled** under `ParallelMode::Sequential`, and wherever rayon's pool has
   one thread, as on wasm, so that a sequential parse is the parse of today and
   pays nothing for any of this.
@@ -187,7 +187,7 @@ chunk's key.
 A chunk is a tracked query, and the parallel part runs them ahead of time on
 database clones, outside any query, the pattern every phase already uses (see
 the compiler guide's
-[Parallel Execution](compiler-guide.md#user-content-parallel-execution)). The
+[Parallel Execution](compiler-guide.md#parallel-execution)). The
 parse that reaches a planned collection then finds every chunk in its memo.
 This keeps diagnostics and dependencies where salsa tracks them, keeps
 parallelism out of queries, as upstream salsa asks, and on wasm, where rayon
@@ -288,13 +288,13 @@ retuning after a change to the parser or the allocator is a diff of a table.
    job that runs the suite with everything chunked.
 
 Each phase pays only under `DATALOVE_PARALLEL`, which is not yet the default;
-the allocator question ([Page faults](compile-time.md#user-content-page-faults))
+the allocator question ([Page faults](compile-time.md#page-faults))
 decides how much each one is worth.
 
 ## Progress
 
 **Phase 0**: `collection_cutoffs` in `datalove-bench`, and its baseline in
-[compile-time.md](compile-time.md#user-content-large-collection-literals). The
+[compile-time.md](compile-time.md#large-collection-literals). The
 parse is 59-98% of every case in both languages, and it costs more per byte as
 the collection grows, from interning every number.
 
@@ -352,7 +352,7 @@ of the wrong shape, which only the parse putting the chunks together can make
 against the first group's, goes where a whole parse would put it. A table's or
 tensor's delimiter complaints set `had_error` on the parser that reached it,
 so a chunk's carries back there. A rank-1 tensor is not cut. The thresholds
-differ from lists'; see [compile-time.md](compile-time.md#user-content-large-collection-literals).
+differ from lists'; see [compile-time.md](compile-time.md#large-collection-literals).
 
 **Phase 3 is not done**, because neither half pays as things are.
 
@@ -405,7 +405,7 @@ split at the token tree without knowing the grammar around it. The design for
 datafun above is kept as the record of what was tried; the code is not.
 
 **Phase 5**: the thresholds for everything cut are from the bench and in
-[compile-time.md](compile-time.md#user-content-large-collection-literals), and
+[compile-time.md](compile-time.md#large-collection-literals), and
 `just test-cut`, CI's fifth job, runs the suite with every collection cut
 after every element, in parallel compiles.
 

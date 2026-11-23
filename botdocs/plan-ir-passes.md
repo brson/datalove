@@ -8,13 +8,13 @@ not started.
 
 ## Contents
 
-- [Where compile time goes](#user-content-where-compile-time-goes)
-- [The passes as they are](#user-content-the-passes-as-they-are)
-- [The order](#user-content-the-order)
-- [Per function, in the module's query](#user-content-per-function-in-the-modules-query)
-- [Later: per-function queries](#user-content-later-per-function-queries)
-- [Later: lowering on demand](#user-content-later-lowering-on-demand)
-- [Phases](#user-content-phases)
+- [Where compile time goes](#where-compile-time-goes)
+- [The passes as they are](#the-passes-as-they-are)
+- [The order](#the-order)
+- [Per function, in the module's query](#per-function-in-the-modules-query)
+- [Later: per-function queries](#later-per-function-queries)
+- [Later: lowering on demand](#later-lowering-on-demand)
+- [Phases](#phases)
 
 ## Where compile time goes
 

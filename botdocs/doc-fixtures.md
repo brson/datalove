@@ -6,14 +6,14 @@ in the reactive scripting post, went in.
 
 ## Contents
 
-- [Why a crate of its own](#user-content-why-a-crate-of-its-own)
-- [Step tables](#user-content-step-tables)
-- [Session replays](#user-content-session-replays)
-- [The trace](#user-content-the-trace)
-- [The player](#user-content-the-player)
-- [Step tables in a replay](#user-content-step-tables-in-a-replay)
-- [Adding a replay](#user-content-adding-a-replay)
-- [Known gaps](#user-content-known-gaps)
+- [Why a crate of its own](#why-a-crate-of-its-own)
+- [Step tables](#step-tables)
+- [Session replays](#session-replays)
+- [The trace](#the-trace)
+- [The player](#the-player)
+- [Step tables in a replay](#step-tables-in-a-replay)
+- [Adding a replay](#adding-a-replay)
+- [Known gaps](#known-gaps)
 
 ## Why a crate of its own
 
@@ -42,7 +42,7 @@ the recognizer and generator in `src/ebnf.rs`, the checking in
 `src/grammar_check.rs`, and the grammars made executable in `src/lexical.rs`,
 `src/token_grammar.rs`, `src/datalit_grammar.rs` and `src/datafun_grammar.rs`,
 how an expression groups by the grammar's parse tree in `src/grouping.rs`,
-and the grammars' `no X: CODE` notes in `src/deletion.rs` (see [Checking the grammar](datalit-ebnf.md#user-content-checking-the-grammar)).
+and the grammars' `no X: CODE` notes in `src/deletion.rs` (see [Checking the grammar](datalit-ebnf.md#checking-the-grammar)).
 `tests/recovery_tests.rs` uses the same grammars to measure how the parsers
 recover from errors (see [Plan: Parse Error Recovery](plan-parse-recovery.md)).
 
@@ -52,7 +52,7 @@ A step is one change to a session: units appended, or one unit edited,
 deleted, inserted or moved, or a module or data file edited. After a step, an
 `expect` table says, for every unit, what it uses from earlier units, what
 happened to it, and what its bindings hold. The columns and the words they use
-are in [Reading the tables](script-reactivity-cases.md#user-content-reading-the-tables).
+are in [Reading the tables](script-reactivity-cases.md#reading-the-tables).
 `src/step_tables.rs` checks each table, on a session that
 `datalove-script-steps` runs.
 
@@ -185,7 +185,7 @@ everything in each doc set's `assets` directory as a static asset.
 A replay is checked against the rules as well as recorded, so a change to the
 language breaks its test rather than quietly changing what the post shows. Its
 worldfile may hold `expect` sections, and `engine` sections after them, as the
-reactive fixtures do; see [Step tables](#user-content-step-tables). An
+reactive fixtures do; see [Step tables](#step-tables). An
 `expect` checks the inputs since the `expect` before it, which are either
 units appended -- the script entered at the start, say -- or one `/edit`,
 `/edit-data`, `/delete`, `/insert` or `/move`. Inputs after the last `expect`
@@ -205,7 +205,7 @@ them.
    `crates/datalove-doc-fixtures/tests/replay_tests.rs`. A test fails on a
    worldfile that is not listed.
 3. Put an `expect` table after the steps worth checking; see
-   [Step tables in a replay](#user-content-step-tables-in-a-replay).
+   [Step tables in a replay](#step-tables-in-a-replay).
 4. Run `BLESS=1 cargo test -p datalove-doc-fixtures`.
 5. Put the `div` and the two `script`s in the document.
 

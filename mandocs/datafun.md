@@ -26,20 +26,20 @@ For detail see additional documentation (which does not exist).
 
 <div class="toc toc-repeat-8">
 
-- [A first script](#user-content-a-first-script)
-- [Data types](#user-content-data-types)
-- [Variables](#user-content-variables)
-- [Functions](#user-content-functions)
-- [Ownership](#user-content-ownership)
-- [Control flow](#user-content-control-flow)
-- [Data types and destructuring](#user-content-data-types-and-destructuring)
-- [Option and result handling](#user-content-option-and-result-handling)
-- [Collections and indexing](#user-content-collections-and-indexing)
-- [Numerics](#user-content-numerics)
-- [Comparison and equality](#user-content-comparison-and-equality)
-- [Modules, packages, libraries and the workspace](#user-content-modules-packages-libraries-and-the-workspace)
-- [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
-- [Generics](#user-content-generics)
+- [A first script](#a-first-script)
+- [Data types](#data-types)
+- [Variables](#variables)
+- [Functions](#functions)
+- [Ownership](#ownership)
+- [Control flow](#control-flow)
+- [Data types and destructuring](#data-types-and-destructuring)
+- [Option and result handling](#option-and-result-handling)
+- [Collections and indexing](#collections-and-indexing)
+- [Numerics](#numerics)
+- [Comparison and equality](#comparison-and-equality)
+- [Modules, packages, libraries and the workspace](#modules-packages-libraries-and-the-workspace)
+- [Constants and compile-time evaluation](#constants-and-compile-time-evaluation)
+- [Generics](#generics)
 
 </div>
 
@@ -89,18 +89,18 @@ A name can only be imported once per scope,
 so when two modules export functions of the same name,
 as `u8.from_int` and `i8.from_int`,
 at least one must be called qualified.
-Modules are covered further in [Modules, packages, libraries and the workspace](#user-content-modules-packages-libraries-and-the-workspace).
+Modules are covered further in [Modules, packages, libraries and the workspace](#modules-packages-libraries-and-the-workspace).
 
 The `ref` before `greeting` passes the string by reference
 instead of moving it into the function.
-This is described in [Ownership](#user-content-ownership).
+This is described in [Ownership](#ownership).
 
 
 ## Data types
 
 Datalove functions operate on the [datalit](datalit.md) types,
 which are structural,
-and linear unless cheap enough to copy, as described in [Ownership](#user-content-ownership).
+and linear unless cheap enough to copy, as described in [Ownership](#ownership).
 They are in brief:
 
 _Primitives_
@@ -226,7 +226,7 @@ debuglog avg
 Lines can break freely between matched braces of all kinds
 (`( .. )`, `{ .. }`, and others,
 including the `< .. >` around the type parameters of
-[generic functions](#user-content-generics)).
+[generic functions](#generics)).
 
 ```datalove
 require module sys/std/f64
@@ -405,7 +405,7 @@ the adapt operator is a singular "magic" operator
 that does whatever is necessary to fit a value
 of one compatible type into another.
 Beyond cloning it also performs widening numeric conversions,
-described in [Numerics](#user-content-numerics),
+described in [Numerics](#numerics),
 and converts an atom or term into an enum that has it as a variant.
 
 When `@` solves a compiler error, the compiler will say exactly where to write it.
@@ -739,7 +739,7 @@ debuglog points
 ```
 
 Sets and maps keep their elements and keys in order,
-the total order described in [Comparison and equality](#user-content-comparison-and-equality),
+the total order described in [Comparison and equality](#comparison-and-equality),
 so a set literal with a duplicate holds it once,
 and a map literal with a repeated key keeps the last value.
 
@@ -899,8 +899,8 @@ debuglog set.contains(ref primes, ref 3)
 
 There is no `for` loop.
 A list is walked with `loop while` and an index.
-Here `.<` is less-than, described in [Comparison and equality](#user-content-comparison-and-equality),
-and `+!` is checked addition, described in [Numerics](#user-content-numerics).
+Here `.<` is less-than, described in [Comparison and equality](#comparison-and-equality),
+and `+!` is checked addition, described in [Numerics](#numerics).
 
 ```datalove
 require module sys/std/list
@@ -1025,7 +1025,7 @@ spelled with a trailing `?` or `!`, as in `+?` and `+!`,
 and the negations `-?` and `-!`.
 
 The checked operators do not produce an option or result in place.
-Like the `?` and `!` operators of [Option and result handling](#user-content-option-and-result-handling),
+Like the `?` and `!` operators of [Option and result handling](#option-and-result-handling),
 on failure they _return from the enclosing function_,
 with `none` for the `?` forms,
 and for the `!` forms with `er error "arithmetic overflow"`,
@@ -1234,7 +1234,7 @@ and the two zeros are different.
 A generic function compares values of a type parameter
 by bounding it with `is ord`,
 which every type satisfies.
-Generics are described in [Generics](#user-content-generics).
+Generics are described in [Generics](#generics).
 
 ```datalove
 require module sys/std/ord
@@ -1647,7 +1647,7 @@ There are three bounds.
 
 - `ord` admits every type.
   It gives access to the total order described in
-  [Comparison and equality](#user-content-comparison-and-equality),
+  [Comparison and equality](#comparison-and-equality),
   through the functions in `sys/std/ord`,
   as in the `largest` example there.
   A set or map over a type parameter, `#{T}` or `%{T -> V}`,
@@ -1657,7 +1657,7 @@ There are three bounds.
   It allows the bare arithmetic operators and the comparisons,
   as well as the functions in `sys/std/float`.
 - `fixedint` admits the fixed-width integers, `index` and `offset`.
-  As described in [Numerics](#user-content-numerics),
+  As described in [Numerics](#numerics),
   these have no bare arithmetic operators,
   so it allows the comparisons and the checked operators, like `+!` and `+?`,
   as well as the functions in `sys/std/fixedint`.
@@ -1699,5 +1699,5 @@ which keeps interactive and incremental compilation fast.
 The choice is not visible in the meaning of programs,
 except that it is why a type parameter is never a copy type.
 
-This is the opposite of [const parameters](#user-content-const-parameters),
+This is the opposite of [const parameters](#const-parameters),
 which make a copy of the function for each const argument.

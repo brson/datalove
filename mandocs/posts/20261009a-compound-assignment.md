@@ -68,9 +68,9 @@ a task, and only expand complexity as I better understand the need.
 So Datalove only supports a few built-in math operations today:
 binary addition, subtraction, multiplication, division, and unary negation (`+`, `-`, `*`, `/`, unary `-`).
 Though because one of Datalove's principles insists on strict
-[numeric correctness](../principles.md#user-content-numerical-correctness)
+[numeric correctness](../principles.md#numerical-correctness)
 the exact formulation of these is
-[quirky](../datafun.md#user-content-numerics).
+[quirky](../datafun.md#numerics).
 
 So on the `sum` benchmark,
 after squeezing out all the basic performance blunders in the allocator and the bigint implementation
@@ -115,7 +115,7 @@ store.move.tracked s0, v4
 
 Eminently pattern-matchable.
 But one of Datalove's principles is that
-[nothing happens that was not written](../principles.md#user-content-nothing-happens-that-was-not-written).
+[nothing happens that was not written](../principles.md#nothing-happens-that-was-not-written).
 I much prefer the language to have surface constructs that map to
 the required underlying performance mechanisms.
 That both makes the language's performance characteristics clear,

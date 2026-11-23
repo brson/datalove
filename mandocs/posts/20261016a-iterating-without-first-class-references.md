@@ -9,7 +9,7 @@ summary: "Iterating over collections can't be satisfyingly abstract without firs
 
 In my [previous round of benchmarking](20261009a-compound-assignment.md)
 I noted that Datalove's system library iterates collections in an awkward way.
-It keeps a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
+It keeps a loop induction variable of type [`index`](../datafun.md#collections-and-indexing),
 increments it each time around the loop, and indexes into the collection to get the element.
 Each index imposes a bounds check.
 Datalove is missing a basic language feature: the `for` loop.
@@ -18,11 +18,11 @@ but without first-class references we can't make iterators a general-purpose lib
 Instead we have to build them into the language and runtime,
 teaching the compiler directly about every type that can be iterated.
 
-- [The situation with loops in Datalove](#user-content-the-situation-with-loops-in-datalove)
-- [A simple design for `for` loops](#user-content-a-simple-design-for-for-loops)
-- [Getting at that loop induction variable](#user-content-getting-at-that-loop-induction-variable)
-- [A protocol for iterating over collections](#user-content-a-protocol-for-iterating-over-collections)
-- [What worked and what remains to be solved](#user-content-what-worked-and-what-remains-to-be-solved)
+- [The situation with loops in Datalove](#the-situation-with-loops-in-datalove)
+- [A simple design for `for` loops](#a-simple-design-for-for-loops)
+- [Getting at that loop induction variable](#getting-at-that-loop-induction-variable)
+- [A protocol for iterating over collections](#a-protocol-for-iterating-over-collections)
+- [What worked and what remains to be solved](#what-worked-and-what-remains-to-be-solved)
 
 
 
@@ -63,7 +63,7 @@ This code has many problems,
 but here I care about one:
 `self[i]?`, which does a bounds check every iteration.
 (`equal_to_at` exists only to make room for the
-[early return that `?` does](../datafun.md#user-content-option-and-result-handling).)
+[early return that `?` does](../datafun.md#option-and-result-handling).)
 
 Indexing gets _much worse_ for sets and maps.
 Here's `set.is_subset_of`:
@@ -110,7 +110,7 @@ Datalove has a linear type system.
 Values are neither garbage-collected nor reference-counted.
 They are always inline value types.
 So copying can be expensive, but iteration should be cheap.
-Datalove also [has no first-class references](../datafun.md#user-content-borrows-are-second-class).
+Datalove also [has no first-class references](../datafun.md#borrows-are-second-class).
 The surface language can't take a pointer into a collection and treat it as a value,
 to move between bindings or return from a function.
 That will limit what we can express.
@@ -136,11 +136,11 @@ fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
 end fun
 ```
 
-`item` is a [reference (`ref`) binding](../datafun.md#user-content-functions),
+`item` is a [reference (`ref`) binding](../datafun.md#functions),
 a pointer straight into the container.
 So `item` can't be moved,
 and `self` can't be mutably referenced or mutated by index.
-This differs from [`match` and destructuring `if`](../datafun.md#user-content-data-types-and-destructuring),
+This differs from [`match` and destructuring `if`](../datafun.md#data-types-and-destructuring),
 which move their operand into the new bindings.
 
 I don't plan to add by-value iteration soon.
@@ -182,7 +182,7 @@ so building one would mean cloning both elements.
 As with lists, the key binding is immutable.
 The value could someday be `mut` to allow in-place mutation.
 
-[Tensors and tables](../datalit.md#user-content-collections) each add their own complications,
+[Tensors and tables](../datalit.md#collections) each add their own complications,
 but they mostly extend the same design.
 
 

@@ -8,21 +8,21 @@ after the parser stopped copying tokens ([plan-parser.md](plan-parser.md)).
 Phases 0 to 3 are done, with `TopLevel` left a tracked struct by choice. Of
 phase 4, `ResolvedCallTarget` is a plain value and the typechecker's
 per-expression tables are `BodyTable`s; `TypeFunction` is still tracked and the
-parse has no `lru`. See [Progress](#user-content-progress).
+parse has no `lru`. See [Progress](#progress).
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [What others do](#user-content-what-others-do)
-- [Why not stop memoizing the parse](#user-content-why-not-stop-memoizing-the-parse)
-- [The design](#user-content-the-design)
-- [What stops naming the AST](#user-content-what-stops-naming-the-ast)
-- [The firewall](#user-content-the-firewall)
-- [Phases](#user-content-phases)
-- [Progress](#user-content-progress)
-- [Verifying each phase](#user-content-verifying-each-phase)
-- [What it should buy](#user-content-what-it-should-buy)
-- [Open questions](#user-content-open-questions)
+- [The problem](#the-problem)
+- [What others do](#what-others-do)
+- [Why not stop memoizing the parse](#why-not-stop-memoizing-the-parse)
+- [The design](#the-design)
+- [What stops naming the AST](#what-stops-naming-the-ast)
+- [The firewall](#the-firewall)
+- [Phases](#phases)
+- [Progress](#progress)
+- [Verifying each phase](#verifying-each-phase)
+- [What it should buy](#what-it-should-buy)
+- [Open questions](#open-questions)
 
 ## The problem
 
@@ -138,7 +138,7 @@ salsa's:
 | exports' `function_asts`, `function_stubs`, `fn_asts` | `StmtFun` | `FunKey`, or the module's own `FunRef` where it is the module's own |
 | `analyze_script_expr_tracked` | an `ExprFun` argument | the unit and an `ExprId` |
 | `typecheck_module`, `analyze_module`, `lower_module`, `TypecheckResult::root_parsed` | `ParsedStatements` as a key or field | the `Module` or unit, reading the AST inside |
-| `ParsedModuleGraph::statements_only` | every module's statements, one tracked field | per-module `Module` handles; see [The firewall](#user-content-the-firewall) |
+| `ParsedModuleGraph::statements_only` | every module's statements, one tracked field | per-module `Module` handles; see [The firewall](#the-firewall) |
 
 What is read through another module's `StmtFun` today is small: lowering takes
 its name, ownership its parameters' `const` flags (which `TypeFunction`

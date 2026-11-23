@@ -12,12 +12,12 @@ and the REPL around it [repl-architecture.md](repl-architecture.md).
 
 ## Contents
 
-- [Units and sessions](#user-content-units-and-sessions)
-- [Bindings and uses](#user-content-bindings-and-uses)
-- [Steps](#user-content-steps)
-- [The rules](#user-content-the-rules)
-- [Unit states](#user-content-unit-states)
-- [REPL words](#user-content-repl-words)
+- [Units and sessions](#units-and-sessions)
+- [Bindings and uses](#bindings-and-uses)
+- [Steps](#steps)
+- [The rules](#the-rules)
+- [Unit states](#unit-states)
+- [REPL words](#repl-words)
 
 ## Units and sessions
 
@@ -108,7 +108,7 @@ it if salsa asks to.
 ## The rules
 
 **the rules**. What a step recompiles and reruns, stated in
-[script-reactivity-cases.md](script-reactivity-cases.md#user-content-the-rules).
+[script-reactivity-cases.md](script-reactivity-cases.md#the-rules).
 The docs used to call them "the algebra"; they are a dependence analysis,
 not an algebra.
 

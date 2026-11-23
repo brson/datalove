@@ -2,17 +2,17 @@
 
 How the datalit and datafun parsers came to recover from errors by rules a
 test can hold them to. Finished November 2026; the rules are the Recovery
-sections of [Datalit Grammar](datalit-ebnf.md#user-content-recovery) and
-[Datafun Grammar](datafun-ebnf.md#user-content-recovery). This is the
+sections of [Datalit Grammar](datalit-ebnf.md#recovery) and
+[Datafun Grammar](datafun-ebnf.md#recovery). This is the
 reasoning behind them.
 
 ## Contents
 
-- [The measurement](#user-content-the-measurement)
-- [What it found](#user-content-what-it-found)
-- [What was decided](#user-content-what-was-decided)
-- [What was weighed](#user-content-what-was-weighed)
-- [What is left](#user-content-what-is-left)
+- [The measurement](#the-measurement)
+- [What it found](#what-it-found)
+- [What was decided](#what-was-decided)
+- [What was weighed](#what-was-weighed)
+- [What is left](#what-is-left)
 
 ## The measurement
 

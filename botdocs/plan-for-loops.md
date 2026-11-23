@@ -5,28 +5,28 @@ backends. Every collection is walked through a cursor whose whole protocol is
 runtime functions; a backend that open-codes them is optimizing, not defining
 them. It replaces "Immutable Cursors for the Collections", which predated fat
 generics. Written and implemented October 2026, all five phases; what was
-built differs from the plan where [What was built](#user-content-what-was-built)
+built differs from the plan where [What was built](#what-was-built)
 says. The language side is in `mandocs/drafts/for-loops-for-collections.md`.
 
 ## Contents
 
-- [What it is for](#user-content-what-it-is-for)
-- [The language](#user-content-the-language)
-- [The protocol](#user-content-the-protocol)
-- [Strided cursors: lists and rank-1 tensors](#user-content-strided-cursors-lists-and-rank-1-tensors)
-- [Row cursors: tensors of rank above 1](#user-content-row-cursors-tensors-of-rank-above-1)
-- [Tree cursors: sets and maps](#user-content-tree-cursors-sets-and-maps)
-- [In the IR](#user-content-in-the-ir)
-- [The indexed form](#user-content-the-indexed-form)
-- [Tradeoffs](#user-content-tradeoffs)
-- [Front end](#user-content-front-end)
-- [Ownership](#user-content-ownership)
-- [Backends](#user-content-backends)
-- [Bugs found on the way](#user-content-bugs-found-on-the-way)
-- [What was built](#user-content-what-was-built)
-- [Measurements](#user-content-measurements)
-- [Phases](#user-content-phases)
-- [Open questions](#user-content-open-questions)
+- [What it is for](#what-it-is-for)
+- [The language](#the-language)
+- [The protocol](#the-protocol)
+- [Strided cursors: lists and rank-1 tensors](#strided-cursors-lists-and-rank-1-tensors)
+- [Row cursors: tensors of rank above 1](#row-cursors-tensors-of-rank-above-1)
+- [Tree cursors: sets and maps](#tree-cursors-sets-and-maps)
+- [In the IR](#in-the-ir)
+- [The indexed form](#the-indexed-form)
+- [Tradeoffs](#tradeoffs)
+- [Front end](#front-end)
+- [Ownership](#ownership)
+- [Backends](#backends)
+- [Bugs found on the way](#bugs-found-on-the-way)
+- [What was built](#what-was-built)
+- [Measurements](#measurements)
+- [Phases](#phases)
+- [Open questions](#open-questions)
 
 ## What it is for
 
@@ -57,7 +57,7 @@ for key, value in ref m     // map
 
 - The iteratee is written with `ref`, and is a place: a name, a parameter, a
   field or index projection (`ref p.items`, `ref xss[i]?`). A temporary
-  (`ref f()`) is left for later; see [Open questions](#user-content-open-questions).
+  (`ref f()`) is left for later; see [Open questions](#open-questions).
 - The bindings are `ref` bindings: they cannot be moved, assigned or passed
   `mut`/`out`. `@` clones. A copy element reads like any value.
 - The iteratee's root binding is **frozen** for the loop: no move, no `set` of
@@ -324,7 +324,7 @@ loop can reach, and no caller has to check emptiness first.
 
 **The row view inside the cursor.** The earlier plan built the view in
 caller-lent scratch. Inside the cursor it needs no scratch in any backend,
-and the C AOT `static` view (see [Bugs](#user-content-bugs-found-on-the-way))
+and the C AOT `static` view (see [Bugs](#bugs-found-on-the-way))
 never comes into it. The cost is a cursor of 48 bytes (64 under
 `index-64`), and an element pointer pointing into the cursor rather than the
 collection.
@@ -342,7 +342,7 @@ and joins that list. `ref` after `in` is the mode, not a value named `ref`,
 for the same reason -- but only while the mode is mandatory. A by-value
 `for x in xs` would make the word after `in` either a mode or a name, and
 2.1 settles that by reserving `ref` for values. See
-[Open questions](#user-content-open-questions).
+[Open questions](#open-questions).
 
 Where the statement threads through:
 
@@ -353,7 +353,7 @@ Where the statement threads through:
 | `parser/src/statement.rs` | dispatch on `for`, `parse_for` after `parse_loop`, the P001 keyword list |
 | `sema/src/lib.rs` | a new `StmtKey` kind (18) |
 | `tycheck/src/statement.rs` | the iteratee's type gives the bindings' types; arity by kind; `loop_depth` |
-| `ownership/src/lib.rs` | see [Ownership](#user-content-ownership) |
+| `ownership/src/lib.rs` | see [Ownership](#ownership) |
 | `lower/src/stmt.rs`, `script.rs`, `context.rs` | the loop shape; `LoopLowerContext` gains `next`, where `continue` goes: the header for `loop`, the advance for `for` |
 | `worldgen` | the shape in `ALL_SHAPES` and the generator |
 | `datalove-mode.el`, the four `datalove-prism.js` copies | keyword and indentation |
@@ -513,7 +513,7 @@ What the plan says, with these differences:
   probability (`for_probability`), since the roll for a statement rarely
   found one: one world in eighty had a `for` before, fifteen after.
 - **Not done:** the missing prototype, below in
-  [Bugs](#user-content-bugs-found-on-the-way), which `for` no longer reaches.
+  [Bugs](#bugs-found-on-the-way), which `for` no longer reaches.
 
 Fixtures: `engines/for_001` to `for_009`,
 `std_tests/179_for_over_a_shrunk_set`, `std_tests/182_for_cursor_bookkeeping`,

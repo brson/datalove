@@ -5,17 +5,17 @@ agreeing with the Rust is not being right: two implementations of one wrong
 rule agree. This is the proof, in `formal/`, that the schedule the move
 analysis builds drops each value a function owns exactly once on every way
 through the function: `fun_ok`, in `Proofs/DropFun.lean`. It began as a
-plan; [Where the proof is](#user-content-where-the-proof-is) maps it.
+plan; [Where the proof is](#where-the-proof-is) maps it.
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [What a path is](#user-content-what-a-path-is)
-- [What is proved](#user-content-what-is-proved)
-- [Why it holds](#user-content-why-it-holds)
-- [What it leaves out](#user-content-what-it-leaves-out)
-- [What setting it out found](#user-content-what-setting-it-out-found)
-- [Where the proof is](#user-content-where-the-proof-is)
+- [The problem](#the-problem)
+- [What a path is](#what-a-path-is)
+- [What is proved](#what-is-proved)
+- [Why it holds](#why-it-holds)
+- [What it leaves out](#what-it-leaves-out)
+- [What setting it out found](#what-setting-it-out-found)
+- [Where the proof is](#where-the-proof-is)
 
 ## The problem
 

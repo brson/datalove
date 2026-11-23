@@ -8,24 +8,24 @@ descriptor per type parameter, which the caller hands over.
 
 This describes the implementation as it stands in November 2026, on all four
 engines. The language-level rules are
-[Section 8.7 of the spec](botspec.md#user-content-87-generic-functions). How it
+[Section 8.7 of the spec](botspec.md#87-generic-functions). How it
 got here is [Generics by Reference](plan-fat-generics.md), which replaced the
 erasure that [Generics and Specialization](plan-generics.md) describes.
 
 ## Contents
 
-- [The shape](#user-content-the-shape)
-- [Types in the IR](#user-content-types-in-the-ir)
-- [Descriptors](#user-content-descriptors)
-- [Storage](#user-content-storage)
-- [Calls](#user-content-calls)
-- [Operations on a dynamic value](#user-content-operations-on-a-dynamic-value)
-- [Natives](#user-content-natives)
-- [What the runtime provides](#user-content-what-the-runtime-provides)
-- [What each engine does](#user-content-what-each-engine-does)
-- [What is refused](#user-content-what-is-refused)
-- [Why not monomorphization](#user-content-why-not-monomorphization)
-- [Where the tests are](#user-content-where-the-tests-are)
+- [The shape](#the-shape)
+- [Types in the IR](#types-in-the-ir)
+- [Descriptors](#descriptors)
+- [Storage](#storage)
+- [Calls](#calls)
+- [Operations on a dynamic value](#operations-on-a-dynamic-value)
+- [Natives](#natives)
+- [What the runtime provides](#what-the-runtime-provides)
+- [What each engine does](#what-each-engine-does)
+- [What is refused](#what-is-refused)
+- [Why not monomorphization](#why-not-monomorphization)
+- [Where the tests are](#where-the-tests-are)
 
 ## The shape
 
@@ -90,7 +90,7 @@ binding costs a compare per type parameter and skips the fill. Every engine
 has one: a writable data object in Cranelift, a `static` in C, and
 `IrLayout::table_cache` in the interpreter. A call site alternating between
 two bindings refills every time; see
-[A generic's descriptor-table cache holds one binding](issues.md#user-content-a-generics-descriptor-table-cache-holds-one-binding).
+[A generic's descriptor-table cache holds one binding](issues.md#a-generics-descriptor-table-cache-holds-one-binding).
 
 **Call sites.** A `Call` carries `bindings`, what the site binds each of the
 callee's type parameters to, written over the caller's own. Each becomes a

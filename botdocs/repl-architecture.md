@@ -15,20 +15,20 @@ step. How an edit reaches the units that depend on it is
 
 ## Contents
 
-- [Crates](#user-content-crates)
-- [The request/response shape](#user-content-the-requestresponse-shape)
-- [The command queue](#user-content-the-command-queue)
-- [The engine](#user-content-the-engine)
-- [What a unit does](#user-content-what-a-unit-does)
-- [Editing, not only appending](#user-content-editing-not-only-appending)
-- [Editing at the prompt](#user-content-editing-at-the-prompt)
-- [Undo and redo](#user-content-undo-and-redo)
-- [Saving and loading a session](#user-content-saving-and-loading-a-session)
-- [`script-world` runs through the engine](#user-content-script-world-runs-through-the-engine)
-- [When there is no engine](#user-content-when-there-is-no-engine)
-- [The terminal UI](#user-content-the-terminal-ui)
-- [Tests](#user-content-tests)
-- [Known gaps](#user-content-known-gaps)
+- [Crates](#crates)
+- [The request/response shape](#the-requestresponse-shape)
+- [The command queue](#the-command-queue)
+- [The engine](#the-engine)
+- [What a unit does](#what-a-unit-does)
+- [Editing, not only appending](#editing-not-only-appending)
+- [Editing at the prompt](#editing-at-the-prompt)
+- [Undo and redo](#undo-and-redo)
+- [Saving and loading a session](#saving-and-loading-a-session)
+- [`script-world` runs through the engine](#script-world-runs-through-the-engine)
+- [When there is no engine](#when-there-is-no-engine)
+- [The terminal UI](#the-terminal-ui)
+- [Tests](#tests)
+- [Known gaps](#known-gaps)
 
 ## Crates
 
@@ -68,14 +68,14 @@ a `ReplCommand` or a `Unit`, and its `Outcome` is the engine's `Eval` for a
 unit, or what a REPL command came to. `Session` is where the two meet, on the
 worker: it carries out units and the commands that change the session. The
 rest of the commands are the app's, which carries them out itself; see
-[The command queue](#user-content-the-command-queue).
+[The command queue](#the-command-queue).
 
 `datalove-cli` calls `datalove_repl_rat::run()` for the interactive REPL,
 `datalove_repl::run_script` for `repl --script`, and `record_world` for
 `repl --load --record`, which writes the trace
 [doc-fixtures.md](doc-fixtures.md) describes. Both take the system library,
 and the workspace's own `local` library if it has one, from the caller; see
-[The engine](#user-content-the-engine). `script-world` uses `Engine` directly.
+[The engine](#the-engine). `script-world` uses `Engine` directly.
 
 ## The request/response shape
 
@@ -245,7 +245,7 @@ because copying stops being available once there are types that cannot be
 cloned. [compiler-guide.md](compiler-guide.md) under "Ownership across units"
 has how this is checked. Rerunning a unit after an edit first reruns from the
 providers of the earlier bindings it took or wrote; see
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-5-the-reach-goes-backward).
+[script-reactivity-architecture.md](script-reactivity-architecture.md#5-the-reach-goes-backward).
 
 **A unit that fails stays in the session** unless it fails with a runtime
 error. A unit that does not compile reports `Eval::NotCompiled`. One that
@@ -254,7 +254,7 @@ from either is compiled and not run, reporting `Eval::Blocked`. Each stays as a
 unit offering no bindings, so the history and the engine's units line up one
 to one for script units, and an edit upstream can make any of them go green.
 The app shows all three as errors and clears nothing.
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-units-that-did-not-run-to-their-end)
+[script-reactivity-architecture.md](script-reactivity-architecture.md#units-that-did-not-run-to-their-end)
 has how the layers keep a failed unit's names from the units after it.
 
 **A runtime error empties the session.** What the frames the error unwound
@@ -296,7 +296,7 @@ borrowing it.
 `Engine::edit_module(library, package, module, source)` does the same from a
 module edit, in every session, and returns each session's report. Which units
 it reaches is
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-4-re-derivation-is-a-walk-and-the-runtime-is-already-per-unit).
+[script-reactivity-architecture.md](script-reactivity-architecture.md#4-re-derivation-is-a-walk-and-the-runtime-is-already-per-unit).
 
 **A module edit that does not compile is kept.** The roots are settled again,
 so the module leaves the compile with the modules requiring it, and the units
@@ -562,7 +562,7 @@ down a few rows. The marks are the status color, a cell having one. The last
 step is the last unit, edit, delete, insert or move the engine carried out; a
 command that changes nothing leaves the marks, and a reset leaves no units to
 mark. What a step compiled comes from the engine (see
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-what-a-step-reports)),
+[script-reactivity-architecture.md](script-reactivity-architecture.md#what-a-step-reports)),
 and `Session` turns its positions into numbers and sends it with every answer;
 the app shows it as it comes, since nothing it could keep by rule would know
 what salsa ran. A step is one type on both sides of the worker, `UnitStep`:
@@ -605,7 +605,7 @@ kept by the unit's number, so units added or removed around it leave it where
 it was. A reset clears it, since the new session numbers from 1 again and the
 old number would land on a different unit. It is what the Detail tab
 describes, and what Delete, Enter and Insert act on; see
-[Editing at the prompt](#user-content-editing-at-the-prompt).
+[Editing at the prompt](#editing-at-the-prompt).
 
 ### Tabs
 
@@ -823,7 +823,7 @@ setup and the loop together.
 - Errors are plain messages in the History tab. The Detail tab renders the
   unit's diagnostics, and the Modules tab the modules'.
 - A type is shown expanded, never by its alias; see
-  [issues.md](issues.md#user-content-a-printed-type-loses-its-alias).
+  [issues.md](issues.md#a-printed-type-loses-its-alias).
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection and drops the mouse wheel for no benefit.
 - Nothing scrolls a pane while a dialog or a modal is open.
@@ -832,4 +832,4 @@ setup and the loop together.
   until the tab is changed.
 - An edit to a module no unit requires reports nothing, since only required
   modules are compiled; see
-  [issues.md](issues.md#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing).
+  [issues.md](issues.md#an-edit-to-a-module-no-unit-requires-reports-nothing).

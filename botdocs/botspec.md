@@ -6,74 +6,74 @@ Appendix B rather than described.
 
 ## Contents
 
-- [1. Introduction](#user-content-1-introduction)
-  - [1.1 Notation](#user-content-11-notation)
-  - [1.2 Scripts, Modules and Sessions](#user-content-12-scripts-modules-and-sessions)
-- [2. Lexical Conventions](#user-content-2-lexical-conventions)
-  - [2.1 Reserved Words](#user-content-21-reserved-words)
-  - [2.2 Literals](#user-content-22-literals)
-  - [2.3 Comments](#user-content-23-comments)
-  - [2.4 Spacing](#user-content-24-spacing)
-  - [2.5 Names](#user-content-25-names)
-  - [2.6 Scope](#user-content-26-scope)
-- [3. Types](#user-content-3-types)
-  - [3.1 Primitive Types](#user-content-31-primitive-types)
-  - [3.2 Collection Types](#user-content-32-collection-types)
-  - [3.3 Aggregate Types](#user-content-33-aggregate-types)
-  - [3.4 Option and Result](#user-content-34-option-and-result)
-  - [3.5 Data and Error Types](#user-content-35-data-and-error-types)
-  - [3.6 Atom, Term, and Enum Types](#user-content-36-atom-term-and-enum-types)
-  - [3.7 Type Aliases](#user-content-37-type-aliases)
-  - [3.8 Recursive Types](#user-content-38-recursive-types)
-- [4. Type Hints](#user-content-4-type-hints)
-- [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
-- [6. Expressions](#user-content-6-expressions)
-  - [6.1 Operators](#user-content-61-operators)
-  - [6.2 Arithmetic](#user-content-62-arithmetic)
-  - [6.3 Comparison](#user-content-63-comparison)
-  - [6.4 Logical Operators](#user-content-64-logical-operators)
-  - [6.5 Try Operators](#user-content-65-try-operators)
-  - [6.6 Operator Argument Semantics](#user-content-66-operator-argument-semantics)
-  - [6.7 Intrinsic Calls](#user-content-67-intrinsic-calls)
-  - [6.8 Adapt Operator](#user-content-68-adapt-operator)
-- [7. Place Expressions and Indexing](#user-content-7-place-expressions-and-indexing)
-  - [7.1 Place vs Value Expressions](#user-content-71-place-vs-value-expressions)
-  - [7.2 Field Access](#user-content-72-field-access)
-  - [7.3 Fallible Indexing](#user-content-73-fallible-indexing)
-  - [7.4 Index and Field Chains](#user-content-74-index-and-field-chains)
-  - [7.5 Destination Contexts](#user-content-75-destination-contexts)
-  - [7.6 Parallel with Checked Arithmetic](#user-content-76-parallel-with-checked-arithmetic)
-- [8. Statements](#user-content-8-statements)
-  - [8.1 Bindings](#user-content-81-bindings)
-  - [8.2 Const](#user-content-82-const)
-  - [8.3 Set](#user-content-83-set)
-  - [8.4 Functions](#user-content-84-functions)
-  - [8.5 Parameter Modes](#user-content-85-parameter-modes)
-  - [8.6 Const Parameters](#user-content-86-const-parameters)
-  - [8.7 Generic Functions](#user-content-87-generic-functions)
-  - [8.8 Control Flow](#user-content-88-control-flow)
-  - [8.9 Return](#user-content-89-return)
-  - [8.10 Debug Log](#user-content-810-debug-log)
-  - [8.11 Call Statements](#user-content-811-call-statements)
-- [9. Module System](#user-content-9-module-system)
-  - [9.1 Hierarchy](#user-content-91-hierarchy)
-  - [9.2 Require](#user-content-92-require)
-  - [9.3 Import](#user-content-93-import)
-  - [9.4 Qualified Calls](#user-content-94-qualified-calls)
-  - [9.5 Native Riders](#user-content-95-native-riders)
-  - [9.6 Data](#user-content-96-data)
-- [10. Numeric Widening](#user-content-10-numeric-widening)
-- [11. Ownership Analysis](#user-content-11-ownership-analysis)
-  - [11.1 Errors](#user-content-111-errors)
-  - [11.2 Mutable Arguments](#user-content-112-mutable-arguments)
-  - [11.3 How Arguments and Operands Are Read](#user-content-113-how-arguments-and-operands-are-read)
-  - [11.4 Loop Restrictions](#user-content-114-loop-restrictions)
-  - [11.5 The Collection a `for` Walks](#user-content-115-the-collection-a-for-walks)
-  - [11.6 Branch Consistency](#user-content-116-branch-consistency)
-  - [11.7 Tracking Categories](#user-content-117-tracking-categories)
-- [12. Bidirectional Type Inference](#user-content-12-bidirectional-type-inference)
-- [Appendix A. Command-Line Interface](#user-content-appendix-a-command-line-interface)
-- [Appendix B. Unimplemented Features](#user-content-appendix-b-unimplemented-features)
+- [1. Introduction](#1-introduction)
+  - [1.1 Notation](#11-notation)
+  - [1.2 Scripts, Modules and Sessions](#12-scripts-modules-and-sessions)
+- [2. Lexical Conventions](#2-lexical-conventions)
+  - [2.1 Reserved Words](#21-reserved-words)
+  - [2.2 Literals](#22-literals)
+  - [2.3 Comments](#23-comments)
+  - [2.4 Spacing](#24-spacing)
+  - [2.5 Names](#25-names)
+  - [2.6 Scope](#26-scope)
+- [3. Types](#3-types)
+  - [3.1 Primitive Types](#31-primitive-types)
+  - [3.2 Collection Types](#32-collection-types)
+  - [3.3 Aggregate Types](#33-aggregate-types)
+  - [3.4 Option and Result](#34-option-and-result)
+  - [3.5 Data and Error Types](#35-data-and-error-types)
+  - [3.6 Atom, Term, and Enum Types](#36-atom-term-and-enum-types)
+  - [3.7 Type Aliases](#37-type-aliases)
+  - [3.8 Recursive Types](#38-recursive-types)
+- [4. Type Hints](#4-type-hints)
+- [5. Copy and Linear Types](#5-copy-and-linear-types)
+- [6. Expressions](#6-expressions)
+  - [6.1 Operators](#61-operators)
+  - [6.2 Arithmetic](#62-arithmetic)
+  - [6.3 Comparison](#63-comparison)
+  - [6.4 Logical Operators](#64-logical-operators)
+  - [6.5 Try Operators](#65-try-operators)
+  - [6.6 Operator Argument Semantics](#66-operator-argument-semantics)
+  - [6.7 Intrinsic Calls](#67-intrinsic-calls)
+  - [6.8 Adapt Operator](#68-adapt-operator)
+- [7. Place Expressions and Indexing](#7-place-expressions-and-indexing)
+  - [7.1 Place vs Value Expressions](#71-place-vs-value-expressions)
+  - [7.2 Field Access](#72-field-access)
+  - [7.3 Fallible Indexing](#73-fallible-indexing)
+  - [7.4 Index and Field Chains](#74-index-and-field-chains)
+  - [7.5 Destination Contexts](#75-destination-contexts)
+  - [7.6 Parallel with Checked Arithmetic](#76-parallel-with-checked-arithmetic)
+- [8. Statements](#8-statements)
+  - [8.1 Bindings](#81-bindings)
+  - [8.2 Const](#82-const)
+  - [8.3 Set](#83-set)
+  - [8.4 Functions](#84-functions)
+  - [8.5 Parameter Modes](#85-parameter-modes)
+  - [8.6 Const Parameters](#86-const-parameters)
+  - [8.7 Generic Functions](#87-generic-functions)
+  - [8.8 Control Flow](#88-control-flow)
+  - [8.9 Return](#89-return)
+  - [8.10 Debug Log](#810-debug-log)
+  - [8.11 Call Statements](#811-call-statements)
+- [9. Module System](#9-module-system)
+  - [9.1 Hierarchy](#91-hierarchy)
+  - [9.2 Require](#92-require)
+  - [9.3 Import](#93-import)
+  - [9.4 Qualified Calls](#94-qualified-calls)
+  - [9.5 Native Riders](#95-native-riders)
+  - [9.6 Data](#96-data)
+- [10. Numeric Widening](#10-numeric-widening)
+- [11. Ownership Analysis](#11-ownership-analysis)
+  - [11.1 Errors](#111-errors)
+  - [11.2 Mutable Arguments](#112-mutable-arguments)
+  - [11.3 How Arguments and Operands Are Read](#113-how-arguments-and-operands-are-read)
+  - [11.4 Loop Restrictions](#114-loop-restrictions)
+  - [11.5 The Collection a `for` Walks](#115-the-collection-a-for-walks)
+  - [11.6 Branch Consistency](#116-branch-consistency)
+  - [11.7 Tracking Categories](#117-tracking-categories)
+- [12. Bidirectional Type Inference](#12-bidirectional-type-inference)
+- [Appendix A. Command-Line Interface](#appendix-a-command-line-interface)
+- [Appendix B. Unimplemented Features](#appendix-b-unimplemented-features)
 
 ## 1. Introduction
 
@@ -1659,7 +1659,7 @@ let x = repeat(COUNT, ref s)  // COUNT is a const binding
 
 **Implementation:** The compiler monomorphizes, keeping the original function
 and adding a copy per instantiation beside it. See [Const Parameter
-Specialization](compiler-guide.md#user-content-const-parameter-specialization)
+Specialization](compiler-guide.md#const-parameter-specialization)
 in the compiler guide.
 
 ### 8.7 Generic Functions
@@ -1688,7 +1688,7 @@ or convert it to anything else.
 arguments, and off what the result is expected to be. Each type parameter is a
 variable unified with the argument types in its positions and with the
 expected result, the way a list's elements are typed together
-([Datalove Literals](../mandocs/datalit.md#user-content-typing-together)):
+([Datalove Literals](../mandocs/datalit.md#typing-together)):
 
 ```datalove
 let a = unwrap_or(some (: u32 / 7), : u32 / 0)   // T is u32
@@ -1853,7 +1853,7 @@ which builds one more descriptor at each level.
 
 How this is implemented is in [Generics: how it works](generics.md); what is
 refused and why is
-[What is refused](generics.md#user-content-what-is-refused).
+[What is refused](generics.md#what-is-refused).
 
 ### 8.8 Control Flow
 
@@ -2622,8 +2622,8 @@ parameters.
 
 Expressions can *synthesize* types (bottom-up) or *check* against expected
 types (top-down). This section is the informal account; the rules are in
-[Datalit Typing Rules](datalit-typing-rules.md#user-content-inference) and
-[Datafun Typing Rules](datafun-typing-rules.md#user-content-inference).
+[Datalit Typing Rules](datalit-typing-rules.md#inference) and
+[Datafun Typing Rules](datafun-typing-rules.md#inference).
 
 **Integer synthesis**: bare integer literals synthesize as `int`
 (arbitrary-precision). When an expected type is available, integers check

@@ -8,15 +8,15 @@ scheduled.
 
 ## Contents
 
-- [What prompted this](#user-content-what-prompted-this)
-- [How a data file is read today](#user-content-how-a-data-file-is-read-today)
-- [How a constant gets back to the runtime](#user-content-how-a-constant-gets-back-to-the-runtime)
-- [The loader](#user-content-the-loader)
-- [Not through ConstValue](#user-content-not-through-constvalue)
-- [One reader, not two](#user-content-one-reader-not-two)
-- [What exists and what is missing](#user-content-what-exists-and-what-is-missing)
-- [Phases](#user-content-phases)
-- [Open questions](#user-content-open-questions)
+- [What prompted this](#what-prompted-this)
+- [How a data file is read today](#how-a-data-file-is-read-today)
+- [How a constant gets back to the runtime](#how-a-constant-gets-back-to-the-runtime)
+- [The loader](#the-loader)
+- [Not through ConstValue](#not-through-constvalue)
+- [One reader, not two](#one-reader-not-two)
+- [What exists and what is missing](#what-exists-and-what-is-missing)
+- [Phases](#phases)
+- [Open questions](#open-questions)
 
 ## What prompted this
 
@@ -177,7 +177,7 @@ table is the export path. `data` is the untyped result.
 3. **Type names in hints.** `: Order /` names an alias. Checking mode barely
    needs one, the expected descriptor covering the value; synthesis mode needs
    a name environment from the caller, or refuses.
-4. **The constant path** in [Not through ConstValue](#user-content-not-through-constvalue).
+4. **The constant path** in [Not through ConstValue](#not-through-constvalue).
 5. **Structured errors,** and the compiler's rendering of them.
 
 ## Phases

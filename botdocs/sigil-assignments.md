@@ -209,4 +209,4 @@ What a sigil operator attaches to is decided by how it was written: one
 against both its neighbours or against neither goes between them, one against
 only what follows it is a prefix operator, and one against only what precedes
 it is a postfix operator. See
-[Section 2.4 of the spec](botspec.md#user-content-24-spacing).
+[Section 2.4 of the spec](botspec.md#24-spacing).

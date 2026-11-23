@@ -11,13 +11,13 @@ the JIT needs.
 
 ## Contents
 
-- [Why the store demo](#user-content-why-the-store-demo)
-- [Where things stand](#user-content-where-things-stand)
-- [The steps](#user-content-the-steps)
-- [The baseline grid](#user-content-the-baseline-grid)
-- [Making the crossings cheap](#user-content-making-the-crossings-cheap)
-- [Tuning](#user-content-tuning)
-- [OSR](#user-content-osr)
+- [Why the store demo](#why-the-store-demo)
+- [Where things stand](#where-things-stand)
+- [The steps](#the-steps)
+- [The baseline grid](#the-baseline-grid)
+- [Making the crossings cheap](#making-the-crossings-cheap)
+- [Tuning](#tuning)
+- [OSR](#osr)
 
 ## Why the store demo
 
@@ -49,17 +49,17 @@ iterations, and `db.build_*_slots`, which run under CTFE at compile time.
 | `--jit-threshold 100` | 550 ms | 43 | 34 ms |
 | AOT executable | 228 ms | - | - |
 
-At 20,000 orders; the [grid](#user-content-the-baseline-grid) has the rest. Compiling the program, which reads the data and evaluates
+At 20,000 orders; the [grid](#the-baseline-grid) has the rest. Compiling the program, which reads the data and evaluates
 the id maps under CTFE, is about 300 ms of every `script` run (`--time`
 prints it), so the threshold-1 JIT runs the report in about 300 ms, of which
 about 70 ms is codegen and some of the rest is `JitEngine::new`. That is within
 reach of AOT, at the price of compiling every function called even once.
 
 **A threshold of 100 is 1.57x the interpreter, ahead of threshold 1 at
-1.52x,** since [OSR](#user-content-osr) enters the queries' loops, called once,
+1.52x,** since [OSR](#osr) enters the queries' loops, called once,
 in compiled code. Before OSR it was 1.28x, and before calls into compiled code
 were planned it was slower than having no JIT at all; see [Making the
-crossings cheap](#user-content-making-the-crossings-cheap). Codegen now
+crossings cheap](#making-the-crossings-cheap). Codegen now
 includes the entries compiled at loops.
 
 **Codegen of the first function cost about 4 ms** whatever it was, which
@@ -90,21 +90,21 @@ size of the run. The engines alternate round by round and the medians are
 reported; `script --time` splits each run into compiling and running, and
 one untimed `--jit-stats` run per threshold gives what was compiled and the
 crossings. It writes `target/store-grid/grid.json`, and is what to rerun after
-each later step. The results are [below](#user-content-the-baseline-grid).
+each later step. The results are [below](#the-baseline-grid).
 
 **2. Make every threshold at least as fast as the interpreter (done).** See
-[Making the crossings cheap](#user-content-making-the-crossings-cheap). Every
+[Making the crossings cheap](#making-the-crossings-cheap). Every
 threshold from 2 up now beats the interpreter at every size; threshold 1
 still loses at 2,000 orders, to its codegen rather than to crossings.
 
-**3. OSR (done),** [below](#user-content-osr). The goal was a threshold of 100
+**3. OSR (done),** [below](#osr). The goal was a threshold of 100
 with OSR running the report close to the threshold-1 time while compiling far
 fewer than 86 functions; it runs it faster than threshold 1, compiling 39.
 
-**4. Tune (done).** See [Tuning](#user-content-tuning).
+**4. Tune (done).** See [Tuning](#tuning).
 
 **5. Check against other programs (done).** `benchvs` and
-`botdocs/learn.dfs`; see [Tuning](#user-content-tuning). The `jit` bench in
+`botdocs/learn.dfs`; see [Tuning](#tuning). The `jit` bench in
 `datalove-bench` was not run: it holds the threshold at 1 on purpose, to
 measure what compiled code is worth rather than when to compile.
 

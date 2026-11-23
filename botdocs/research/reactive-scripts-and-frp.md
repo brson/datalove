@@ -9,18 +9,18 @@ from memory and not re-read; check them before citing them in a post.
 
 ## Contents
 
-- [The answer](#user-content-the-answer)
-- [The semantics, restated](#user-content-the-semantics-restated)
-- [Reactive notebooks: the direct neighbours](#user-content-reactive-notebooks-the-direct-neighbours)
-- [The rules are dependence analysis](#user-content-the-rules-are-dependence-analysis)
-- [Incremental computation and build systems](#user-content-incremental-computation-and-build-systems)
-- [FRP](#user-content-frp)
-- [What a data change did in the engine](#user-content-what-a-data-change-did-in-the-engine)
-- [Data as an input binding](#user-content-data-as-an-input-binding)
-- [Below the unit: incremental data](#user-content-below-the-unit-incremental-data)
-- [Recommendations](#user-content-recommendations)
-- [Open questions](#user-content-open-questions)
-- [Sources](#user-content-sources)
+- [The answer](#the-answer)
+- [The semantics, restated](#the-semantics-restated)
+- [Reactive notebooks: the direct neighbours](#reactive-notebooks-the-direct-neighbours)
+- [The rules are dependence analysis](#the-rules-are-dependence-analysis)
+- [Incremental computation and build systems](#incremental-computation-and-build-systems)
+- [FRP](#frp)
+- [What a data change did in the engine](#what-a-data-change-did-in-the-engine)
+- [Data as an input binding](#data-as-an-input-binding)
+- [Below the unit: incremental data](#below-the-unit-incremental-data)
+- [Recommendations](#recommendations)
+- [Open questions](#open-questions)
+- [Sources](#sources)
 
 ## The answer
 
@@ -104,7 +104,7 @@ binding is visible statically: linear types for moves, `set` and `mut`/`out`
 parameters in signatures for writes. IPyflow's worst failure, a write through
 an alias inside a function, cannot happen. That is the strongest claim for the
 comparison section. The engine is held to it by the cases under
-[writes through function parameters](../script-reactivity-cases.md#user-content-writes-through-function-parameters),
+[writes through function parameters](../script-reactivity-cases.md#writes-through-function-parameters),
 which include Rex's `flu_vaccine` edit and its `aliasing_val_swap`.
 
 ## The rules are dependence analysis

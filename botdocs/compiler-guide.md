@@ -4,49 +4,49 @@ Reference for the datalove-datafun compiler architecture.
 
 ## Contents
 
-- [Crate Organization](#user-content-crate-organization)
-- [Module Compilation Phases](#user-content-module-compilation-phases)
-  - [Token Gluing](#user-content-token-gluing)
-  - [Phase 5: IR Lowering Detail](#user-content-phase-5-ir-lowering-detail)
-  - [Const Parameter Specialization](#user-content-const-parameter-specialization)
-  - [Const Evaluation](#user-content-const-evaluation)
-- [Generics](#user-content-generics) -- orientation; the full account is [Generics: how it works](generics.md)
-- [Native Riders](#user-content-native-riders)
-  - [The Runtime Kernel and What Belongs in a Rider](#user-content-the-runtime-kernel-and-what-belongs-in-a-rider)
-- [The Shipped Binary](#user-content-the-shipped-binary)
-  - [Checkout and Release Builds](#user-content-checkout-and-release-builds)
-  - [The ABI Check](#user-content-the-abi-check)
-  - [Rider Manifests and Interfaces](#user-content-rider-manifests-and-interfaces)
-- [Script Compilation Phases](#user-content-script-compilation-phases)
-- [Printing Types and Errors](#user-content-printing-types-and-errors)
-- [IR Types](#user-content-ir-types)
-  - [IDs](#user-content-ids)
-  - [Code Unit References](#user-content-code-unit-references)
-  - [IrCodeUnit](#user-content-ircodeunit)
-  - [Type Layout](#user-content-type-layout)
-  - [Parameter Modes](#user-content-parameter-modes)
-  - [Enum Instructions](#user-content-enum-instructions)
-  - [Intrinsics](#user-content-intrinsics)
-- [Salsa Patterns](#user-content-salsa-patterns)
-  - [Database](#user-content-database)
-  - [Tracked Functions](#user-content-tracked-functions)
-  - [Incremental Compilation](#user-content-incremental-compilation)
-  - [Reusing a Compiled World](#user-content-reusing-a-compiled-world)
-  - [Parallel Execution](#user-content-parallel-execution)
-- [Ownership Analysis](#user-content-ownership-analysis)
-  - [Tracking Categories](#user-content-tracking-categories)
-  - [Error Codes](#user-content-error-codes)
-  - [Drop Schedule](#user-content-drop-schedule)
-  - [AOT Tracking Bytes](#user-content-aot-tracking-bytes)
-- [Execution Backends](#user-content-execution-backends)
-  - [Leak Checking](#user-content-leak-checking)
-- [Performance Notes](#user-content-performance-notes)
-- [Entry Points](#user-content-entry-points)
-  - [Compiling From Roots](#user-content-compiling-from-roots)
-- [Test Patterns](#user-content-test-patterns)
-  - [index-64](#user-content-index-64)
-  - [Worldgen Coverage](#user-content-worldgen-coverage)
-- [Key Files](#user-content-key-files)
+- [Crate Organization](#crate-organization)
+- [Module Compilation Phases](#module-compilation-phases)
+  - [Token Gluing](#token-gluing)
+  - [Phase 5: IR Lowering Detail](#phase-5-ir-lowering-detail)
+  - [Const Parameter Specialization](#const-parameter-specialization)
+  - [Const Evaluation](#const-evaluation)
+- [Generics](#generics) -- orientation; the full account is [Generics: how it works](generics.md)
+- [Native Riders](#native-riders)
+  - [The Runtime Kernel and What Belongs in a Rider](#the-runtime-kernel-and-what-belongs-in-a-rider)
+- [The Shipped Binary](#the-shipped-binary)
+  - [Checkout and Release Builds](#checkout-and-release-builds)
+  - [The ABI Check](#the-abi-check)
+  - [Rider Manifests and Interfaces](#rider-manifests-and-interfaces)
+- [Script Compilation Phases](#script-compilation-phases)
+- [Printing Types and Errors](#printing-types-and-errors)
+- [IR Types](#ir-types)
+  - [IDs](#ids)
+  - [Code Unit References](#code-unit-references)
+  - [IrCodeUnit](#ircodeunit)
+  - [Type Layout](#type-layout)
+  - [Parameter Modes](#parameter-modes)
+  - [Enum Instructions](#enum-instructions)
+  - [Intrinsics](#intrinsics)
+- [Salsa Patterns](#salsa-patterns)
+  - [Database](#database)
+  - [Tracked Functions](#tracked-functions)
+  - [Incremental Compilation](#incremental-compilation)
+  - [Reusing a Compiled World](#reusing-a-compiled-world)
+  - [Parallel Execution](#parallel-execution)
+- [Ownership Analysis](#ownership-analysis)
+  - [Tracking Categories](#tracking-categories)
+  - [Error Codes](#error-codes)
+  - [Drop Schedule](#drop-schedule)
+  - [AOT Tracking Bytes](#aot-tracking-bytes)
+- [Execution Backends](#execution-backends)
+  - [Leak Checking](#leak-checking)
+- [Performance Notes](#performance-notes)
+- [Entry Points](#entry-points)
+  - [Compiling From Roots](#compiling-from-roots)
+- [Test Patterns](#test-patterns)
+  - [index-64](#index-64)
+  - [Worldgen Coverage](#worldgen-coverage)
+- [Key Files](#key-files)
 
 ## Crate Organization
 
@@ -124,14 +124,14 @@ inside it.
 
 `datalove-sys-packages` sits above everything else: nothing in the compiler depends
 on it, so editing a `.dfm` recompiles no compiler crate. See [The Shipped
-Binary](#user-content-the-shipped-binary).
+Binary](#the-shipped-binary).
 
 ## Module Compilation Phases
 
 Module compilation runs through five phases. Phases 1-4 are handled by `compile_modules()`,
 phase 5 by `lower_module_graph_with_evaluator()`. Each `*_phase` is its step
 with, in a parallel compile, the step's per-module queries computed ahead of
-it; see [Parallel Execution](#user-content-parallel-execution).
+it; see [Parallel Execution](#parallel-execution).
 
 ```
 Source Text
@@ -587,7 +587,7 @@ clones once rather than cloning through `ListGet` and then cloning that. It
 holds for an element of a type parameter too: the reference is described by
 the element type's descriptor table entry, so reading through it reads the
 bytes as what they are. See
-[Generics](generics.md#user-content-operations-on-a-dynamic-value).
+[Generics](generics.md#operations-on-a-dynamic-value).
 
 A copy element keeps the direct read: there is nothing to move out and nothing
 to free, so a borrow would buy nothing.
@@ -721,7 +721,7 @@ engine, a dynamic path per instruction, behind a gate in the compiled backends
 What it does not do -- bounds beyond `float`, `fixedint` and `ord`, so nothing
 can be done to a bare `T` but move it, drop it, clone it, print it and hand it
 back -- and why, is in
-[What is refused](generics.md#user-content-what-is-refused). Read that before
+[What is refused](generics.md#what-is-refused). Read that before
 assuming something is a bug.
 
 ## Native Riders
@@ -862,7 +862,7 @@ Two things travel inside the binary, both assembled by
 | What | How | Where it comes from |
 |------|-----|---------------------|
 | Modules, data files, manifests | `build.rs` walks `sys/`, emits a table of `include_bytes!` by path | `sys/*/*.dfm`, `*.dlt`, `manifest.toml` |
-| Rider interfaces | The rider crate's `INTERFACE` constant, in the same table at the path the file would have; see [below](#user-content-rider-manifests-and-interfaces) | `sys/*/rider/rider.dli` |
+| Rider interfaces | The rider crate's `INTERFACE` constant, in the same table at the path the file would have; see [below](#rider-manifests-and-interfaces) | `sys/*/rider/rider.dli` |
 | Rider functions | `datalove-rider-sys-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
 
 The table is a filesystem: `datalove_sys_packages::files()` is a
@@ -887,7 +887,7 @@ after loading. A release build has none, `rider/` not being in the published
 crate, and its riders come from the registry. So the std rider reaches an
 AOT-compiled program the way any other rider does: the compiler synthesizes a
 native component for whatever riders the module graph holds and builds it with
-cargo. See [Native Riders](#user-content-native-riders).
+cargo. See [Native Riders](#native-riders).
 
 That is what lets a program mix `sys/` with a rider of its own. The binary
 used to link a prebuilt archive containing the std rider and nothing else, so
@@ -1090,7 +1090,7 @@ faults: every compound a lowercase name with its parts in angle brackets
 (`list<int>`, `tuple<u8, string>`, `param<0>`), so an IR type is never taken
 for a datalove one. Nothing a user sees prints one. The REPL takes its types
 from the typechecker; see
-[repl-architecture.md](repl-architecture.md#user-content-the-engine).
+[repl-architecture.md](repl-architecture.md#the-engine).
 
 **A type error is worded once.** Each `PendingDiagnostic` is built into a
 diagnostic in one function, `build` in `datafun-tycheck/src/emit.rs`; emitting
@@ -1211,7 +1211,7 @@ pub enum CodeUnitContext {
 ```
 
 The three contexts' fields are listed and explained in
-[ir.md](ir.md#user-content-5-code-units).
+[ir.md](ir.md#5-code-units).
 
 An `IrModule` is `{ functions: Vec<IrCodeUnit>, symbols: SymbolTable }`.
 Lookup at runtime goes through `ModuleFunctionRegistry` (keyed by
@@ -1247,7 +1247,7 @@ functions in both authorities:
 disagreement with the callee (F057), so ownership analysis reads the mode off
 the call site and needs no resolved call target. How parameters are read and
 written, and who destroys what an `out` parameter held, is in
-[ir.md](ir.md#user-content-parameter-modes).
+[ir.md](ir.md#parameter-modes).
 
 ### Enum Instructions
 
@@ -1279,7 +1279,7 @@ push, a swap -- is an **intrinsic native** instead: a rider native declared
 `intrinsic native fun`, called as any native, which a backend may do in place
 of the call. `NativeContext::intrinsic` says which; Cranelift open-codes them
 where the types are static (`codegen/native_intrinsics.rs`) and calls the
-native otherwise. See [Intrinsic natives](native-abi.md#user-content-intrinsic-natives).
+native otherwise. See [Intrinsic natives](native-abi.md#intrinsic-natives).
 
 ## Salsa Patterns
 
@@ -1292,7 +1292,7 @@ and how to measure whether a change memoizes.
 The compiler's database is `Database` in `datalove-datafun-compiler/src/lib.rs`,
 re-exported as `datalove_datafun::Database`; what cloning it shares and how
 `Database::recording` reports queries is in
-[salsa-architecture.md](salsa-architecture.md#user-content-the-databases).
+[salsa-architecture.md](salsa-architecture.md#the-databases).
 
 ### Tracked Functions
 
@@ -1430,7 +1430,7 @@ the aggregator rebuilds. In a real compile phase 1's warm-up finds nothing
 to do, because package resolution has already parsed every module; in a
 parallel compile that parse is the parallel one, in
 `extract_dependencies_with_mode`. See
-[where compile time goes](compile-time.md#user-content-parallel-compilation).
+[where compile time goes](compile-time.md#parallel-compilation).
 Thinning `ModuleGraphTypecheckResult` took typecheck from 1.57x to 1.78x for
 exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.
@@ -1509,7 +1509,7 @@ and borrowed through a `StaticRef`. A module or script const named from a
 function is lowered that way directly. A function-local const, and a
 specialized copy's const parameter, is lowered as a value defined by a `Const`
 and promoted afterwards by `promote_function_consts`; see
-[Consts Built Once](plan-static-consts.md#user-content-as-built).
+[Consts Built Once](plan-static-consts.md#as-built).
 
 ### Error Codes
 
@@ -1542,7 +1542,7 @@ never reached.
 O001, O007 and O013 carry an `OwnershipRecoveryHint` suggesting an `@`,
 as O016 does for a move out of a const. The parse codes are datalit's D-codes
 and datafun's P-codes; see
-[Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
+[Datalit Grammar](datalit-ebnf.md#diagnostics).
 
 Every code, in all five families, is a variant of an enum in
 `datalove-diagnostic-codes` whose discriminant is its number, so two faults
@@ -1578,7 +1578,7 @@ Nothing compares the lowered IR with the schedule, but a debug build checks
 that what the IR does holds together: `drop_check` in the IR crate refuses a
 leak, a second drop, a store over a value and a way out that leaves anything
 owed, on every module function and script unit; see
-[The drop check](ir.md#user-content-the-drop-check).
+[The drop check](ir.md#the-drop-check).
 
 `before_set_target_early_return` is what is live once the value and the keys
 have run, which is when a set-index bounds check can fail: what they moved is
@@ -1627,7 +1627,7 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   script unit's. Each const runs as unit 0, which no script unit is numbered.
 - **JIT** (`datalove-datafun-cranelift-jit`) tiers by call count, and enters a
   loop's compiled code partway through a call once the loop has run often
-  enough (on-stack replacement; see [Tuning the JIT](plan-jit-tuning.md#user-content-osr)).
+  enough (on-stack replacement; see [Tuning the JIT](plan-jit-tuning.md#osr)).
   `OptimizingDispatcher` executes native code when a function is compiled, and
   otherwise counts toward the threshold. `DispatcherMode::Tuned` uses thresholds;
   `Chaos` makes seeded pseudo-random decisions for testing. `script --jit` runs
@@ -1748,7 +1748,7 @@ which it replaced, it is 7-10% faster interpreting and 14% faster compiling
 
 **Startup is the standard library.** A process starts in about 3ms and a trivial
 `script --no-sys` finishes in under 4ms; the same script with `sys/` is 55-60ms.
-Narrowing to [roots](#user-content-compiling-from-roots) is what takes a script
+Narrowing to [roots](#compiling-from-roots) is what takes a script
 that uses little of the library well under that. The largest real program in the
 tree, `botdocs/learn.dfs`, adds under 10ms on top of the floor.
 
@@ -2153,7 +2153,7 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 `ExampleTestRunner::with_worker_context(dir, init, analyzer)` hands each
 fixture a context built by `init`, for state that is expensive and cannot be
 shared between threads -- `std_engine_tests` keeps a `CompiledWorld` there (see
-[Reusing a Compiled World](#user-content-reusing-a-compiled-world)). The runner
+[Reusing a Compiled World](#reusing-a-compiled-world)). The runner
 keeps contexts in a pool, borrowing one per fixture and handing it back,
 rather than using rayon's `map_init`: `map_init` runs its initializer once per
 *work split*, not once per thread, and built 80 worlds for 143 fixtures. One
@@ -2183,7 +2183,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
 | `literal_equiv_tests` | Generated datalit expressions of every kind, recursive types among them, put to datalit and to datafun: inferred (`expr` against `let _x = expr`: the same tree, type and diagnostic codes), valued (read as a data file and compiled as a literal in one program, shown alike), checked (`: T / expr` against `let _x: T = expr`), placed (as an argument, a return, a `set` and a `var` in datafun, against `: T / expr`), and broken by datalit's mutations (both refuse, or agree). A failed subsumption is T022 or T032 in datalit and F016 in datafun by design, an unknown type name T059 and F064, and what datalit cannot parse datafun's wider grammar may, so long as it refuses it. A difference is shrunk and written out as a case, which once fixed is kept in `tests/literal_equiv/`, run before the seeds; `LITERAL_EQUIV_TEXT` compares one expression |
-| `coverage_tests` (in `datalove-worldgen`) | What of the AST the worldfiles `worldgen_engine_tests` runs cover. See [Worldgen Coverage](#user-content-worldgen-coverage) and [Generative Seeds](#user-content-generative-seeds) |
+| `coverage_tests` (in `datalove-worldgen`) | What of the AST the worldfiles `worldgen_engine_tests` runs cover. See [Worldgen Coverage](#worldgen-coverage) and [Generative Seeds](#generative-seeds) |
 | `worldgen_engine_tests` | Generated worldfiles, a third of them one fragment and the rest cut into units as a session is, through `engine_tests`' checks (`tests/engines/mod.rs`, which both share): every unit compiles, and every engine observes what the IR walker did. Most worlds call the standard library, which worldfile analysis compiles as far as a world requires it when `AnalysisOptions::system` is given (`worldfile_module_compiler`); the AOT backends link a native component built with its riders, in `rider_build::default_work_dir()`. Seeds run in worker processes, so a crash or a hang fails its seed alone. A failing world is written out under the target directory, shrunk, written out again, and run again with `WORLDGEN_ENGINES_WORLD`; on the default seeds, floors ask for loops entered, units ended early and blocked, and AOT runs. See [plan-worldgen-engines.md](plan-worldgen-engines.md) |
 | `generative_reactive_tests` (in `datalove-tests`) | Generated scripts, cut into fragment and expression units that declare and call functions, call modules' qualified and the standard library, and return early with errors, and edited, deleted, reordered and inserted at random, with the modules and data they require edited too, and beside each a dense session of a few units over two names, leave each unit as a fresh run of its code would after every step, in how it ended, what it binds and what it shows, and never crash the engine. The session runs its calls through the chaos JIT, kept across the steps; the fresh run, on the bytecode alone. A few seeds from the test's default in `just test`, 1000 from seed 1000000 in `just test-generative-reactive`; a failing seed is shrunk and written out as a worldfile, and once fixed is kept in `tests/generative_reactive/`, which every run checks first. `just measure-faults` breaks each reach rule in turn, by `scripts/reach-faults.toml`, and says what these tests and the hand-written ones catch of it |
 | `ownership_fuzz_tests` (in `datalove-cli`) | Generated functions over heap values -- strings, a struct of two, an enum with a payload, lists -- that move, clone, lend and change them and their fields, `out` arguments filling variables declared with no value, across nested `if`s, `match`es, `for`s, counted `loop`s and an option's binding, leaving by `ret`, `?`, `break` and `continue` at any depth, with dead code after, through the binary: it must never panic, and what it accepts it runs with the leak check on, on the bytecode, on the IR walker and under the JIT compiling every function at once, each of which must end cleanly. A second drop is seen three ways: with the leak check on the runtime leaves what it destroys poisoned rather than empty and refuses to destroy it again (`any_destroy_local`), on every engine; the IR walker asserts that every precise drop finds what it drops (`Frame::debug_assert_held`); and compiled code's second free is the allocator's to see. Half the time a way out is preceded by a value given away, since what a way out drops is decided from what was moved on the way to it. The generator tracks what it moved, so most scripts run, and one in twenty names a value whatever it holds, for the ownership pass to refuse. `OWNERSHIP_FUZZ_WRITE` writes failing scripts to a directory, and `OWNERSHIP_FUZZ_SHOW` prints the first refused with a code |

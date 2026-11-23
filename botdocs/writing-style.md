@@ -7,18 +7,18 @@ is silent, they are the tiebreaker.
 
 ## Contents
 
-- [The one rule](#user-content-the-one-rule)
-- [Know which kind of document you are writing](#user-content-know-which-kind-of-document-you-are-writing)
-- [Give it a spine](#user-content-give-it-a-spine)
-- [Openings](#user-content-openings)
-- [Endings](#user-content-endings)
-- [Write the bookends first](#user-content-write-the-bookends-first)
-- [Sentences](#user-content-sentences)
-- [Cutting](#user-content-cutting)
-- [Botdocs conventions](#user-content-botdocs-conventions)
-- [Blog posts](#user-content-blog-posts)
-- [Checklist](#user-content-checklist)
-- [Sources](#user-content-sources)
+- [The one rule](#the-one-rule)
+- [Know which kind of document you are writing](#know-which-kind-of-document-you-are-writing)
+- [Give it a spine](#give-it-a-spine)
+- [Openings](#openings)
+- [Endings](#endings)
+- [Write the bookends first](#write-the-bookends-first)
+- [Sentences](#sentences)
+- [Cutting](#cutting)
+- [Botdocs conventions](#botdocs-conventions)
+- [Blog posts](#blog-posts)
+- [Checklist](#checklist)
+- [Sources](#sources)
 
 ## The one rule
 
@@ -46,7 +46,7 @@ Pick one; link to the others.
   files.
 - **How-to** -- steps to accomplish a task. Example: `release.md`.
 - **Blog post** -- an explanation with a narrator and an opinion. See
-  [Blog posts](#user-content-blog-posts).
+  [Blog posts](#blog-posts).
 
 A plan that becomes implemented should eventually be distilled into an
 explanation or reference doc. Do not keep patching a plan into a spec.
@@ -171,8 +171,8 @@ Observed from the existing docs; follow them.
 - Directly under the title, one short paragraph: what this is, its status, and
   when it was written. For example: "Written October 2026 alongside the `for`
   draft; not implemented."
-- A `## Contents` list for anything longer than a few screens. Anchors use the
-  `#user-content-` prefix.
+- A `## Contents` list for anything longer than a few screens. Anchors are the
+  bare heading id, `#some-heading`, with no `user-content-` prefix.
 - Prose is hard-wrapped at about 80 columns, in ordinary paragraphs.
 - Plans end with what exists, what is missing, phases, and open questions.
   Open questions are real questions, not tasks in disguise.

@@ -5,19 +5,19 @@ share one lexer, in `crates/bcts/src/lexer.rs`, and both grammars,
 [Datalit Grammar](datalit-ebnf.md) and [Datafun Grammar](datafun-ebnf.md),
 are written over the tokens it makes. This states what those tokens are, and
 a test holds the lexer to it (see
-[Checking the grammar](#user-content-checking-the-grammar)).
+[Checking the grammar](#checking-the-grammar)).
 
 ## Contents
 
-- [Notation](#user-content-notation)
-- [Grammar](#user-content-grammar)
-- [What the grammars read](#user-content-what-the-grammars-read)
-- [Checking the grammar](#user-content-checking-the-grammar)
+- [Notation](#notation)
+- [Grammar](#grammar)
+- [What the grammars read](#what-the-grammars-read)
+- [Checking the grammar](#checking-the-grammar)
 
 ## Notation
 
 ISO 14977 EBNF, written as the
-[datalit grammar's notation](datalit-ebnf.md#user-content-notation) says.
+[datalit grammar's notation](datalit-ebnf.md#notation) says.
 This grammar is over characters: a terminal matches the characters it
 spells, where the datalit and datafun grammars, written over the tokens this
 one makes, match a terminal against a token. One rule is not in the EBNF:

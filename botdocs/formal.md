@@ -8,17 +8,17 @@ statements, running a script, and the ownership analyses.
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [The shape of the answer](#user-content-the-shape-of-the-answer)
-- [Coverage](#user-content-coverage)
-- [The type language](#user-content-the-type-language)
-- [Literal typing](#user-content-literal-typing)
-- [Datafun checking](#user-content-datafun-checking)
-- [Running a script](#user-content-running-a-script)
-- [Ownership](#user-content-ownership)
-- [Running it](#user-content-running-it)
-- [Keeping it true](#user-content-keeping-it-true)
-- [What is not covered](#user-content-what-is-not-covered)
+- [The problem](#the-problem)
+- [The shape of the answer](#the-shape-of-the-answer)
+- [Coverage](#coverage)
+- [The type language](#the-type-language)
+- [Literal typing](#literal-typing)
+- [Datafun checking](#datafun-checking)
+- [Running a script](#running-a-script)
+- [Ownership](#ownership)
+- [Running it](#running-it)
+- [Keeping it true](#keeping-it-true)
+- [What is not covered](#what-is-not-covered)
 
 ## The problem
 
@@ -355,7 +355,7 @@ holds the model to the Rust's recovery as well as its rules: what is bound
 after a failed `let`, which bodies of a binding `if` are checked, where a call
 stops. The doc said nothing of that, and now says what the tests found ([Going
 on after an
-error](datafun-typing-rules.md#user-content-going-on-after-an-error)).
+error](datafun-typing-rules.md#going-on-after-an-error)).
 
 `fun_tests` holds the Rust to it. Scripts come from worldgen, configured to
 stay inside the slice, as the single module it writes, checked as a script.
@@ -419,7 +419,7 @@ seeds compare about 4700 such types, and all agree.
   the generated scripts alike, worldgen now writing enums under aliases and
   matching on them, and a mutation damaging a `match`'s cases. Writing them
   down settled recovery the doc had not said, now in [Going on after an
-  error](datafun-typing-rules.md#user-content-going-on-after-an-error).
+  error](datafun-typing-rules.md#going-on-after-an-error).
 - **Two of the model's own rules were wrong**, found when projections
   widened what the tests reach. A literal form with no rule for the
   expected type inferred itself first, so `ret some x` with `x` unbound was
@@ -432,7 +432,7 @@ seeds compare about 4700 such types, and all agree.
   a non-copy field was F070, while `f()[0]?` of a non-copy element had no F072
   check, and was read by cloning it, with no `@` written. Both are now refused
   outside a borrowed position ([the
-  issue](issues.md#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
+  issue](issues.md#a-non-copy-part-of-a-temporary-can-only-be-borrowed)
   says why), and a borrowed one is read through a reference: `f()[0]?@` cloned
   twice, and `debuglog f().name` leaked the temporary. The backend fixture
   `45_borrowed_part_of_a_temporary` holds both.
@@ -551,7 +551,7 @@ Of checking, and of the inference under it:
   parameter and no `rec` in them (`Ground`); with one, `expose` would not
   commute with substituting it, and an instance spelling a recursive type into
   a key would be T065, which only refuses the spelling ([the
-  issue](issues.md#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)).
+  issue](issues.md#t065-refuses-a-recursive-key-only-where-it-is-written)).
   The theorem takes inference as a parameter, as the theorems above do, and
   asks of it that under an instance it answer what it answered under the
   generic, substituted, wherever the generic checked quietly (`InstEnv`). That
@@ -1177,7 +1177,7 @@ job of their own that installs elan (`.github/workflows/ci.yml`).
 ## Keeping it true
 
 A change to a function in the table under
-[The type language](#user-content-the-type-language) needs the same change to
+[The type language](#the-type-language) needs the same change to
 its Lean transcription, or `oracle_tests` fails on the cases that differ.
 The change may then break a proof, which is the point: either the proof is
 repaired, or the change broke a property the language promised, and the docs
@@ -1220,7 +1220,7 @@ In rough order of what to do next:
 - **Order independence.** The doc claims that where unification's constraints
   all hold and no `rec` is involved, the order of a collection's elements does
   not change what it synthesizes. With `rec` it does not hold ([the
-  issue](issues.md#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
+  issue](issues.md#a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
   Without, it is tested, not proved: `lit_tests`'s `order_does_not_matter`
   puts generated pairs in a list both ways, holds the Rust to the model on
   each, and requires that where either order checks both do, to one type;

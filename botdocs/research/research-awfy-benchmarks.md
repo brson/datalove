@@ -65,7 +65,7 @@ recursion (Permute's 8660 came out right), and walking an arena list linked by
 | Permute | 64 | Recursion through a `mut` list, swaps | Probed: gives 8660 |
 | Queens | 87 | Backtracking recursion over `mut` `[bool]`s | Like Permute |
 | Bounce | 89 | Structs in a list, branches, AWFY's `Random` | `Random` is a 16-bit LCG, a few lines |
-| Towers | 96 | Stacks pushed and popped in a recursion | Ported, with recursive types; see [Storage, Towers and Json](#user-content-storage-towers-and-json) |
+| Towers | 96 | Stacks pushed and popped in a recursion | Ported, with recursive types; see [Storage, Towers and Json](#storage-towers-and-json) |
 
 These are AWFY's micro benchmarks. Several are sized by AWFY's inner
 iterations to run for microseconds, so for `benchvs`'s whole-process timing
@@ -79,7 +79,7 @@ arena for every object graph and an enum for every class hierarchy.
 |---|---|---|---|
 | Richards | 438 | Application-shaped: a scheduler over tasks and packets, branchy, optional links, struct mutation | Tasks and packets in arenas linked by `?index`; the four task kinds' closures become an enum matched per step. The canonical macro benchmark |
 | Havlak | 663 | Collections in a real algorithm: lists, sets and maps of node numbers, union-find, many allocations | Blocks are already numbered, so the graph is indices by nature; `forEach` closures become loops. Exercises the runtime library the store demo's profile found to be the bottleneck |
-| Json | 563 | Parsing a string byte by byte, building a tree | Ported, with recursive types; see [Storage, Towers and Json](#user-content-storage-towers-and-json) |
+| Json | 563 | Parsing a string byte by byte, building a tree | Ported, with recursive types; see [Storage, Towers and Json](#storage-towers-and-json) |
 
 **Waiting on a language feature.** Porting these now would change what they
 measure.
@@ -191,7 +191,7 @@ backends:
   became the recursive type only by `@`, which copies it, so at every level
   the whole subtree was copied: written that way Storage ran in 14.3 s AOT,
   3.9x the struct's 3.7 s. Since a recursive type and its unfolding meet at
-  the head ([Recursive Structural Types](../plan-recursive-types.md#user-content-meeting-at-the-head)),
+  the head ([Recursive Structural Types](../plan-recursive-types.md#meeting-at-the-head)),
   the port is in AWFY's shape, pushed into as the list it is and returned with
   no copy: 3.42 s AOT, 3.53 s JIT, 11.1 s interpreted.
 - **Remainders are fallible.** `u32.rem_checked` and `div_wrapping` return an

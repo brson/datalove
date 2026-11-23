@@ -8,13 +8,13 @@ every step into a write, a compile and a run; the threads themselves are not.
 
 ## Contents
 
-- [Why](#user-content-why)
-- [What already holds](#user-content-what-already-holds)
-- [Phase 1: sessions in one engine](#user-content-phase-1-sessions-in-one-engine)
-- [What stands in the way of threads](#user-content-what-stands-in-the-way-of-threads)
-- [Phase 2: a thread per session](#user-content-phase-2-a-thread-per-session)
-- [Phase 3: sessions that move between threads](#user-content-phase-3-sessions-that-move-between-threads)
-- [Open questions](#user-content-open-questions)
+- [Why](#why)
+- [What already holds](#what-already-holds)
+- [Phase 1: sessions in one engine](#phase-1-sessions-in-one-engine)
+- [What stands in the way of threads](#what-stands-in-the-way-of-threads)
+- [Phase 2: a thread per session](#phase-2-a-thread-per-session)
+- [Phase 3: sessions that move between threads](#phase-3-sessions-that-move-between-threads)
+- [Open questions](#open-questions)
 
 ## Why
 

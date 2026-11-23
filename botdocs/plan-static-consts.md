@@ -3,26 +3,26 @@
 A plan for giving a const of a linear type one home for the life of the
 program, built once, and making every use of it a borrow of that home rather
 than a fresh copy on the heap. A feasibility study, written 2026-10-06. Steps 1 to 3 of [Order of
-work](#user-content-order-of-work) are implemented: the ownership rule, statics
+work](#order-of-work) are implemented: the ownership rule, statics
 for module, script and function consts, and const parameters by reference.
 Pooling non-copy literals, borrowing `match` and prebuilt AOT images are not.
-[Where things stand](#user-content-where-things-stand) describes the code
+[Where things stand](#where-things-stand) describes the code
 before the work.
 
 ## Contents
 
-- [Why](#user-content-why)
-- [Where things stand](#user-content-where-things-stand)
-- [The model](#user-content-the-model)
-- [Why the runtime is ready](#user-content-why-the-runtime-is-ready)
-- [Why lowering is mostly ready](#user-content-why-lowering-is-mostly-ready)
-- [Backends](#user-content-backends)
-- [The obstacle: function-local consts](#user-content-the-obstacle-function-local-consts)
-- [The other passes](#user-content-the-other-passes)
-- [The language decision](#user-content-the-language-decision)
-- [Literals](#user-content-literals)
-- [Order of work](#user-content-order-of-work)
-- [Open questions](#user-content-open-questions)
+- [Why](#why)
+- [Where things stand](#where-things-stand)
+- [The model](#the-model)
+- [Why the runtime is ready](#why-the-runtime-is-ready)
+- [Why lowering is mostly ready](#why-lowering-is-mostly-ready)
+- [Backends](#backends)
+- [The obstacle: function-local consts](#the-obstacle-function-local-consts)
+- [The other passes](#the-other-passes)
+- [The language decision](#the-language-decision)
+- [Literals](#literals)
+- [Order of work](#order-of-work)
+- [Open questions](#open-questions)
 
 ## Why
 
@@ -88,7 +88,7 @@ vN = staticref #k               // vN: Ref(T)
 Every use goes through that ref exactly as a use of a `ref` parameter does.
 Moving out of a const is an error, as moving out of a `ref` parameter is, and
 `CONST@` lowers to `clone *vN` (see
-[the language decision](#user-content-the-language-decision)). Copy-type consts
+[the language decision](#the-language-decision)). Copy-type consts
 are unaffected and stay immediate `Const` literals.
 
 ## Why the runtime is ready
@@ -196,7 +196,7 @@ Turning `v3` into a `Ref` after the fact means retyping it and deleting its
 drops. That looked fragile while a const could be moved, so this plan proposed
 lowering the function again once its consts had values. Once step 1 refused
 moves out of a const it stopped being fragile, and step 3 did the rewrite
-instead; see [As built](#user-content-as-built).
+instead; see [As built](#as-built).
 
 ## The other passes
 
@@ -260,7 +260,7 @@ section. Two things it needed that this plan did not foresee:
   call a copy of its own, because an unspecialized call consumed the argument
   and a specialized one dropped it. Const parameters are now passed by
   reference instead, so the call borrows; see
-  [As built](#user-content-as-built).
+  [As built](#as-built).
 - **Lowering's per-read copies are gone.** Lowering used to clone a
   function-local const or a const parameter at each read, so that reading did
   not consume it. With moves refused, a borrow now uses the binding itself, and
@@ -288,9 +288,9 @@ larger win than named consts.
 1. Done. The ownership rule: moving out of a non-copy const or const
    parameter requires `@`, with fixtures and documentation updated to match.
 2. Done. Pools and `staticref` for module-level and script-level consts, on
-   all four backends. See [As built](#user-content-as-built).
+   all four backends. See [As built](#as-built).
 3. Done. Function-local consts, and const parameters through specialization,
-   by promoting them in the IR. See [As built](#user-content-as-built).
+   by promoting them in the IR. See [As built](#as-built).
 4. Pooling read-only non-copy literals.
 5. Borrowing `match` and destructuring `if`, which remove most of the `@`s
    step 1 adds.

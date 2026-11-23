@@ -11,29 +11,29 @@ rules that type it.
 
 ## Contents
 
-- [Notation](#user-content-notation)
-- [Types](#user-content-types)
-- [Expressions](#user-content-expressions)
-  - [Inherited rules](#user-content-inherited-rules)
-  - [Variables](#user-content-variables)
-  - [Arithmetic, comparison and logic](#user-content-arithmetic-comparison-and-logic)
-  - [Try operators](#user-content-try-operators)
-  - [Adapt](#user-content-adapt)
-  - [Calls](#user-content-calls)
-  - [Fields and indexes](#user-content-fields-and-indexes)
-  - [Inference](#user-content-inference)
-  - [Rule selection](#user-content-rule-selection)
-- [Statements](#user-content-statements)
-  - [Patterns](#user-content-patterns)
-  - [Bindings](#user-content-bindings)
-  - [Assignment](#user-content-assignment)
-  - [Control flow](#user-content-control-flow)
-  - [Functions](#user-content-functions)
-  - [Modules and scripts](#user-content-modules-and-scripts)
-- [Going on after an error](#user-content-going-on-after-an-error)
-- [Diagnostics](#user-content-diagnostics)
-- [Implementation](#user-content-implementation)
-- [References](#user-content-references)
+- [Notation](#notation)
+- [Types](#types)
+- [Expressions](#expressions)
+  - [Inherited rules](#inherited-rules)
+  - [Variables](#variables)
+  - [Arithmetic, comparison and logic](#arithmetic-comparison-and-logic)
+  - [Try operators](#try-operators)
+  - [Adapt](#adapt)
+  - [Calls](#calls)
+  - [Fields and indexes](#fields-and-indexes)
+  - [Inference](#inference)
+  - [Rule selection](#rule-selection)
+- [Statements](#statements)
+  - [Patterns](#patterns)
+  - [Bindings](#bindings)
+  - [Assignment](#assignment)
+  - [Control flow](#control-flow)
+  - [Functions](#functions)
+  - [Modules and scripts](#modules-and-scripts)
+- [Going on after an error](#going-on-after-an-error)
+- [Diagnostics](#diagnostics)
+- [Implementation](#implementation)
+- [References](#references)
 
 ## Notation
 
@@ -229,9 +229,9 @@ operands at one type:
 ```
 
 The operands are typed together, by datalit's inference
-([Datalit Typing Rules, Inference](datalit-typing-rules.md#user-content-inference))
+([Datalit Typing Rules, Inference](datalit-typing-rules.md#inference))
 extended to datafun's expressions as described under
-[Inference](#user-content-inference) below:
+[Inference](#inference) below:
 
 ```
 Γ ⊢ e₁ ⇝ τ₁    Γ ⊢ e₂ ⇝ τ₂    τ₁ ≐ τ₂    T = default(τ₁) ≡ default(τ₂)    Γ ⊢ e₁ ⇐ T    Γ ⊢ e₂ ⇐ T
@@ -526,7 +526,7 @@ term. The parts are moved into what is built, so `debuglog (p.name,)` is
 F070 for a `string` field as `let t = (p.name,)` is. A part of what is not a
 place, `f().name` or `f()[k]?`, is refused as a part of a place is (F070,
 F072), though nothing holds a temporary afterwards
-([an issue](issues.md#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)).
+([an issue](issues.md#a-non-copy-part-of-a-temporary-can-only-be-borrowed)).
 Borrowed, it is read through a reference, and the temporary dropped after.
 
 ### Inference
@@ -713,7 +713,7 @@ element of a tensor of rank above 1, is F073.
 returns early as surely as the last one. An undefined
 root is F054; an immutable one is F055. A compound operator the place's type
 does not admit is F026. The order in which a `set` evaluates its parts is in
-[the spec](botspec.md#user-content-83-set).
+[the spec](botspec.md#83-set).
 
 ### Control flow
 

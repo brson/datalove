@@ -5,23 +5,23 @@ that lowering produces and that every backend consumes.
 
 ## Contents
 
-- [1. What the IR Is](#user-content-1-what-the-ir-is)
-- [2. Identifiers](#user-content-2-identifiers)
-- [3. Types](#user-content-3-types)
-- [4. Layout](#user-content-4-layout)
-- [5. Code Units](#user-content-5-code-units)
-- [6. Blocks and Operands](#user-content-6-blocks-and-operands)
-- [7. Instructions](#user-content-7-instructions)
-- [8. Terminators](#user-content-8-terminators)
-- [9. Ownership and Tracking](#user-content-9-ownership-and-tracking)
-- [10. Constants](#user-content-10-constants)
-- [11. Generics and Descriptors](#user-content-11-generics-and-descriptors)
-- [12. Registries](#user-content-12-registries)
-- [13. Passes](#user-content-13-passes)
-- [14. Consumers](#user-content-14-consumers)
-- [15. Text and Serialized Forms](#user-content-15-text-and-serialized-forms)
-- [16. Invariants](#user-content-16-invariants)
-- [17. Tests](#user-content-17-tests)
+- [1. What the IR Is](#1-what-the-ir-is)
+- [2. Identifiers](#2-identifiers)
+- [3. Types](#3-types)
+- [4. Layout](#4-layout)
+- [5. Code Units](#5-code-units)
+- [6. Blocks and Operands](#6-blocks-and-operands)
+- [7. Instructions](#7-instructions)
+- [8. Terminators](#8-terminators)
+- [9. Ownership and Tracking](#9-ownership-and-tracking)
+- [10. Constants](#10-constants)
+- [11. Generics and Descriptors](#11-generics-and-descriptors)
+- [12. Registries](#12-registries)
+- [13. Passes](#13-passes)
+- [14. Consumers](#14-consumers)
+- [15. Text and Serialized Forms](#15-text-and-serialized-forms)
+- [16. Invariants](#16-invariants)
+- [17. Tests](#17-tests)
 
 ## 1. What the IR Is
 
@@ -746,7 +746,7 @@ writes a tracking byte. A tracked variant reads the byte before destroying
 anything and writes it afterwards.
 
 The full error catalogue (O001 to O017) is in the
-[compiler guide](compiler-guide.md#user-content-error-codes).
+[compiler guide](compiler-guide.md#error-codes).
 
 ## 10. Constants
 
@@ -829,7 +829,7 @@ an early return, with the error printed; a stack overflow; or another
 failure, as the interpreter said it. A value that ran to its end and cannot be
 read back is the compiler's fault, and panics. The compiler turns each into a
 C-code diagnostic at the const; see
-[the compiler guide](compiler-guide.md#user-content-const-evaluation).
+[the compiler guide](compiler-guide.md#const-evaluation).
 
 ## 11. Generics and Descriptors
 
@@ -1109,9 +1109,9 @@ Bless expected output with `BLESS=1 cargo test`.
 - [Language Specification](botspec.md) -- what the source means
 - [The Native Rider ABI](native-abi.md) -- how a native call is made
 - [Generics: how it works](generics.md) -- dynamic values and descriptor tables
-- [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
+- [Const Parameter Specialization](compiler-guide.md#const-parameter-specialization)
   -- monomorphization
-- [IrCodeUnit](compiler-guide.md#user-content-ircodeunit) -- one type for all
+- [IrCodeUnit](compiler-guide.md#ircodeunit) -- one type for all
   three kinds of code unit
-- [index-64](compiler-guide.md#user-content-index-64) -- what decides the width
+- [index-64](compiler-guide.md#index-64) -- what decides the width
   of `Index`

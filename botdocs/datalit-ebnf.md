@@ -3,26 +3,26 @@
 The concrete syntax of datalit, the data-literal language, as EBNF. This is a
 reference: it states what the parser in `crates/datalove-datalit/src/parser`
 accepts, over the lexer and bracket matcher in `crates/bcts`, and a test
-holds it to that (see [Checking the grammar](#user-content-checking-the-grammar)).
+holds it to that (see [Checking the grammar](#checking-the-grammar)).
 
 What a well-formed literal means, and which ones type-check, is in
 [Datalit Typing Rules](datalit-typing-rules.md). Datafun embeds most of this
 grammar, with differences listed in
-[Datafun Grammar](datafun-ebnf.md#user-content-differences-from-datalit). The
+[Datafun Grammar](datafun-ebnf.md#differences-from-datalit). The
 user manual, `mandocs/datalit.md`, describes the syntax in prose; where it
-disagrees with the parser, see [The manual](#user-content-the-manual).
+disagrees with the parser, see [The manual](#the-manual).
 
 ## Contents
 
-- [Notation](#user-content-notation)
-- [Grammar](#user-content-grammar)
-- [Rules outside the grammar](#user-content-rules-outside-the-grammar)
-- [Recovery](#user-content-recovery)
-- [Checking the grammar](#user-content-checking-the-grammar)
-- [Diagnostics](#user-content-diagnostics)
-- [Divergences](#user-content-divergences)
-  - [The manual](#user-content-the-manual)
-  - [The specification](#user-content-the-specification)
+- [Notation](#notation)
+- [Grammar](#grammar)
+- [Rules outside the grammar](#rules-outside-the-grammar)
+- [Recovery](#recovery)
+- [Checking the grammar](#checking-the-grammar)
+- [Diagnostics](#diagnostics)
+- [Divergences](#divergences)
+  - [The manual](#the-manual)
+  - [The specification](#the-specification)
 
 ## Notation
 
@@ -171,7 +171,7 @@ The parser refuses some text the grammar derives, by the rules below, and
 then only with these codes: D023, D030, D038, D039, D040, D041, D042, D045,
 D057. Everything else it refuses, the grammar does not derive, and everything
 it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
-[Checking the grammar](#user-content-checking-the-grammar)).
+[Checking the grammar](#checking-the-grammar)).
 
 - **Brackets match.** Every bracket is closed by its partner: a close with no
   open is D054, and an open never closed is D055.
@@ -220,7 +220,7 @@ it accepts, the grammar does. `crates/datalove-doc-fixtures` checks this (see
   is the empty table.
 
 The examples above, and more, each with the codes the parser refuses it
-with, or `ok` (see [Checking the grammar](#user-content-checking-the-grammar)):
+with, or `ok` (see [Checking the grammar](#checking-the-grammar)):
 
 ```examples datalit
 D059       truefalse
@@ -290,7 +290,7 @@ or on a construct that ends there, or in the gap before what is there instead
 of a missing token, but for an unmatched bracket, which is reported where it
 opens. `recovery_contract` in `crates/datalove-doc-fixtures/tests/recovery_tests.rs`
 holds the parser to this, as it holds datafun's to
-[its rules](datafun-ebnf.md#user-content-recovery).
+[its rules](datafun-ebnf.md#recovery).
 
 ```examples datalit
 D020       [1,
@@ -306,7 +306,7 @@ D055       [1, (2
 grammar block above and runs it, as an Earley recognizer, beside the parser.
 Whatever the parser accepts the recognizer must too, and whatever the
 recognizer accepts the parser must accept or refuse only with a code from
-the list at the top of [Rules outside the grammar](#user-content-rules-outside-the-grammar).
+the list at the top of [Rules outside the grammar](#rules-outside-the-grammar).
 The test reads that list from this document.
 
 Its inputs are the `examples` blocks above, every `.dlt` file under
@@ -401,14 +401,14 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`,
 | D061 | A signed hex literal | `expr.rs:135` |
 
 D001 to D016 were the ownership codes, now O001 to O016
-([spec Section 11.1](botspec.md#user-content-111-errors)), and are retired.
+([spec Section 11.1](botspec.md#111-errors)), and are retired.
 D044 to D053 and D058 to D061 are faults that used to share a number with an
 ownership code or with another parse fault. Line numbers are as of November
 2026 and drift; the code is a `DCode` variant in
 `crates/datalove-diagnostic-codes`, and its name is what to search for.
 
 Type errors (T-codes) are listed in
-[Datalit Typing Rules](datalit-typing-rules.md#user-content-diagnostics).
+[Datalit Typing Rules](datalit-typing-rules.md#diagnostics).
 
 ## Divergences
 
@@ -419,8 +419,8 @@ structure and Tensor); they are written one after another, as above.
 
 ### The specification
 
-[Section 2](botspec.md#user-content-2-lexical-conventions) of the spec gives
-the shared lexical rules, and [Section 4](botspec.md#user-content-4-type-hints)
+[Section 2](botspec.md#2-lexical-conventions) of the spec gives
+the shared lexical rules, and [Section 4](botspec.md#4-type-hints)
 hints; they agree with this grammar. What the spec says of datafun's syntax
 that is not true of datalit is in
-[Datafun Grammar](datafun-ebnf.md#user-content-differences-from-datalit).
+[Datafun Grammar](datafun-ebnf.md#differences-from-datalit).

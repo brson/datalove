@@ -15,49 +15,49 @@ home here.
 
 ## Contents
 
-- [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A REPL unit that fails keeps what it did to earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
-  - [A unit that did not run still gives away what it would have taken](#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
-  - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
-  - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
-  - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
-  - [An edit to a module no unit requires reports nothing](#user-content-an-edit-to-a-module-no-unit-requires-reports-nothing)
+- [Engines and the REPL: failing the wrong way](#engines-and-the-repl-failing-the-wrong-way)
+  - [A REPL unit that fails keeps what it did to earlier units](#a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
+  - [A unit that did not run still gives away what it would have taken](#a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
+  - [Deep recursion aborts the process off Linux](#deep-recursion-aborts-the-process-off-linux)
+  - [Compile-time evaluation has no limits](#compile-time-evaluation-has-no-limits)
+  - [The JIT has no way back from a full arena](#the-jit-has-no-way-back-from-a-full-arena)
+  - [An edit to a module no unit requires reports nothing](#an-edit-to-a-module-no-unit-requires-reports-nothing)
 
-- [The language and its checks](#user-content-the-language-and-its-checks)
-  - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
-  - [A non-copy part of a temporary can only be borrowed](#user-content-a-non-copy-part-of-a-temporary-can-only-be-borrowed)
-  - [A `let` with no type that fails to typecheck leaves its name undefined](#user-content-a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
-  - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
-  - [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
-  - [One function per name, so no prelude of imports](#user-content-one-function-per-name-so-no-prelude-of-imports)
-  - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
-  - [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
-  - [A printed type loses its alias](#user-content-a-printed-type-loses-its-alias)
-  - [`(T)` is read as a tuple of one](#user-content-t-is-read-as-a-tuple-of-one)
-  - [T065 refuses a recursive key only where it is written](#user-content-t065-refuses-a-recursive-key-only-where-it-is-written)
-  - [A list with a recursive field checks in one order and not the other](#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)
+- [The language and its checks](#the-language-and-its-checks)
+  - [The loop check asks where a binding ended up, not whether its move repeats](#the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
+  - [A non-copy part of a temporary can only be borrowed](#a-non-copy-part-of-a-temporary-can-only-be-borrowed)
+  - [A `let` with no type that fails to typecheck leaves its name undefined](#a-let-with-no-type-that-fails-to-typecheck-leaves-its-name-undefined)
+  - [No table module, and none can be written](#no-table-module-and-none-can-be-written)
+  - [Nothing takes a value back out of data or error](#nothing-takes-a-value-back-out-of-data-or-error)
+  - [One function per name, so no prelude of imports](#one-function-per-name-so-no-prelude-of-imports)
+  - [Nothing names another module's type](#nothing-names-another-modules-type)
+  - [What writing the store demo ran into](#what-writing-the-store-demo-ran-into)
+  - [A printed type loses its alias](#a-printed-type-loses-its-alias)
+  - [`(T)` is read as a tuple of one](#t-is-read-as-a-tuple-of-one)
+  - [T065 refuses a recursive key only where it is written](#t065-refuses-a-recursive-key-only-where-it-is-written)
+  - [A list with a recursive field checks in one order and not the other](#a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)
 
-- [The typecheckers: cost and limits](#user-content-the-typecheckers-cost-and-limits)
-  - [Deeply nested literals overflow the stack](#user-content-deeply-nested-literals-overflow-the-stack)
-  - [Datafun records a copy of every expression's type](#user-content-datafun-records-a-copy-of-every-expressions-type)
+- [The typecheckers: cost and limits](#the-typecheckers-cost-and-limits)
+  - [Deeply nested literals overflow the stack](#deeply-nested-literals-overflow-the-stack)
+  - [Datafun records a copy of every expression's type](#datafun-records-a-copy-of-every-expressions-type)
 
-- [Backends and performance](#user-content-backends-and-performance)
-  - [Cranelift refuses a module function whose end nothing reaches](#user-content-cranelift-refuses-a-module-function-whose-end-nothing-reaches)
-  - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
-  - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
-  - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
-  - [The C backend calls a runtime function it never declares](#user-content-the-c-backend-calls-a-runtime-function-it-never-declares)
-  - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
-  - [The allocator keeps every block it has ever handed out](#user-content-the-allocator-keeps-every-block-it-has-ever-handed-out)
+- [Backends and performance](#backends-and-performance)
+  - [Cranelift refuses a module function whose end nothing reaches](#cranelift-refuses-a-module-function-whose-end-nothing-reaches)
+  - [A generic's descriptor-table cache holds one binding](#a-generics-descriptor-table-cache-holds-one-binding)
+  - [No inlining in Cranelift, and the C backend is built at -O0](#no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
+  - [The C backend emits code the size of the data](#the-c-backend-emits-code-the-size-of-the-data)
+  - [The C backend calls a runtime function it never declares](#the-c-backend-calls-a-runtime-function-it-never-declares)
+  - [A script's data const is copied into the unit that declares it](#a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
+  - [The allocator keeps every block it has ever handed out](#the-allocator-keeps-every-block-it-has-ever-handed-out)
 
-- [Compilation and incrementality](#user-content-compilation-and-incrementality)
-  - [Pruning stops at the module](#user-content-pruning-stops-at-the-module)
-  - [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
-  - [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
-  - [Every REPL unit is a new salsa input](#user-content-every-repl-unit-is-a-new-salsa-input)
+- [Compilation and incrementality](#compilation-and-incrementality)
+  - [Pruning stops at the module](#pruning-stops-at-the-module)
+  - [Nothing consumes a WorkspaceDelta](#nothing-consumes-a-workspacedelta)
+  - [No batch of scripts against one world](#no-batch-of-scripts-against-one-world)
+  - [Every REPL unit is a new salsa input](#every-repl-unit-is-a-new-salsa-input)
 
-- [Testing](#user-content-testing)
-  - [The cli tests run with leak checking on, which no user does](#user-content-the-cli-tests-run-with-leak-checking-on-which-no-user-does)
+- [Testing](#testing)
+  - [The cli tests run with leak checking on, which no user does](#the-cli-tests-run-with-leak-checking-on-which-no-user-does)
 
 ## Engines and the REPL: failing the wrong way
 
@@ -503,7 +503,7 @@ The fix is either a nesting limit with a diagnostic, which the datalit spec
 would then have to state, or an explicit work stack in place of recursion in
 each phase that walks the expression. The runtime already bounds recursion
 against the native stack (`dtlv_rti_native_stack_limit`, see
-[Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)),
+[Deep recursion aborts the process off Linux](#deep-recursion-aborts-the-process-off-linux)),
 but the front end has nothing like it. Inference, which
 [One Rule for Literals That Share a Type](plan-literal-typing.md) added to
 both checkers, recurses on the expression too, and would need the same
@@ -515,7 +515,7 @@ treatment.
 clones the full `Type` of every expression it records. In a nested literal
 each level's type contains the type of everything below it, so a literal
 nested `d` deep records `O(d²)` of type for `O(d)` of input, and in general
-`O(n × d)`. The [stack overflow](#user-content-deeply-nested-literals-overflow-the-stack)
+`O(n × d)`. The [stack overflow](#deeply-nested-literals-overflow-the-stack)
 stops the program at a depth where this is still too small to measure. Once
 that is fixed, it is the next superlinear cost. Inference
 ([One Rule for Literals That Share a Type](plan-literal-typing.md)) keeps an
@@ -570,7 +570,7 @@ the instantiation cache already is, would fix that too.
 **Reasoned from the code; the speedups are measured.** Gaps in what the
 compiled tiers do, each cheap to state and none started. (Another, that the
 JIT could not see a loop in a function called once, is fixed by OSR; see
-[Tuning the JIT](plan-jit-tuning.md#user-content-osr).)
+[Tuning the JIT](plan-jit-tuning.md#osr).)
 
 - **No inlining in Cranelift.** Nothing implements
   `cranelift_codegen::inline::Inline` or calls `Context::inline`, so neither the

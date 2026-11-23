@@ -8,13 +8,13 @@ for data modeling and transformation.
 
 <div class="toc toc-repeat-4">
 
-- [Glorify the plain old data types](#user-content-glorify-the-plain-old-data-types)
-- [Power through restricted language design](#user-content-power-through-restricted-language-design)
-- [Nothing happens that was not written](#user-content-nothing-happens-that-was-not-written)
-- [Numerical correctness](#user-content-numerical-correctness)
-- [Strict baseline first; controlled ergonomics later](#user-content-strict-baseline-first-controlled-ergonomics-later)
-- [Small enough to understand and remember](#user-content-small-enough-to-understand-and-remember)
-- [Fast compilation over fast execution](#user-content-fast-compilation-over-fast-execution)
+- [Glorify the plain old data types](#glorify-the-plain-old-data-types)
+- [Power through restricted language design](#power-through-restricted-language-design)
+- [Nothing happens that was not written](#nothing-happens-that-was-not-written)
+- [Numerical correctness](#numerical-correctness)
+- [Strict baseline first; controlled ergonomics later](#strict-baseline-first-controlled-ergonomics-later)
+- [Small enough to understand and remember](#small-enough-to-understand-and-remember)
+- [Fast compilation over fast execution](#fast-compilation-over-fast-execution)
 
 </div>
 

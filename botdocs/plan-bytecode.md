@@ -20,35 +20,35 @@ the IR walker on every fixture from the first day.
 
 > **This is a plan, and a prototype of it.** The prototype is in
 > `crates/datalove-datafun-interp/src/bytecode/`, on by default since October
-> 2026 (`DATALOVE_INTERP=ir` turns it off); [What the prototype found](#user-content-what-the-prototype-found)
+> 2026 (`DATALOVE_INTERP=ir` turns it off); [What the prototype found](#what-the-prototype-found)
 > says how it went. Calls items 1 to 4 are done since; item 5, inlining leaf
 > bodies at lowering, was not done as written, and nothing else here is open.
 > The rest records the reasoning and the facts it rests on as of October 2026.
 
 ## Contents
 
-- [Why build it](#user-content-why-build-it)
-- [Where the time goes today](#user-content-where-the-time-goes-today)
-- [What already exists to build on](#user-content-what-already-exists-to-build-on)
-- [The design](#user-content-the-design)
-  - [Scope](#user-content-scope)
-  - [The lowering](#user-content-the-lowering)
-  - [Operands and addressing](#user-content-operands-and-addressing)
-  - [Descriptors](#user-content-descriptors)
-  - [The instruction set](#user-content-the-instruction-set)
-  - [Control flow](#user-content-control-flow)
-  - [Liveness and tracking bytes](#user-content-liveness-and-tracking-bytes)
-  - [Calls](#user-content-calls)
-  - [The dispatch loop](#user-content-the-dispatch-loop)
-  - [Integration and fallback](#user-content-integration-and-fallback)
-  - [Caching and invalidation](#user-content-caching-and-invalidation)
-- [Testing](#user-content-testing)
-- [Measuring](#user-content-measuring)
-- [Order of work](#user-content-order-of-work)
-- [What the prototype found](#user-content-what-the-prototype-found)
-- [Risks and open questions](#user-content-risks-and-open-questions)
-- [Things the survey turned up](#user-content-things-the-survey-turned-up)
-- [Prior art](#user-content-prior-art)
+- [Why build it](#why-build-it)
+- [Where the time goes today](#where-the-time-goes-today)
+- [What already exists to build on](#what-already-exists-to-build-on)
+- [The design](#the-design)
+  - [Scope](#scope)
+  - [The lowering](#the-lowering)
+  - [Operands and addressing](#operands-and-addressing)
+  - [Descriptors](#descriptors)
+  - [The instruction set](#the-instruction-set)
+  - [Control flow](#control-flow)
+  - [Liveness and tracking bytes](#liveness-and-tracking-bytes)
+  - [Calls](#calls)
+  - [The dispatch loop](#the-dispatch-loop)
+  - [Integration and fallback](#integration-and-fallback)
+  - [Caching and invalidation](#caching-and-invalidation)
+- [Testing](#testing)
+- [Measuring](#measuring)
+- [Order of work](#order-of-work)
+- [What the prototype found](#what-the-prototype-found)
+- [Risks and open questions](#risks-and-open-questions)
+- [Things the survey turned up](#things-the-survey-turned-up)
+- [Prior art](#prior-art)
 
 ## Why build it
 
@@ -151,7 +151,7 @@ data structure designed for analysis rather than execution.
   REPL error recovery. Function bodies never contain external operands; Cranelift
   refuses them for the same reason and compiles functions regardless.
 - CTFE runs script units too, so it stays on the IR walker. Functions it calls
-  could use bytecode, but see [caching](#user-content-caching-and-invalidation)
+  could use bytecode, but see [caching](#caching-and-invalidation)
   for why CTFE should bypass the cache at first.
 
 ### The lowering
@@ -174,7 +174,7 @@ It runs once per body, lazily, when the body is first called -- the same moment
 lowering is a single pass over the blocks with the IR's types (`value_types`,
 `slot_types`, the function context) and the layout in hand. It may decline: any
 instruction it does not support yet makes it return `None`, and the body runs on
-the IR walker (see [fallback](#user-content-integration-and-fallback)).
+the IR walker (see [fallback](#integration-and-fallback)).
 
 ### Operands and addressing
 
@@ -264,7 +264,7 @@ one offset at lowering. In a generic, where the base's descriptor is dynamic, th
 runtime-call forms stay (`field_read`, `field_offset`).
 
 **Slots, parameters, references.** Stores and loads with the tracking decision
-baked in (see [liveness](#user-content-liveness-and-tracking-bytes)):
+baked in (see [liveness](#liveness-and-tracking-bytes)):
 `StoreSlot { off, src, size }`, `StoreSlotTracked { off, src, size, track }`
 (store, set LIVE: stores are pure, and the `drop.tracked` in front destroys
 what the slot held), `LoadSlotMoveTracked`,
@@ -280,7 +280,7 @@ resolved operands, element descriptors and strides, still calling the runtime
 for anything that allocates or clones. Indexing a list of scalars can read the
 element inline, as Cranelift does (`load(list + 0) + i * size`).
 
-**Calls, debug.** See [calls](#user-content-calls). `DebugLog { src, desc }`.
+**Calls, debug.** See [calls](#calls). `DebugLog { src, desc }`.
 
 ### Control flow
 
@@ -710,7 +710,7 @@ call. (3)-(5) are cheaper and independent.
   could shrink to a reference implementation used only in tests, or be removed.
 - **Matching the IR walker's quirks.** The survey found places where the IR
   walker's ownership bookkeeping is uneven (see
-  [below](#user-content-things-the-survey-turned-up)). The bytecode should match
+  [below](#things-the-survey-turned-up)). The bytecode should match
   the IR walker exactly at first, so the differential tests mean something, and
   the quirks should be fixed in both, separately, with fixtures.
 - **Descriptors in generics.** The dynamic-descriptor cases (borrowed parameters,
@@ -723,7 +723,7 @@ call. (3)-(5) are cheaper and independent.
   frame's size is known per body, so the lowering can check every offset it
   emits against it once, leaving the loop free of bounds checks without losing
   safety. Miri must agree.
-- **CTFE and caching.** See [caching](#user-content-caching-and-invalidation): the
+- **CTFE and caching.** See [caching](#caching-and-invalidation): the
   existing layout cache is already exposed to identity reuse, and the bytecode
   cache must not be.
 

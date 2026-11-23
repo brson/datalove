@@ -24,18 +24,18 @@ and syntax of Datalove in general.
 
 <div class="toc toc-repeat-6">
 
-- [An example](#user-content-an-example)
-- [Lexical structure](#user-content-lexical-structure)
-- [Expressions](#user-content-expressions)
-- [Primitive types](#user-content-primitive-types)
-- [Collections](#user-content-collections)
-- [Aggregates](#user-content-aggregates)
-- [Dynamic types](#user-content-dynamic-types)
-- [Type equivalence](#user-content-type-equivalence)
-- [Type synthesis and checking](#user-content-type-synthesis-and-checking)
-- [Comparison and total ordering](#user-content-comparison-and-total-ordering)
-- [Canonical forms](#user-content-canonical-forms)
-- [Bugs and open questions](#user-content-bugs-and-open-questions)
+- [An example](#an-example)
+- [Lexical structure](#lexical-structure)
+- [Expressions](#expressions)
+- [Primitive types](#primitive-types)
+- [Collections](#collections)
+- [Aggregates](#aggregates)
+- [Dynamic types](#dynamic-types)
+- [Type equivalence](#type-equivalence)
+- [Type synthesis and checking](#type-synthesis-and-checking)
+- [Comparison and total ordering](#comparison-and-total-ordering)
+- [Canonical forms](#canonical-forms)
+- [Bugs and open questions](#bugs-and-open-questions)
 
 </div>
 
@@ -231,7 +231,7 @@ may end with a comma:
 The comma closes the last item and means nothing more,
 so one is allowed and two are not.
 Tensors are the exception, as their commas carry shape;
-see [Tensor](#user-content-tensor).
+see [Tensor](#tensor).
 
 
 
@@ -382,7 +382,7 @@ An ordered sequence of homogeneous elements.
 
 All elements have the same type.
 Without an expected type,
-the elements are [typed together](#user-content-typing-together):
+the elements are [typed together](#typing-together):
 literals go along with any element that has a definite type,
 and take their defaults if none does.
 `[: u8 / 1, 2]` is a `[u8]`,
@@ -408,7 +408,7 @@ All keys must have the same type,
 and all values must have the same type.
 Any type may be a key.
 
-A map's entries are kept in the [total ordering](#user-content-comparison-and-total-ordering)
+A map's entries are kept in the [total ordering](#comparison-and-total-ordering)
 of their keys,
 not in the order they were written:
 `%{ 2 -> 0, 1 -> 0 }` and `%{ 1 -> 0, 2 -> 0 }` are the same map.
@@ -1047,7 +1047,7 @@ but the payloads of its `data` and `error` values.
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
-- Where a printer should put the hints [required above](#user-content-required-type-hints):
+- Where a printer should put the hints [required above](#required-type-hints):
   once at the root, or on each part that needs one.
 - What are the rules for printing disambiguating floats, etc?
 - Should dupe map/set keys be an error?

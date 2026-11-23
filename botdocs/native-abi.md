@@ -5,15 +5,15 @@ current with the four backends as of November 2026.
 
 ## Contents
 
-- [The shape of a call](#user-content-the-shape-of-a-call)
-- [Where the type comes from](#user-content-where-the-type-comes-from)
-- [Return-position type parameters](#user-content-return-position-type-parameters)
-- [Writing the result](#user-content-writing-the-result)
-- [Ownership](#user-content-ownership)
-- [Declaring a native](#user-content-declaring-a-native)
-- [Intrinsic natives](#user-content-intrinsic-natives)
-- [Borrowing a `data`](#user-content-borrowing-a-data)
-- [Arity](#user-content-arity)
+- [The shape of a call](#the-shape-of-a-call)
+- [Where the type comes from](#where-the-type-comes-from)
+- [Return-position type parameters](#return-position-type-parameters)
+- [Writing the result](#writing-the-result)
+- [Ownership](#ownership)
+- [Declaring a native](#declaring-a-native)
+- [Intrinsic natives](#intrinsic-natives)
+- [Borrowing a `data`](#borrowing-a-data)
+- [Arity](#arity)
 
 A rider is a package of native functions. Its signatures are declared in a
 `.dli` interface file, its implementations are `extern "C-unwind"` functions in
@@ -132,7 +132,7 @@ let a: u8 = zero()
 works: `zero` hands `fixedint_zero` its entry for `T`, which the script filled
 with `u8`'s descriptor. A call with nothing to say what `T` is, such as
 `debuglog zero()`, is refused by the type checker (F101); the rules for what
-decides it are the spec's ([Section 8.7](botspec.md#user-content-87-generic-functions)).
+decides it are the spec's ([Section 8.7](botspec.md#87-generic-functions)).
 
 ## Writing the result
 

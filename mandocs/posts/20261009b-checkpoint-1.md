@@ -4,7 +4,7 @@ category: milestone
 summary: "We've reached the first stop in the roadmap"
 ---
 
-I've decided to close out [Checkpoint 1](../roadmap.md#user-content-checkpoint-1---compiler-architecture).
+I've decided to close out [Checkpoint 1](../roadmap.md#checkpoint-1---compiler-architecture).
 The last remaining item for some time was to write sufficient human docs.
 The task is never over, and eventually one just has to call it done.
 So it's done for now.

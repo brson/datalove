@@ -9,16 +9,16 @@ own; the runtime's I/O is not.
 
 ## Contents
 
-- [Why](#user-content-why)
-- [What already holds](#user-content-what-already-holds)
-- [Where the I/O is](#user-content-where-the-io-is)
-- [The interface](#user-content-the-interface)
-- [Where the handle goes](#user-content-where-the-handle-goes)
-- [The native toolchain stays outside](#user-content-the-native-toolchain-stays-outside)
-- [The embedded system library](#user-content-the-embedded-system-library)
-- [Megaspace-iostack](#user-content-megaspace-iostack)
-- [Phases](#user-content-phases)
-- [Open questions](#user-content-open-questions)
+- [Why](#why)
+- [What already holds](#what-already-holds)
+- [Where the I/O is](#where-the-io-is)
+- [The interface](#the-interface)
+- [Where the handle goes](#where-the-handle-goes)
+- [The native toolchain stays outside](#the-native-toolchain-stays-outside)
+- [The embedded system library](#the-embedded-system-library)
+- [Megaspace-iostack](#megaspace-iostack)
+- [Phases](#phases)
+- [Open questions](#open-questions)
 
 ## Why
 
@@ -81,7 +81,7 @@ virtual filesystem has to say what a relative path means, so the working
 directory belongs to the layer rather than to its callers.
 
 **The native toolchain.** Rider builds, linking and loading. See
-[The native toolchain stays outside](#user-content-the-native-toolchain-stays-outside).
+[The native toolchain stays outside](#the-native-toolchain-stays-outside).
 
 **Debug output.** Later, not now.
 
@@ -96,7 +96,7 @@ directory belongs to the layer rather than to its callers.
 ## The interface
 
 Synchronous, behind `Arc`, with the names and signatures of
-[megaspace-fs](#user-content-megaspace-iostack) wherever the two overlap:
+[megaspace-fs](#megaspace-iostack) wherever the two overlap:
 
 ```rust
 pub type DynFs = Arc<dyn Fs>;
@@ -158,7 +158,7 @@ The CLI and the REPL each make one `HostFs` at startup and hand it down. As
 
 Nothing below the driver changes, since nothing below it does I/O. The
 system library brings a filesystem of its own; see
-[The embedded system library](#user-content-the-embedded-system-library).
+[The embedded system library](#the-embedded-system-library).
 
 For the runtime, later, a handle sits in `RtLocal` beside
 `debug_output_mode`, and a compiled binary installs a `HostFs` when its

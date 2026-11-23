@@ -11,26 +11,26 @@ is why, and what could be done about it.
 
 The intent behind tables is a dataframe -- relational operations, and pipelines
 that take a table of one schema to a table of another. [If the target is
-Polars](#user-content-if-the-target-is-polars) weighs the hypotheses against
-that, and [H6](#user-content-h6-row-polymorphism-for-presence-comptime-for-construction)
+Polars](#if-the-target-is-polars) weighs the hypotheses against
+that, and [H6](#h6-row-polymorphism-for-presence-comptime-for-construction)
 is the direction currently favoured: row types where a signature names the
 columns it needs, and compile-time evaluation where the schema is computed.
 
 ## Contents
 
-- [What a table can do today](#user-content-what-a-table-can-do-today)
-- [The problem, stated precisely](#user-content-the-problem-stated-precisely)
-- [What the implementation already believes](#user-content-what-the-implementation-already-believes)
-- [What people want from struct-of-arrays elsewhere](#user-content-what-people-want-from-struct-of-arrays-elsewhere)
-- [H1: a `table` bound](#user-content-h1-a-table-bound)
-- [H2: a table is `table R` for a row type `R`](#user-content-h2-a-table-is-table-r-for-a-row-type-r)
-- [H3: row polymorphism](#user-content-h3-row-polymorphism)
-- [H4: column projection alone, and no table module](#user-content-h4-column-projection-alone-and-no-table-module)
-- [H5: types as compile-time values](#user-content-h5-types-as-compile-time-values)
-- [H6: row polymorphism for presence, comptime for construction](#user-content-h6-row-polymorphism-for-presence-comptime-for-construction)
-- [If the target is Polars](#user-content-if-the-target-is-polars)
-- [Sequencing](#user-content-sequencing)
-- [What would settle it](#user-content-what-would-settle-it)
+- [What a table can do today](#what-a-table-can-do-today)
+- [The problem, stated precisely](#the-problem-stated-precisely)
+- [What the implementation already believes](#what-the-implementation-already-believes)
+- [What people want from struct-of-arrays elsewhere](#what-people-want-from-struct-of-arrays-elsewhere)
+- [H1: a `table` bound](#h1-a-table-bound)
+- [H2: a table is `table R` for a row type `R`](#h2-a-table-is-table-r-for-a-row-type-r)
+- [H3: row polymorphism](#h3-row-polymorphism)
+- [H4: column projection alone, and no table module](#h4-column-projection-alone-and-no-table-module)
+- [H5: types as compile-time values](#h5-types-as-compile-time-values)
+- [H6: row polymorphism for presence, comptime for construction](#h6-row-polymorphism-for-presence-comptime-for-construction)
+- [If the target is Polars](#if-the-target-is-polars)
+- [Sequencing](#sequencing)
+- [What would settle it](#what-would-settle-it)
 
 ## What a table can do today
 
@@ -306,7 +306,7 @@ still reads `t.x`; the label elaborates to a type-level thing and it stays in
 reasoning about it -- Zig's `fn Foo(comptime T: type) type`, C++ templates, Rust
 const generics. Datalove has both ingredients already: CTFE that evaluates const
 expressions including calls, and const parameters. This is the direction
-[H5](#user-content-h5-types-as-compile-time-values) works through, and it turns
+[H5](#h5-types-as-compile-time-values) works through, and it turns
 out not to cost compile-once the way it does in Zig -- the type is computed at
 the call site while the body is compiled once. It does move the checking of a
 *type application* to the call site, and it does need the two roles of a const
@@ -560,7 +560,7 @@ This is the useful decomposition, because the tiers need very different things.
 | **Shrinking** | select, drop | row subtraction, or written by hand per schema pair |
 | **Growing** | with_column, derive, rename | row extension, or by hand |
 | **Combining** | join, union | row concatenation with disjointness |
-| **Computing** | group_by/agg, pivot | type-level *functions* over labels -- the output type depends on which aggregate was applied. See [how far up this goes](#user-content-how-far-up-the-type-system-this-goes) |
+| **Computing** | group_by/agg, pivot | type-level *functions* over labels -- the output type depends on which aggregate was applied. See [how far up this goes](#how-far-up-the-type-system-this-goes) |
 
 The top row is the surprise. Every schema-preserving operation is generic in the
 row and needs no type-level computation at all, and that is a large fraction of

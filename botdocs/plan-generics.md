@@ -1,8 +1,8 @@
 # Generics and Specialization
 
-> **Superseded.** Erasure -- Layer 1 of [The design](#user-content-the-design),
+> **Superseded.** Erasure -- Layer 1 of [The design](#the-design),
 > and everything from [What a first attempt
-> found](#user-content-what-a-first-attempt-found) on -- was replaced by
+> found](#what-a-first-attempt-found) on -- was replaced by
 > [Generics by Reference](plan-fat-generics.md). Layer 2 was replaced by
 > [Specializing Generics](plan-monomorphization.md), whose run-time experiment
 > found counters the wrong shape for choosing what to specialize. What still
@@ -27,21 +27,21 @@ monomorphization.
 
 ## Contents
 
-- [Why not the const parameter machinery](#user-content-why-not-the-const-parameter-machinery)
-- [What already exists](#user-content-what-already-exists)
-- [The design](#user-content-the-design)
-- [Cost](#user-content-cost)
-- [Surface syntax](#user-content-surface-syntax)
-- [Const parameters after this](#user-content-const-parameters-after-this)
-- [What a first attempt found](#user-content-what-a-first-attempt-found)
-- [What the erased shape is for](#user-content-what-the-erased-shape-is-for)
-- [Carrying the descriptor with the value](#user-content-carrying-the-descriptor-with-the-value)
-  -- including [a borrow taken out of a borrowed container](#user-content-what-this-does-not-leave-a-borrow-taken-out-of-a-borrowed-container),
+- [Why not the const parameter machinery](#why-not-the-const-parameter-machinery)
+- [What already exists](#what-already-exists)
+- [The design](#the-design)
+- [Cost](#cost)
+- [Surface syntax](#surface-syntax)
+- [Const parameters after this](#const-parameters-after-this)
+- [What a first attempt found](#what-a-first-attempt-found)
+- [What the erased shape is for](#what-the-erased-shape-is-for)
+- [Carrying the descriptor with the value](#carrying-the-descriptor-with-the-value)
+  -- including [a borrow taken out of a borrowed container](#what-this-does-not-leave-a-borrow-taken-out-of-a-borrowed-container),
   parked
-- [Where this stands](#user-content-where-this-stands) -- what works, and the
+- [Where this stands](#where-this-stands) -- what works, and the
   current limitations
-- [Order of work](#user-content-order-of-work)
-- [Prior art](#user-content-prior-art)
+- [Order of work](#order-of-work)
+- [Prior art](#prior-art)
 
 ## Why not the const parameter machinery
 
@@ -201,7 +201,7 @@ Independent of generics, and worth doing regardless:
 
 - ~~Replace union-branch with monomorphization.~~ Done: each instantiation is now an
   additive copy, `name__ct0` and so on, and the differential suite was kept. See
-  [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization).
+  [Const Parameter Specialization](compiler-guide.md#const-parameter-specialization).
 - Reconsider the const-binding-only restriction. `pow(2, 10)` failing because `10` is a
   literal is a bad first impression, and once specialization no longer depends on
   pre-resolved `ResolvedConsts` lookups the restriction is easier to lift.
@@ -211,7 +211,7 @@ Independent of generics, and worth doing regardless:
   along different axes -- specialization deletes the first, erasure replaces the
   second -- so one copy per const instantiation serves every type instantiation.
   What used to stop it was a phase ordering rather than a conflict, and is written
-  up in [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization).
+  up in [Const Parameter Specialization](compiler-guide.md#const-parameter-specialization).
   A const parameter whose own *type* is a type parameter is still refused.
 
 ## What a first attempt found
@@ -297,7 +297,7 @@ speaks. So the split is scalars, options and results by erasure, which is the
 stdlib blocker, and containers by descriptor.
 
 Written before it was clear that a container never needs converting at all. See
-[What the erased shape is for](#user-content-what-the-erased-shape-is-for).
+[What the erased shape is for](#what-the-erased-shape-is-for).
 
 The order below is unchanged by this, but step 2 gets much smaller: `T := data`
 rather than a new IR type.
@@ -591,7 +591,7 @@ this area has had.
 >
 > **Fixed for fields.** A reference now carries the descriptor of what it points
 > at, and offsets come from that; see
-> (What each backend carries)(generics.md#user-content-what-each-backend-carries) and
+> (What each backend carries)(generics.md#what-each-backend-carries) and
 > `backend/15_borrowed_generic_aggregate.dfs`. Element references still do not,
 > which is the entry left in [Known issues](issues.md).
 >
@@ -606,7 +606,7 @@ this area has had.
 > their stride from `operand_type(list)`, so a borrowed index inside a generic
 > landed between elements and segfaulted. They take it from the container's
 > descriptor now, and the element's descriptor travels with the reference; see
-> (What each backend carries)(generics.md#user-content-what-each-backend-carries).
+> (What each backend carries)(generics.md#what-each-backend-carries).
 >
 > The reading half was also less done than it said. A map lookup inside a
 > generic described the map by its static type, a `%{data -> data}`, and returned
@@ -836,7 +836,7 @@ first set of bounds are all done. What is left:
 - **Bounds beyond the closed set**, if a want appears that `ord`, `fixedint`
   and `float` do not cover. Each new one costs runtime entries per operation.
 - **A generic that builds a collection and recurses at a larger type**, which
-  is refused; see [Limitations](#user-content-limitations). Narrow, and may
+  is refused; see [Limitations](#limitations). Narrow, and may
   never matter.
 
 ## Prior art

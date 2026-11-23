@@ -449,7 +449,7 @@ saw none of it.
 hasher salsa uses internally, seeded as above.
 
 The hot maps moved from SipHash first, one profile at a time; see
-[compile time](compile-time.md#user-content-what-was-fixed). The other 60-odd
+[compile time](compile-time.md#what-was-fixed). The other 60-odd
 files followed in November 2026. They took a compile of every `sys/std` module
 from 136.7M instructions to 135.0M. A compiled program's speed did not change,
 except under leak checking: the runtime records every live allocation in a
@@ -505,7 +505,7 @@ each of a script unit's analysis passes records itself, with the unit's
 `Source`, into a thread-local the engine collects around each step. It is
 hand-placed and thread-local like `log_query`, which is what lets it run in
 production without a salsa event callback; see
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-what-a-step-reports).
+[script-reactivity-architecture.md](script-reactivity-architecture.md#what-a-step-reports).
 Its hand-placing is checked rather than trusted: the reactive tests compare
 it with `QueryRecorder` on every step.
 
@@ -549,7 +549,7 @@ typecheck_module_graph(db.as_salsa_db(), parsed_graph, names)
 
 The warm-up and the aggregator have to ask with the same function, or the warm
 is wasted; see the compiler guide's
-[Parallel Execution](compiler-guide.md#user-content-parallel-execution).
+[Parallel Execution](compiler-guide.md#parallel-execution).
 On by default; `DATALOVE_PARALLEL=0` turns it off.
 
 ## Pitfalls in short

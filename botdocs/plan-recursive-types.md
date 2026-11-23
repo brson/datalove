@@ -5,33 +5,33 @@ iso-recursive semantics, and recursion that must pass through a collection
 rather than a box. Written October 2026 in response to
 `mandocs/drafts/recursive-structural-types.md`. Checked on paper against the
 AWFY benchmarks that need recursive data. The decisions for a first cut are
-in [Decisions](#user-content-decisions). Phases 1 to 4 are implemented
+in [Decisions](#decisions). Phases 1 to 4 are implemented
 (October 2026): recursive types in datalit, and in Datafun on every engine;
-see [Phase 1 as built](#user-content-phase-1-as-built) and
-[Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built). Deep values,
+see [Phase 1 as built](#phase-1-as-built) and
+[Phases 2 to 4 as built](#phases-2-to-4-as-built). Deep values,
 phase 5, are not done.
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [The design in brief](#user-content-the-design-in-brief)
-- [Decisions](#user-content-decisions)
-- [Syntax](#user-content-syntax)
-- [The guard rule](#user-content-the-guard-rule)
-- [What no box costs](#user-content-what-no-box-costs)
-- [Iso-recursive, with roll and unroll inserted](#user-content-iso-recursive-with-roll-and-unroll-inserted)
-- [The type checker](#user-content-the-type-checker)
-- [Borrowing match](#user-content-borrowing-match)
-- [Runtime and backends](#user-content-runtime-and-backends)
-- [The IR and the backends](#user-content-the-ir-and-the-backends)
-- [Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)
-- [Prior art](#user-content-prior-art)
-- [Phase 1 as built](#user-content-phase-1-as-built)
-- [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built)
-- [Meeting at the head](#user-content-meeting-at-the-head)
-- [What exists, what is missing](#user-content-what-exists-what-is-missing)
-- [Phases](#user-content-phases)
-- [Open questions](#user-content-open-questions)
+- [The problem](#the-problem)
+- [The design in brief](#the-design-in-brief)
+- [Decisions](#decisions)
+- [Syntax](#syntax)
+- [The guard rule](#the-guard-rule)
+- [What no box costs](#what-no-box-costs)
+- [Iso-recursive, with roll and unroll inserted](#iso-recursive-with-roll-and-unroll-inserted)
+- [The type checker](#the-type-checker)
+- [Borrowing match](#borrowing-match)
+- [Runtime and backends](#runtime-and-backends)
+- [The IR and the backends](#the-ir-and-the-backends)
+- [Against the AWFY benchmarks](#against-the-awfy-benchmarks)
+- [Prior art](#prior-art)
+- [Phase 1 as built](#phase-1-as-built)
+- [Phases 2 to 4 as built](#phases-2-to-4-as-built)
+- [Meeting at the head](#meeting-at-the-head)
+- [What exists, what is missing](#what-exists-what-is-missing)
+- [Phases](#phases)
+- [Open questions](#open-questions)
 
 ## The problem
 
@@ -153,7 +153,7 @@ binary search trees do pay.
 
 In the AWFY benchmarks the arity went unenforced in List, Towers and
 Richards, but expressing the structure was never a problem
-([Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)).
+([Against the AWFY benchmarks](#against-the-awfy-benchmarks)).
 
 If the cost matters, the smallest fix is to make the guard a slot of its own.
 That fix is a box under another name, and should be decided as one. This plan
@@ -185,7 +185,7 @@ inserting them silently does not hide any work.
 - **Anything else meets at the head.** As first built, a value whose type is
   the unfolding was refused where the `rec` type was expected, and `@` rolled
   it, with a copy. That was replaced; see
-  [Meeting at the head](#user-content-meeting-at-the-head).
+  [Meeting at the head](#meeting-at-the-head).
 
 ## The type checker
 
@@ -244,7 +244,7 @@ and an audit of the elimination sites.
 
 ## Borrowing match
 
-Deferred ([Decisions](#user-content-decisions)). `match` consumes its input (botspec Section 8.8). A recursive struct can be
+Deferred ([Decisions](#decisions)). `match` consumes its input (botspec Section 8.8). A recursive struct can be
 read without moving it, because a field projection is a borrow:
 `f(ref n.kids[0]?)`. A recursive enum cannot. Reading a `Json` or an AST
 means moving the value or cloning every level, so recursive enums can be
@@ -298,7 +298,7 @@ These come from reading the code; none of them has been tried yet.
 
 The type checker is the smaller part of the work. Behind it, as found before
 phase 2; what was done about each is in
-[Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built):
+[Phases 2 to 4 as built](#phases-2-to-4-as-built):
 
 - **`IrType` is a second type tree.** `crates/datalove-datafun-ir/src/lib.rs`
   mirrors the checker's `Type` with boxed children. Lowering a `rec` type into
@@ -525,7 +525,7 @@ F090, the refusal phase 1 put in, is gone.
   read it there (`spec_037_var_without_value_of_an_alias`).
 
 What is left is in
-[What exists, what is missing](#user-content-what-exists-what-is-missing).
+[What exists, what is missing](#what-exists-what-is-missing).
 
 ## Meeting at the head
 
@@ -577,7 +577,7 @@ What exists:
 
 What is missing, as of October 2026. Each is a gap or a known fault, not a
 question; the questions are under
-[Open questions](#user-content-open-questions).
+[Open questions](#open-questions).
 
 **Faults and limits in what is built**
 
@@ -637,13 +637,13 @@ question; the questions are under
   covers `IrTyDescTable` and datalit's `TyDescTable`. It cannot run generated
   code, so the Cranelift and C AOT descriptors are tested natively only.
 - The examples in botspec Section 3.8 and the code in this plan's
-  [Against the AWFY benchmarks](#user-content-against-the-awfy-benchmarks)
+  [Against the AWFY benchmarks](#against-the-awfy-benchmarks)
   were written by hand and are not run; the fixtures are.
 
 **The benchmarks**
 
 - Storage, Json and Towers are in `benchvs`; the timings and profiles are in
-  [the AWFY survey](research/research-awfy-benchmarks.md#user-content-storage-towers-and-json).
+  [the AWFY survey](research/research-awfy-benchmarks.md#storage-towers-and-json).
   Compiled, Datalove is 9.9x Java on Storage, 13.7x on Towers and faster than
   Java on Json. None of it is the cost of recursive types themselves: it is
   dropping trees value by value, generic `list.push`, small copies through
@@ -656,11 +656,11 @@ question; the questions are under
 
 ## Phases
 
-1. **Datalit.** Done; see [Phase 1 as built](#user-content-phase-1-as-built).
+1. **Datalit.** Done; see [Phase 1 as built](#phase-1-as-built).
 2. **The Datafun checker.** Done.
 3. **The IR.** Done.
 4. **Backends.** Done, and Storage, Json and Towers are ported to `benchvs`;
-   see [Phases 2 to 4 as built](#user-content-phases-2-to-4-as-built).
+   see [Phases 2 to 4 as built](#phases-2-to-4-as-built).
 5. **Deep values.** Measure the depth at which drop and clone overflow, then
    decide between explicit work stacks and a documented limit.
 

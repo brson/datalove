@@ -29,7 +29,7 @@ to rerun that always produces the same result as a fresh run of all cells.
 
 **Part 1. Background**
 
-- [What is a reactive notebook?](#user-content-what-is-a-reactive-notebook)
+- [What is a reactive notebook?](#what-is-a-reactive-notebook)
 
 **Part 2. Experiments**
 
@@ -37,12 +37,12 @@ todo
 
 **Part 3. Results and Discussion**
 
-- [Rerun rules for mutated and moved bindings](#user-content-rerun-rules-for-mutated-and-moved-bindings)
-- [Functions and modules are bindings too](#user-content-functions-and-modules-are-bindings-too)
-- [Validating this design with a literate test suite](#user-content-validating-this-design-with-a-literate-test-suite)
-- [Comparing to the literature](#user-content-comparing-to-the-literature)
-- [A live example of the Datalove scripting engine](#user-content-a-live-example-of-the-datalove-scripting-engine)
-- [Conclusions](#user-content-conclusions)
+- [Rerun rules for mutated and moved bindings](#rerun-rules-for-mutated-and-moved-bindings)
+- [Functions and modules are bindings too](#functions-and-modules-are-bindings-too)
+- [Validating this design with a literate test suite](#validating-this-design-with-a-literate-test-suite)
+- [Comparing to the literature](#comparing-to-the-literature)
+- [A live example of the Datalove scripting engine](#a-live-example-of-the-datalove-scripting-engine)
+- [Conclusions](#conclusions)
 
 
 
@@ -194,7 +194,7 @@ impose I/O on a script.
 > The `!` sigil indicates sites of potential early-return errors,
 > here a missing key in the `budget` map, `budget[c]!`.
 > "Greater than" is spelled `.>` because Datalove
-> [treats `<` and `>` as matched brackets in the lexer](../datafun.md#user-content-comparison-and-equality).
+> [treats `<` and `>` as matched brackets in the lexer](../datafun.md#comparison-and-equality).
 > The remaining Datalove syntax in this example is similar to other common languages.
 
 Run in order, the script units produce `output`:

@@ -12,11 +12,11 @@ The surface language is spartan,
 as is the standard library,
 and the language can perform no direct I/O.
 
-- [Checkpoint 2 - Interactive scripts](#user-content-checkpoint-2---interactive-scripts)
-- [In progress](#user-content-in-progress)
-- [On deck](#user-content-on-deck)
-- [Retired checkpoints](#user-content-retired-checkpoints)
-  - [Checkpoint 1 - Compiler architecture](#user-content-checkpoint-1---compiler-architecture)
+- [Checkpoint 2 - Interactive scripts](#checkpoint-2---interactive-scripts)
+- [In progress](#in-progress)
+- [On deck](#on-deck)
+- [Retired checkpoints](#retired-checkpoints)
+  - [Checkpoint 1 - Compiler architecture](#checkpoint-1---compiler-architecture)
 
 
 

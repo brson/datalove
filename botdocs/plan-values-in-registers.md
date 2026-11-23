@@ -2,19 +2,19 @@
 
 Written October 2026, after profiling the AWFY benchmarks under the JIT.
 Measurements are from `benchvs` at commit `80b5d68cd`. All three layers are
-implemented; see [Where it stands](#user-content-where-it-stands).
+implemented; see [Where it stands](#where-it-stands).
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [What the frame layout requires](#user-content-what-the-frame-layout-requires)
-- [Layer 1: small aggregates as words](#user-content-layer-1-small-aggregates-as-words)
-- [Layer 2: a register convention between compiled functions](#user-content-layer-2-a-register-convention-between-compiled-functions)
-- [Layer 3: slots](#user-content-layer-3-slots)
-- [What exists, what is missing](#user-content-what-exists-what-is-missing)
-- [Phases](#user-content-phases)
-- [Open questions](#user-content-open-questions)
-- [Where it stands](#user-content-where-it-stands)
+- [The problem](#the-problem)
+- [What the frame layout requires](#what-the-frame-layout-requires)
+- [Layer 1: small aggregates as words](#layer-1-small-aggregates-as-words)
+- [Layer 2: a register convention between compiled functions](#layer-2-a-register-convention-between-compiled-functions)
+- [Layer 3: slots](#layer-3-slots)
+- [What exists, what is missing](#what-exists-what-is-missing)
+- [Phases](#phases)
+- [Open questions](#open-questions)
+- [Where it stands](#where-it-stands)
 
 ## The problem
 
@@ -196,7 +196,7 @@ Missing, when this was written: the words representation and the analysis
 choosing it, words through block parameters and `Return`, and the internal
 entry, its adapter and stubs with the register convention. All of it exists
 now except words at an OSR entry; see
-[Where it stands](#user-content-where-it-stands).
+[Where it stands](#where-it-stands).
 
 ## Phases
 

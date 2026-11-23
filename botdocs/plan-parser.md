@@ -3,20 +3,20 @@
 A plan for rewriting how the datafun and datalit parsers get their tokens, so
 that a parse allocates for the AST it returns rather than for the tokens it
 reads. Written October 2026, and implemented the same month,
-with the departures and the results in [What was built](#user-content-what-was-built).
+with the departures and the results in [What was built](#what-was-built).
 The measurements behind it are in [Where Compile Time Goes](compile-time.md).
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [Where the allocation is](#user-content-where-the-allocation-is)
-- [The design](#user-content-the-design)
-- [What does not change](#user-content-what-does-not-change)
-- [Recovery](#user-content-recovery)
-- [Migrating](#user-content-migrating)
-- [Phases](#user-content-phases)
-- [What was built](#user-content-what-was-built)
-- [Open questions](#user-content-open-questions)
+- [The problem](#the-problem)
+- [Where the allocation is](#where-the-allocation-is)
+- [The design](#the-design)
+- [What does not change](#what-does-not-change)
+- [Recovery](#recovery)
+- [Migrating](#migrating)
+- [Phases](#phases)
+- [What was built](#what-was-built)
+- [Open questions](#open-questions)
 
 ## The problem
 
@@ -75,7 +75,7 @@ How a parse gets there:
 for an open bracket, the index its contents end at; for a close bracket that
 recovery threw away, a mark saying to skip it. The bracer's recovery
 algorithm is kept as it is and only its output changes (see
-[Recovery](#user-content-recovery)). It is the same length as the token array,
+[Recovery](#recovery)). It is the same length as the token array,
 built in the same pass, and one more allocation.
 
 **A cursor in place of a token stream.** A `Cursor` is the token and match

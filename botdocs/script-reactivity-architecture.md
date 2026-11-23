@@ -24,19 +24,19 @@ it, with the designs that were tried and rejected.
 
 ## Contents
 
-- [The claim](#user-content-the-claim)
-- [The shape of it](#user-content-the-shape-of-it)
-- [1. A unit's key is the unit, not its place or its history](#user-content-1-a-units-key-is-the-unit-not-its-place-or-its-history)
-- [2. The environment is read, not seeded](#user-content-2-the-environment-is-read-not-seeded)
-- [3. Lowering folds records, rather than mutating one](#user-content-3-lowering-folds-records-rather-than-mutating-one)
-- [4. Re-derivation is a walk, and the runtime is already per-unit](#user-content-4-re-derivation-is-a-walk-and-the-runtime-is-already-per-unit)
-- [5. The reach goes backward](#user-content-5-the-reach-goes-backward)
-- [Splices](#user-content-splices)
-- [Crossing a database change](#user-content-crossing-a-database-change)
-- [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)
-- [What a step reports](#user-content-what-a-step-reports)
-- [How it is validated](#user-content-how-it-is-validated)
-- [What is not covered, and what is known wrong](#user-content-what-is-not-covered-and-what-is-known-wrong)
+- [The claim](#the-claim)
+- [The shape of it](#the-shape-of-it)
+- [1. A unit's key is the unit, not its place or its history](#1-a-units-key-is-the-unit-not-its-place-or-its-history)
+- [2. The environment is read, not seeded](#2-the-environment-is-read-not-seeded)
+- [3. Lowering folds records, rather than mutating one](#3-lowering-folds-records-rather-than-mutating-one)
+- [4. Re-derivation is a walk, and the runtime is already per-unit](#4-re-derivation-is-a-walk-and-the-runtime-is-already-per-unit)
+- [5. The reach goes backward](#5-the-reach-goes-backward)
+- [Splices](#splices)
+- [Crossing a database change](#crossing-a-database-change)
+- [Units that did not run to their end](#units-that-did-not-run-to-their-end)
+- [What a step reports](#what-a-step-reports)
+- [How it is validated](#how-it-is-validated)
+- [What is not covered, and what is known wrong](#what-is-not-covered-and-what-is-known-wrong)
 
 ## The claim
 
@@ -58,7 +58,7 @@ unit's binding as it would out of its own, and `set` writes into an earlier
 unit's `var`. Then the binding is no longer as the units that read it found
 it, and rerunning one of them means building the binding again first. So if
 D moved `a` out of A, editing B reruns A, B and D. See
-[5. The reach goes backward](#user-content-5-the-reach-goes-backward).
+[5. The reach goes backward](#5-the-reach-goes-backward).
 
 ## The shape of it
 
@@ -395,7 +395,7 @@ It rests on a unit's record saying what it took and wrote. A unit that compiled
 and did not run to its end -- returned early, or was blocked -- keeps its
 record, so it is assumed to have taken what it would take. The cost of that is
 rerunning its provider for nothing; see
-[issues.md](issues.md#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken).
+[issues.md](issues.md#a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken).
 Retracting a revival restores the binding like any other retract, by
 rerunning its provider and the take after it. Since the binding held nothing
 before the revival, emptying it would do as well without running anything;
@@ -442,7 +442,7 @@ edit from nothing and a deletion an edit to nothing:
 `ScriptCompiler::{relower_inserted, relower_deleted, relower_moved, truncate_units}` are the
 compiler's verbs. The links are input fields, so setting one needs `&mut db`,
 which is why the session splices the list and the compiler, built afterwards,
-re-derives; see [Crossing a database change](#user-content-crossing-a-database-change).
+re-derives; see [Crossing a database change](#crossing-a-database-change).
 
 The executor runs the reach in place, as for an edit.
 `ScriptExecutor::insert_unit` puts an inserted unit in its place with no
@@ -454,7 +454,7 @@ which a move always does. Frames and functions are kept by id, so nothing
 else moves.
 
 **A unit that stops compiling stays**, as an appended unit that fails does
-(see [Units that did not run to their end](#user-content-units-that-did-not-run-to-their-end)).
+(see [Units that did not run to their end](#units-that-did-not-run-to-their-end)).
 Removing a unit that a later unit reads leaves the reader failing, and putting
 the binding back makes it compile and run again.
 
@@ -654,7 +654,7 @@ separate test pins that the fixture has the shape the claim is about.
 The step tables state, per step, what each unit should do, and check it
 against what salsa actually ran and against a fresh run of the session's
 current code, which is the definition of a correct step; see [Step
-tables](doc-fixtures.md#user-content-step-tables). Removing the engine's
+tables](doc-fixtures.md#step-tables). Removing the engine's
 ownership hook fails every step where a unit's ownership analysis runs and its
 typecheck does not.
 
@@ -893,19 +893,19 @@ units directly when the question is about validity.
   to a graph-derived expectation and to the falsification runs.
 - **A change to the module set re-keys every unit.** The engine narrows its
   modules to what the units require on every step (see
-  [repl-architecture.md](repl-architecture.md#user-content-the-engine)), and a
+  [repl-architecture.md](repl-architecture.md#the-engine)), and a
   step that moves them interns a new `ScriptEnv`. Every unit's typecheck then
   has a new key. The units already lowered keep their IR, which is sound
   because module ids are given by path. But the reach for a set change has
   never been asked about, and no engine path adds a module source mid-session;
-  see [issues.md](issues.md#user-content-nothing-consumes-a-workspacedelta).
+  see [issues.md](issues.md#nothing-consumes-a-workspacedelta).
 - **A unit that returns early keeps what it did to earlier units.** A `set` or
   an `out` argument writes into an earlier unit's frame, a move takes from one,
   and an early return after either leaves it done. `var p = (1, "a")` followed
   by a unit that does `set p.1 = "mutated"` before a failing `!` leaves `p`
   mutated. So a failed unit does influence the session until something
   re-derives it, when the rerun of section 5 builds `p` again first. See
-  [issues.md](issues.md#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units).
+  [issues.md](issues.md#a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units).
 - **A unit that did not run is assumed to have done what it would do.** Its
   record lists what it would take and write. So a blocked unit makes the names
   it would take unusable after it, and its provider reruns for it, though
@@ -918,7 +918,7 @@ units directly when the question is about validity.
   and need nothing new of the engine: undoing an edit *is* an edit, undoing an
   append is `truncate_units`, and undoing an insert, a delete or a move is
   the opposite splice. See
-  [repl-architecture.md](repl-architecture.md#user-content-undo-and-redo).
+  [repl-architecture.md](repl-architecture.md#undo-and-redo).
 - **Only pure `fun`s exist**, so the only output is `debuglog`, and skipping a
   unit's execution skips nothing observable beyond it. `proc`s and real I/O
   need the runtime's I/O behind a virtual layer, which does not exist yet:

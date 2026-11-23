@@ -7,14 +7,14 @@ enough of what they compute for that to mean something. Written November
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [One oracle](#user-content-one-oracle)
-- [Programs that show what they compute](#user-content-programs-that-show-what-they-compute)
-- [Failures become fixtures](#user-content-failures-become-fixtures)
-- [Floors](#user-content-floors)
-- [What it retires](#user-content-what-it-retires)
-- [Phases](#user-content-phases)
-- [Open questions](#user-content-open-questions)
+- [The problem](#the-problem)
+- [One oracle](#one-oracle)
+- [Programs that show what they compute](#programs-that-show-what-they-compute)
+- [Failures become fixtures](#failures-become-fixtures)
+- [Floors](#floors)
+- [What it retires](#what-it-retires)
+- [Phases](#phases)
+- [Open questions](#open-questions)
 
 ## The problem
 

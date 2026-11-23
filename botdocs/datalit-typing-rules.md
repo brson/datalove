@@ -9,23 +9,23 @@ extend these.
 
 ## Contents
 
-- [Notation](#user-content-notation)
-- [Syntax](#user-content-syntax)
-- [Type equivalence](#user-content-type-equivalence)
-- [Well-formed types](#user-content-well-formed-types)
-- [Synthesis](#user-content-synthesis)
-- [Inference](#user-content-inference)
-- [Checking](#user-content-checking)
-- [Rule selection](#user-content-rule-selection)
-- [Consequences](#user-content-consequences)
-- [Diagnostics](#user-content-diagnostics)
-- [Implementation](#user-content-implementation)
-- [References](#user-content-references)
+- [Notation](#notation)
+- [Syntax](#syntax)
+- [Type equivalence](#type-equivalence)
+- [Well-formed types](#well-formed-types)
+- [Synthesis](#synthesis)
+- [Inference](#inference)
+- [Checking](#checking)
+- [Rule selection](#rule-selection)
+- [Consequences](#consequences)
+- [Diagnostics](#diagnostics)
+- [Implementation](#implementation)
+- [References](#references)
 
 ## Notation
 
 The system is bidirectional in the style of Pierce and Turner and of Dunfield
-and Krishnaswami's survey (see [References](#user-content-references)). It has
+and Krishnaswami's survey (see [References](#references)). It has
 two typing judgments:
 
 ```
@@ -222,7 +222,7 @@ Nothing goes on from the failure: the checker still stops at the first
 premise that fails.
 
 Any other expression synthesizes in three steps: infer a type for it with
-variables where its parts must agree ([Inference](#user-content-inference)),
+variables where its parts must agree ([Inference](#inference)),
 give each variable nothing decided its default, and check the expression
 against the type that results:
 
@@ -344,7 +344,7 @@ accepted against it by `≈`. Written the other way round, the list is a
 types the field takes depends on the order. With the hint on a part around
 the field, `≈` compares the field without unfolding it, and the order where
 the hint comes second is T040: `[{ next = [] }, : { next: rec L [L] } / {
-next = [] }]` ([the issue](issues.md#user-content-a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
+next = [] }]` ([the issue](issues.md#a-list-with-a-recursive-field-checks-in-one-order-and-not-the-other)).
 
 The shared variable of an empty collection, or of an empty table's columns,
 is `open`; with elements it is decided by them. The variable is what the
@@ -425,7 +425,7 @@ The mode switch: an expression that synthesizes can be checked against any
 equivalent type. Because `≡` is equality and not subtyping, this rule never
 converts anything. It is the fallback, used only when no rule below matches
 the pair of expression form and expected type (see
-[Rule selection](#user-content-rule-selection)). Every form but `true`,
+[Rule selection](#rule-selection)). Every form but `true`,
 `false` and a string has a rule below for each type head it can have, so for
 those forms the fallback is reached only on a head mismatch, and fails.
 
@@ -622,7 +622,7 @@ Some properties follow from the rules and are worth stating outright.
 
 Datafun reports many of these codes too, for the same faults in the literal
 forms it shares; its own table lists which
-([Datafun Typing Rules](datafun-typing-rules.md#user-content-diagnostics)).
+([Datafun Typing Rules](datafun-typing-rules.md#diagnostics)).
 
 | Code | Mode | Meaning |
 |------|------|---------|
@@ -675,7 +675,7 @@ derived comparison is equivalence up to the names. `TypeRec::unfold` makes the
 unfolding, and `expose` unfolds a type whose head is a `rec`. A type taken out
 of a body is unfolded, so it is closed, and a `RecVar` is only ever in a body.
 `RecScope` in `convert_type_hint` resolves the names and checks the
-conditions of [Well-formed types](#user-content-well-formed-types).
+conditions of [Well-formed types](#well-formed-types).
 
 The diagnostic codes T018 to T021, T051, T052 and T060 were for elements that
 differed from the first under the first-element rule this replaces. They are

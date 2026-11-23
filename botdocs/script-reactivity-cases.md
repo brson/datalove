@@ -12,25 +12,25 @@ is the narrative version. How the engine does it is
 
 ## Contents
 
-- [Reading the tables](#user-content-reading-the-tables)
-- [The rules](#user-content-the-rules)
-- [One unit, four accesses](#user-content-one-unit-four-accesses)
-- [A unit stops compiling, and starts again](#user-content-a-unit-stops-compiling-and-starts-again)
-- [Overwrites](#user-content-overwrites)
-- [Reading before or after another unit changes a binding](#user-content-reading-before-or-after-another-unit-changes-a-binding)
-- [Edits that add or remove a take](#user-content-edits-that-add-or-remove-a-take)
-- [Edits that add or remove a write](#user-content-edits-that-add-or-remove-a-write)
-- [Revivals](#user-content-revivals)
-- [Reruns that need reruns](#user-content-reruns-that-need-reruns)
-- [Shadowing](#user-content-shadowing)
-- [Values through intermediate bindings](#user-content-values-through-intermediate-bindings)
-- [Writes through function parameters](#user-content-writes-through-function-parameters)
-- [Modules and data](#user-content-modules-and-data)
-- [Conditional writes, loops and parts of bindings](#user-content-conditional-writes-loops-and-parts-of-bindings)
-- [Splices](#user-content-splices)
-- [Reorders](#user-content-reorders)
-- [Returning early](#user-content-returning-early)
-- [Where the engine does more than the rules](#user-content-where-the-engine-does-more-than-the-rules)
+- [Reading the tables](#reading-the-tables)
+- [The rules](#the-rules)
+- [One unit, four accesses](#one-unit-four-accesses)
+- [A unit stops compiling, and starts again](#a-unit-stops-compiling-and-starts-again)
+- [Overwrites](#overwrites)
+- [Reading before or after another unit changes a binding](#reading-before-or-after-another-unit-changes-a-binding)
+- [Edits that add or remove a take](#edits-that-add-or-remove-a-take)
+- [Edits that add or remove a write](#edits-that-add-or-remove-a-write)
+- [Revivals](#revivals)
+- [Reruns that need reruns](#reruns-that-need-reruns)
+- [Shadowing](#shadowing)
+- [Values through intermediate bindings](#values-through-intermediate-bindings)
+- [Writes through function parameters](#writes-through-function-parameters)
+- [Modules and data](#modules-and-data)
+- [Conditional writes, loops and parts of bindings](#conditional-writes-loops-and-parts-of-bindings)
+- [Splices](#splices)
+- [Reorders](#reorders)
+- [Returning early](#returning-early)
+- [Where the engine does more than the rules](#where-the-engine-does-more-than-the-rules)
 
 ## Reading the tables
 
@@ -40,7 +40,7 @@ modification. After each step a table says, for every unit:
 - **code**: its source, joined onto one line with `; `.
 - **uses from earlier units**: what it does to each binding an earlier unit
   provides, and which unit is its provider: `reads`, `takes`, `overwrites`,
-  `updates` or `revives` (see [the rules](#user-content-the-rules)).
+  `updates` or `revives` (see [the rules](#the-rules)).
 - **this step**: what happened to it.
 - **because**: why. The one column that is not checked. A `rerun:` prefix
   marks a unit run to restore a binding for another unit.
@@ -48,7 +48,7 @@ modification. After each step a table says, for every unit:
   given away, `-` for none.
 
 How the tables are checked, including against a fresh run of the session's
-current code, is in [Step tables](doc-fixtures.md#user-content-step-tables).
+current code, is in [Step tables](doc-fixtures.md#step-tables).
 
 What happens to a unit in a step is one of:
 
@@ -158,7 +158,7 @@ A unit that comes to be blocked when it runs, where it was not, did nothing,
 so overwrote nothing: that is a Break of its own, and one that stops being
 blocked is a Fix. Whether a unit is blocked is only known once it runs, so
 the engine treats an overwrite by a unit that may be blocked as an update;
-see [Returning early](#user-content-returning-early).
+see [Returning early](#returning-early).
 
 Two consequences are worth spelling out. Retracting a read restores nothing,
 and neither does applying an overwrite. And a later overwrite shields the
@@ -1986,7 +1986,7 @@ end fun
 
 A body edit reaches unit 3, which imports from the module, and unit 4,
 which calls `bump`. Unit 4 updates `b`, so unit 1 reruns first, as in
-[writes through function parameters](#user-content-writes-through-function-parameters).
+[writes through function parameters](#writes-through-function-parameters).
 Unit 2 only requires the module, and has nothing to do again.
 
 <!-- world module-edit step 3 -->

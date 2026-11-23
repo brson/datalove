@@ -2885,9 +2885,9 @@ dependencies = [
 
 [[package]]
 name = "megaspace-pipeliner"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5ab536e6b92bd42db84e578378a887a7d0e5d7373f76b3f7329f587ff8e90e"
+checksum = "e7dbaf90cf2d8922a55702674ffcab49ff1b4925f92140bde6736760a4a89562"
 dependencies = [
  "anyhow",
  "chrono",

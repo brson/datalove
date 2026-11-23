@@ -8,16 +8,16 @@ reworked; see [the parser plan](plan-parser.md).
 
 ## Contents
 
-- [Measuring](#user-content-measuring)
-- [The breakdown](#user-content-the-breakdown)
-- [Page faults](#user-content-page-faults)
-- [Parsing](#user-content-parsing)
-- [Parallel compilation](#user-content-parallel-compilation)
-  - [Inside phase 5](#user-content-inside-phase-5)
-  - [On real programs](#user-content-on-real-programs)
-  - [Large collection literals](#user-content-large-collection-literals)
-- [What was fixed](#user-content-what-was-fixed)
-- [What is left](#user-content-what-is-left)
+- [Measuring](#measuring)
+- [The breakdown](#the-breakdown)
+- [Page faults](#page-faults)
+- [Parsing](#parsing)
+- [Parallel compilation](#parallel-compilation)
+  - [Inside phase 5](#inside-phase-5)
+  - [On real programs](#on-real-programs)
+  - [Large collection literals](#large-collection-literals)
+- [What was fixed](#what-was-fixed)
+- [What is left](#what-is-left)
 
 ## Measuring
 
@@ -80,10 +80,10 @@ dependency for no gain. Snapshots are the piece to borrow if inference ever
 has to try something and take it back.
 
 Of the cycles, a fifth to a quarter are the kernel's, almost all page
-faults; see [Page faults](#user-content-page-faults). `malloc`, `free` and
+faults; see [Page faults](#page-faults). `malloc`, `free` and
 `realloc` are 8% of the user instructions between them.
 
-Parsing has no hot spot; see [Parsing](#user-content-parsing). Typecheck and ownership analysis kept their
+Parsing has no hot spot; see [Parsing](#parsing). Typecheck and ownership analysis kept their
 per-expression tables in `BTreeMap`s keyed by `ExprKey`, and inserting into
 those was the largest item in each. They are dense vectors per function now
 (`BodyTable`); see [plan-plain-ast.md](plan-plain-ast.md).
@@ -159,7 +159,7 @@ kept, so one parser per parse is still open.
 
 A parallel compile, the default since October 2026, runs each phase's
 per-module work on rayon (see
-[the compiler guide](compiler-guide.md#user-content-parallel-execution)), but
+[the compiler guide](compiler-guide.md#parallel-execution)), but
 on the `sys/std` script it buys little: measured October 2026 on four cores,
 24.2ms wall sequential and 17.4ms parallel, 1.4x. Two things cost most of the
 rest, and both have been measured rather than guessed.
@@ -186,7 +186,7 @@ compiler code, 15% page faults and 15% `mprotect`, with the rest scheduling
 and spinning. The `mprotect` calls come from glibc growing each thread's
 private arena a little at a time. Each one takes the process's `mmap_lock` for
 writing, which stalls page faults on every other thread (`rwsem_spin_on_owner`
-in the profile). The huge pages of [Page faults](#user-content-page-faults)
+in the profile). The huge pages of [Page faults](#page-faults)
 remove almost all of it, and they help the parallel run more than the
 sequential one:
 
@@ -325,7 +325,7 @@ are the same, kernel cycles are up by about 15ms, and with
 is glibc growing a worker thread's arena, which allocates from heaps it maps
 and grows itself, against the main arena growing by `brk`. Huge pages take
 both modes down (141ms sequential) but not the gap (170ms parallel). This is
-the allocator question of [Page faults](#user-content-page-faults) again, from
+the allocator question of [Page faults](#page-faults) again, from
 the other side: an allocator whose per-thread heaps cost what the main one
 does would remove it.
 
@@ -415,7 +415,7 @@ evaluating the const is 22%), but a datafun chunk has to be renumbered into
 its body, which copies every expression out of its memo, and parsed in turn
 those chunks cost up to 1.6x. Cut only in parallel compiles, a 1.86MB list
 compiled in 154ms rather than 201ms. That was built and taken out; see
-[the plan](plan-parallel-collections.md#user-content-progress). Data that big
+[the plan](plan-parallel-collections.md#progress). Data that big
 goes in a data file.
 
 ## What was fixed
@@ -467,8 +467,8 @@ goes in a data file.
 
 - Huge pages, above: the largest single item, and a decision about the
   allocator. It matters more in a parallel compile; see
-  [Parallel compilation](#user-content-parallel-compilation).
-- Parsing: no single fix; see [Parsing](#user-content-parsing).
+  [Parallel compilation](#parallel-compilation).
+- Parsing: no single fix; see [Parsing](#parsing).
 - Ownership analysis clones each function's `FunctionAnalysis` into lowering,
   since `LowerCtx` owns it; borrowing it would save the copy.
 - Lowering on demand, which would skip most of 5a and 5d; see

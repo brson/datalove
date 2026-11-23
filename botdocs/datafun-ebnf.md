@@ -4,37 +4,37 @@ The concrete syntax of datafun, the statement and expression language of
 scripts (`.dfs`) and modules (`.dfm`), as EBNF. This is a reference: it states
 what the parser in `crates/datalove-datafun-parser` accepts, over the lexer
 and bracket matcher in `crates/bcts`, and a test holds it to that (see
-[Checking the grammar](#user-content-checking-the-grammar)).
+[Checking the grammar](#checking-the-grammar)).
 
 It builds on [Datalit Grammar](datalit-ebnf.md), whose type syntax it shares
 outright and whose value syntax it re-implements with
-[differences](#user-content-differences-from-datalit). What a well-formed
+[differences](#differences-from-datalit). What a well-formed
 program means is in [Datafun Typing Rules](datafun-typing-rules.md); the
-[table of productions](#user-content-productions-and-their-typing-rules)
+[table of productions](#productions-and-their-typing-rules)
 says which rule types each form.
 
 ## Contents
 
-- [Notation](#user-content-notation)
-- [Grammar](#user-content-grammar)
-- [Rules outside the grammar](#user-content-rules-outside-the-grammar)
-- [Recovery](#user-content-recovery)
-- [Checking the grammar](#user-content-checking-the-grammar)
-- [Productions and their typing rules](#user-content-productions-and-their-typing-rules)
-- [Differences from datalit](#user-content-differences-from-datalit)
-- [Diagnostics](#user-content-diagnostics)
-- [Divergences](#user-content-divergences)
+- [Notation](#notation)
+- [Grammar](#grammar)
+- [Rules outside the grammar](#rules-outside-the-grammar)
+- [Recovery](#recovery)
+- [Checking the grammar](#checking-the-grammar)
+- [Productions and their typing rules](#productions-and-their-typing-rules)
+- [Differences from datalit](#differences-from-datalit)
+- [Diagnostics](#diagnostics)
+- [Divergences](#divergences)
 
 ## Notation
 
-The EBNF is as in the [datalit grammar](datalit-ebnf.md#user-content-notation),
+The EBNF is as in the [datalit grammar](datalit-ebnf.md#notation),
 over the tokens of [Lexical Grammar](lexical-grammar.md): whitespace and
 comments between tokens are not written. More notation carries what tokens
 alone cannot:
 
 - `~x` means `x` is glued to the token before it: no space, newline or comment
   between them. Spacing decides fixity in datafun
-  ([spec Section 2.4](botspec.md#user-content-24-spacing)), and `~` is where it
+  ([spec Section 2.4](botspec.md#24-spacing)), and `~` is where it
   does. A `~` with nothing after it, as in `[ "-", ~ ], dec_number`, says the
   next token is glued to the one before it.
 - `EOL` is a statement break: a newline before a token at bracket depth 0.
@@ -46,7 +46,7 @@ alone cannot:
   closing line: `end_line("fun")` is `"end", "fun"` on a line of its own.
 - `newline` is a table's row break, and the rules under
   `(* Written in characters *)` describe the text of one glued run of tokens,
-  as in the [datalit grammar](datalit-ebnf.md#user-content-notation). The
+  as in the [datalit grammar](datalit-ebnf.md#notation). The
   rules that are `? as in the datalit grammar ?` are those rules of it, with
   the rules they use, and a rule both grammars write is written the same in
   both.
@@ -264,7 +264,7 @@ datalit grammar's, and then only with these codes: D023, D030, D038, D039,
 D040, D041, D042, D045, D057, P031, P049, P062, P065, P066, P072, P073, P074,
 P078, P079, P085, P091. Everything else it refuses, the grammar does not
 derive, and everything it accepts, the grammar does. A test checks this (see
-[Checking the grammar](#user-content-checking-the-grammar)).
+[Checking the grammar](#checking-the-grammar)).
 
 **Lines and blocks.**
 
@@ -274,15 +274,15 @@ derive, and everything it accepts, the grammar does. A test checks this (see
   blank lines; inside brackets it is an error, as in `f(1; 2)`, P021.
 - `end`, `else` and `case` are recognised only at the start of a line. An
   `end fun` inside an open `if` closes both, and the `if`, which lost its
-  `end`, is P034 (see [Recovery](#user-content-recovery)).
+  `end`, is P034 (see [Recovery](#recovery)).
 - `inline` is only the whole first line of a function body.
 - `require`, `import`, `fun`, `native fun` and `type` are declarations, read
   only at the top level. Inside a block each is P074, though it is still parsed
   so that what is wrong inside it is reported too.
 - In a module the top level holds declarations and `const` only; any other
-  statement is P077 ([spec Section 9.1](botspec.md#user-content-91-hierarchy)).
+  statement is P077 ([spec Section 9.1](botspec.md#91-hierarchy)).
   A rider interface holds `native fun` and `type` only; anything else is P084
-  ([spec Section 9.5](botspec.md#user-content-95-native-riders)). Each is
+  ([spec Section 9.5](botspec.md#95-native-riders)). Each is
   parsed by its own query, `parse_rider_interface`, and checked by
   `check_rider_interface` in `datalove-datafun-compiler`, whose accumulated
   diagnostics are the interface's.
@@ -321,7 +321,7 @@ P084       const x = 1
 ```
 
 **Spacing.** The glue test decides fixity
-([spec Section 2.4](botspec.md#user-content-24-spacing)):
+([spec Section 2.4](botspec.md#24-spacing)):
 
 - A sigil binary operator is glued on both sides or on neither. `a -b` and
   `a- b` end the expression, and the operator is P091. Word operators
@@ -537,11 +537,11 @@ P001       fnord x
 
 `crates/datalove-doc-fixtures/tests/datafun_grammar_tests.rs` reads the grammar
 block above and runs it, as an Earley recognizer, beside the parser, as
-[Datalit Grammar](datalit-ebnf.md#user-content-checking-the-grammar) is run
+[Datalit Grammar](datalit-ebnf.md#checking-the-grammar) is run
 beside its own. Whatever the parser accepts the recognizer must too, and
 whatever the recognizer accepts the parser must accept or refuse only with a
 code from the list at the top of
-[Rules outside the grammar](#user-content-rules-outside-the-grammar), which
+[Rules outside the grammar](#rules-outside-the-grammar), which
 the test reads from this document.
 
 The recognizer reads tokens as datalit's does, with an `EOL` added before a
@@ -554,15 +554,15 @@ Its inputs are every `.dfs`, `.dfm` and `.dli` file under `crates/` and
 generated from the grammar, and each of those with a character changed, each
 parsed as a script, module or rider interface, and the `examples` blocks
 above, fenced as ```` ```examples script ````, `module` or `interface` and
-written as [datalit's are](datalit-ebnf.md#user-content-checking-the-grammar):
+written as [datalit's are](datalit-ebnf.md#checking-the-grammar):
 the parser must refuse each with exactly the codes given. The generated
 strings must reach the whole grammar, and the `no X: CODE` notes hold, as
-[datalit's do](datalit-ebnf.md#user-content-checking-the-grammar).
+[datalit's do](datalit-ebnf.md#checking-the-grammar).
 
 The same test holds the parser to the grammar's grouping. It generates
 expressions, with a space wherever one may go, and for each the parser takes,
 the recognizer's item sets give the parse tree, which must be the only one.
-The tree's expressions, as [Grouping](#user-content-notation) reads them,
+The tree's expressions, as [Grouping](#notation) reads them,
 must have the spans of the expressions the parser builds, each of two tokens
 or more; one token is one expression however it is read. So a parser that
 read `a - b - c` as `a - (b - c)`, or bound `not` tighter than `.`, fails it,
@@ -575,7 +575,7 @@ point at. The tree and the spans are in
 | Production | Typing rules |
 |---|---|
 | `hinted` | `Syn-TypedExpr`, `Check-Hinted` |
-| literals, collections, constructors | the datalit rules, [inherited](datafun-typing-rules.md#user-content-inherited-rules) |
+| literals, collections, constructors | the datalit rules, [inherited](datafun-typing-rules.md#inherited-rules) |
 | `add_op`, `mul_op`, `cmp_op`, `and`, `or`, `xor` | `Pair`, `Syn-Arith`, `Syn-Ord`, `Syn-Eq`, `Syn-Logic`, `Check-BinOp` |
 | `prefix_op` | `Syn-Neg`, `Syn-NegChecked`, `Syn-NegOptional`, `Syn-Not`, `Check-Neg`, `Check-NegLit` |
 | postfix `?`, `!` | `Syn-TryOption`, `Syn-TryResult` |
@@ -619,8 +619,8 @@ statement or bracket (P021).
 ## Diagnostics
 
 Datafun's own parse errors. Where its syntax is datalit's, its parser reports
-datalit's codes; see [Differences from datalit](#user-content-differences-from-datalit)
-and [Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
+datalit's codes; see [Differences from datalit](#differences-from-datalit)
+and [Datalit Grammar](datalit-ebnf.md#diagnostics).
 
 | Code | Refuses |
 |---|---|

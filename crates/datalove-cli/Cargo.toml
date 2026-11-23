@@ -12,7 +12,7 @@ rmx.workspace = true
 bct.workspace = true
 serde = { version = "1", features = ["derive"] }
 datalove-buildinfo.workspace = true
-megaspace-pipeliner = "0.6.1"
+megaspace-pipeliner = "0.7.0"
 datalove.workspace = true
 datalove-repl-rat.workspace = true
 datalove-worldgen.workspace = true

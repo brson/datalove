@@ -7,20 +7,20 @@ October 2026 after a review of both checkers, and implemented in both the same
 month. The rules as built are stated in
 [Datalit Typing Rules](datalit-typing-rules.md) and
 [Datafun Typing Rules](datafun-typing-rules.md), and for users in
-[Datalove Literals](../mandocs/datalit.md#user-content-typing-together); this
+[Datalove Literals](../mandocs/datalit.md#typing-together); this
 document keeps the argument for them and what is left.
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [What a literal is](#user-content-what-a-literal-is)
-- [Empty collections stop synthesizing](#user-content-empty-collections-stop-synthesizing)
-- [Classes of variable](#user-content-classes-of-variable)
-- [One rule for sharing a type](#user-content-one-rule-for-sharing-a-type)
-- [In linear time](#user-content-in-linear-time)
-- [What changes for the user](#user-content-what-changes-for-the-user)
-- [What is left](#user-content-what-is-left)
-- [Open questions](#user-content-open-questions)
+- [The problem](#the-problem)
+- [What a literal is](#what-a-literal-is)
+- [Empty collections stop synthesizing](#empty-collections-stop-synthesizing)
+- [Classes of variable](#classes-of-variable)
+- [One rule for sharing a type](#one-rule-for-sharing-a-type)
+- [In linear time](#in-linear-time)
+- [What changes for the user](#what-changes-for-the-user)
+- [What is left](#what-is-left)
+- [Open questions](#open-questions)
 
 ## The problem
 
@@ -203,7 +203,7 @@ to T021, T051, T052, T060) are retired: the check reports the element with
 the check's own code.
 
 The value printer gets a rule for where hints are needed, which
-[Canonical forms](../mandocs/datalit.md#user-content-canonical-forms) now
+[Canonical forms](../mandocs/datalit.md#canonical-forms) now
 states: the root needs a hint when its type is not the one its literals
 default to, and an empty collection needs one when nothing around it fixes
 its type. The printer does not follow it yet.
@@ -213,10 +213,10 @@ its type. The printer does not follow it yet.
 - **Recorded types are copies.** Datafun records a cloned `Type` per
   expression, and inference keeps a type per expression the same way. Shared
   or interned types would make the record linear; see
-  [issues](issues.md#user-content-datafun-records-a-copy-of-every-expressions-type).
+  [issues](issues.md#datafun-records-a-copy-of-every-expressions-type).
 - **No depth limit.** Inference recurses on the expression, as checking does,
   and both overflow the stack on deep enough nesting; see
-  [issues](issues.md#user-content-deeply-nested-literals-overflow-the-stack).
+  [issues](issues.md#deeply-nested-literals-overflow-the-stack).
 - **Bounds do not take part.** A bound such as `T is float` is checked after
   `T` is found, so `lerp(0, 1, 0.5)` makes `T` `int` and is refused, where a
   class for the bound would have made it `f64`.

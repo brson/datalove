@@ -796,7 +796,7 @@ one before it, known everywhere else by an id it keeps, so a splice moves no
 key and no id, and re-derives its reach as an edit does. The suffix below was
 the cost of identifying a unit by its position, and not inherent after all;
 see
-[script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-splices).)*
+[script-reactivity-architecture.md](script-reactivity-architecture.md#splices).)*
 
 What it came to, over four units A B C D where D reads A's binding and nothing
 reads B's:
@@ -819,7 +819,7 @@ Five things were decided or found while doing it.
 1. **The put-back is the compiler's, not the engine's.** *(Superseded: a
    splice no longer rejects a suffix that fails to compile. A failing unit
    stays, as an appended one does; see
-   [script-reactivity-architecture.md](script-reactivity-architecture.md#user-content-splices).
+   [script-reactivity-architecture.md](script-reactivity-architecture.md#splices).
    Points 1 and 4 and the rejection cases below record the policy as it was.)* `splice` compiles the
    new suffix, and if any unit of it failed puts the old list back and
    re-derives, returning `Err`. So the engine never sees a half-spliced session
@@ -896,7 +896,7 @@ history; the machinery now has every verb one would be built on -- undoing an
 append is `truncate_units`, and undoing an insert or a delete is the other
 splice verb. The REPL's `/undo` and `/redo` have since been built that way, on
 the REPL's own history; see
-[repl-architecture.md](repl-architecture.md#user-content-undo-and-redo).
+[repl-architecture.md](repl-architecture.md#undo-and-redo).
 
 What follows is the plan as written before the work.
 

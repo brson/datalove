@@ -5,8 +5,8 @@ value whose type mentions a type parameter is a pointer at the value in its
 real layout together with that value's descriptor, and the descriptors a body
 needs are built at run time from one descriptor per type parameter. Written
 October 2026; done. A review's findings are fixed (see [After the
-review](#user-content-after-the-review)) and the measurements are in
-[Cost](#user-content-cost). [Generics: how it works](generics.md) is the
+review](#after-the-review)) and the measurements are in
+[Cost](#cost). [Generics: how it works](generics.md) is the
 reference now.
 
 This supersedes the erasure half of [Generics and
@@ -16,26 +16,26 @@ stays the plan for speed, and comes after this.
 
 ## Contents
 
-- [Why](#user-content-why)
-- [The shape](#user-content-the-shape)
-- [Types in the IR](#user-content-types-in-the-ir)
-- [Descriptors](#user-content-descriptors)
-- [Storage](#user-content-storage)
-- [Calls](#user-content-calls)
-- [Operations on a dynamic value](#user-content-operations-on-a-dynamic-value)
-- [Natives](#user-content-natives)
-- [The runtime](#user-content-the-runtime)
-- [What goes away](#user-content-what-goes-away)
-- [What stays](#user-content-what-stays)
-- [What it does for other work](#user-content-what-it-does-for-other-work)
-- [Cost](#user-content-cost)
-- [Phases](#user-content-phases)
-- [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand)
-- [Where phase 5 stands](#user-content-where-phase-5-stands)
-- [Where phase 6 stands](#user-content-where-phase-6-stands)
-- [Where phase 7 stands](#user-content-where-phase-7-stands)
-- [After the review](#user-content-after-the-review)
-- [Open questions](#user-content-open-questions)
+- [Why](#why)
+- [The shape](#the-shape)
+- [Types in the IR](#types-in-the-ir)
+- [Descriptors](#descriptors)
+- [Storage](#storage)
+- [Calls](#calls)
+- [Operations on a dynamic value](#operations-on-a-dynamic-value)
+- [Natives](#natives)
+- [The runtime](#the-runtime)
+- [What goes away](#what-goes-away)
+- [What stays](#what-stays)
+- [What it does for other work](#what-it-does-for-other-work)
+- [Cost](#cost)
+- [Phases](#phases)
+- [Where phases 3 and 4 stand](#where-phases-3-and-4-stand)
+- [Where phase 5 stands](#where-phase-5-stands)
+- [Where phase 6 stands](#where-phase-6-stands)
+- [Where phase 7 stands](#where-phase-7-stands)
+- [After the review](#after-the-review)
+- [Open questions](#open-questions)
 
 ## Why
 
@@ -45,7 +45,7 @@ on every backend, but it gets there with three ways of getting a descriptor
 between a value's real shape and its erased one (`erase`, `reify`, `convert`,
 `needs_erasure` asked in both directions), and a derivation of what each
 reference points at (`resolve_ref_descriptors`). Its recurring fault, named in
-[plan-generics](plan-generics.md#user-content-what-a-prototype-of-that-found),
+[plan-generics](plan-generics.md#what-a-prototype-of-that-found),
 is a descriptor that holds "for exactly as long as the value stays in the
 parameter it arrived in": owned containers moved into a local, borrows taken
 out of a borrowed container, and now a reference held across a `for` loop all
@@ -128,7 +128,7 @@ expression, with a `TyTag::Param` descriptor wherever a type parameter stands.
 At entry the function asks the runtime to instantiate each template against
 its type-parameter descriptors (`dtlv_rti_tydesc_instantiate`), and the
 runtime caches what it builds, so a table fill is a lookup per entry after the
-first call at a given binding. See [The runtime](#user-content-the-runtime).
+first call at a given binding. See [The runtime](#the-runtime).
 
 A lookup per entry per call is still a cost on every call, and a small `sys/std`
 generic called in a loop pays it every time. The expected fix is a one-entry
@@ -232,7 +232,7 @@ A concrete caller receiving a dynamic return provides its own concrete
 destination and its static descriptor.
 
 Then the type-parameter descriptors, in declaration order. Natives keep their
-own trailing descriptors for now; see [Natives](#user-content-natives).
+own trailing descriptors for now; see [Natives](#natives).
 
 ## Operations on a dynamic value
 
@@ -349,7 +349,7 @@ runtime before its descriptor table -- so no key outlives what it names.
 `shadow_limit`, beside `stack_limit`, so compiled code bumps and restores it
 inline and calls the runtime (`dtlv_rti_shadow_alloc`) only when a request
 does not fit. It is in `impls/shadow.rs`. It grows by chunks, never by moving, so a pointer
-into it stays good; see [Release](#user-content-storage) for what restoring
+into it stays good; see [Release](#storage) for what restoring
 across a chunk boundary has to restore. It is per `RtLocal`, which is per
 runtime handle, and a handle is used by one thread at a time, so it is
 reentrant and thread-safe by construction -- the property the C backend's
@@ -376,7 +376,7 @@ across chunk boundaries, reset, and restore across a boundary.
   `engines/module_060_unbounded_shape` flips to passing, now
   `module_068_growing_type`). `NativeContext`'s
   own `descriptor_shapes` stays, as `undetermined_type_params`; see
-  [Natives](#user-content-natives).
+  [Natives](#natives).
 - `DescriptorShape` for functions, `shape_descriptors_for`,
   `write_call_descriptors`, and the `shape_descriptors` on `Call`, replaced by
   the per-type-parameter descriptors
@@ -422,7 +422,7 @@ callers' calling convention, so editing it invalidates less.
 
 **Const parameter specialization** (`specialize.rs`) does what it did; it
 carries the descriptor table and the hidden descriptors along, as
-[Descriptors](#user-content-descriptors) says.
+[Descriptors](#descriptors) says.
 
 ## Cost
 
@@ -519,7 +519,7 @@ three hand-coded entry layouts (`bridge::call_jit`, the bytecode's
 `call_planned_jit`, and the `__jit_dispatch_call` trampoline), so a compiled
 caller of an interpreted generic has to pass what the new convention expects.
 
-0. **Baseline** (done). The measurements in [Cost](#user-content-cost).
+0. **Baseline** (done). The measurements in [Cost](#cost).
 1. **Runtime** (done). Descriptor construction from templates, and its cache
    outside the allocator; the payload-offset entry for options, results and enums;
    `clone_local`'s address assertion made structural; the shadow stack in
@@ -537,16 +537,16 @@ caller of an interpreted generic has to pass what the new convention expects.
 3. **Lowering** (done), under the feature: written types kept, the table
    built, type-parameter descriptors at call sites, no `Erase` or `Reify`.
    Ownership analysis is unchanged, the language being unchanged. See
-   [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand).
+   [Where phases 3 and 4 stand](#where-phases-3-and-4-stand).
 4. **Interpreter, bytecode and CTFE** (done), the reference: the dynamic
    frame, the operations table above, calls. The interpreter's frame is the
    one the JIT shares for OSR, so the dynamic frame is laid out here once for
    both. CTFE is this interpreter, so it comes along. The bytecode runs a
    generic's body; see [Where phases 3 and 4
-   stand](#user-content-where-phases-3-and-4-stand).
+   stand](#where-phases-3-and-4-stand).
 5. **Cranelift**, AOT and JIT (done): the same, plus the bridge, the
    trampoline and OSR carrying fat pointers and type-parameter descriptors.
-   See [Where phase 5 stands](#user-content-where-phase-5-stands). OSR shares
+   See [Where phase 5 stands](#where-phase-5-stands). OSR shares
    the interpreter's frame (`osr.rs`) and so adopts its dynamic frame rather
    than building one: `OsrSpec` has a descriptor-table offset,
    `table_offset`, and `enter_osr` loads the table and the fat pointers from
@@ -554,10 +554,10 @@ caller of an interpreted generic has to pass what the new convention expects.
    lowering check in phase 2, except that an OSR entry hands a dynamic block
    parameter its own storage, so that copy is a `memmove`.
 6. **C AOT** (done): the same again, in C. See [Where phase 6
-   stands](#user-content-where-phase-6-stands).
+   stands](#where-phase-6-stands).
 7. **Flip and delete** (done). The feature is gone, nothing erases, and a
    call at a growing type has a fixture. See [Where phase 7
-   stands](#user-content-where-phase-7-stands).
+   stands](#where-phase-7-stands).
 8. **Docs and measurement** (done). `generics.md` rewritten, `plan-generics.md`
    marked superseded where it is, `native-abi.md` and `ir.md` updated, and the
    measurements recorded.
@@ -733,7 +733,7 @@ There is one configuration: lowering keeps a generic's types as written, and
 generic at a growing type, `nest<T>` binding `T` to `[T]` four deep, on every
 engine.
 
-Deleted, from [What goes away](#user-content-what-goes-away):
+Deleted, from [What goes away](#what-goes-away):
 
 - in lowering, the argument and return conversions, the binding moved out
   before one, wrapped container shapes and `open_container`, built shapes
@@ -894,7 +894,7 @@ anything inlined into it can move that either way.
 Settled since the first draft:
 
 - **Where the cache lives.** Per runtime handle, outside its allocator; see
-  [The runtime](#user-content-the-runtime). A shared cache would outlive the
+  [The runtime](#the-runtime). A shared cache would outlive the
   descriptors its keys point at.
 - **Tracking bytes.** They live in a region after the values and slots in the
   fixed frame, only for tracked slots and `out` parameters

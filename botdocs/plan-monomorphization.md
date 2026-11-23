@@ -4,7 +4,7 @@ Written October 2026, after generics by reference landed. Implemented as a
 proof: instances, and a compile-time pass that points call sites at them one
 at a time, tested on the IR walker and offered to nothing else. A run-time
 version in the JIT was built, measured and taken out; see [What a run-time
-experiment found](#user-content-what-a-run-time-experiment-found).
+experiment found](#what-a-run-time-experiment-found).
 This replaces an earlier plan written under erasure, which had to lower a
 generic again from source to get a concrete copy. Under the current design it
 does not.
@@ -29,16 +29,16 @@ into a caller.
 
 ## Contents
 
-- [Why the old plan no longer applies](#user-content-why-the-old-plan-no-longer-applies)
-- [An instance is a substitution](#user-content-an-instance-is-a-substitution)
-- [Why substitution is sound](#user-content-why-substitution-is-sound)
-- [Additive: every call site is optional](#user-content-additive-every-call-site-is-optional)
-- [Ahead of time](#user-content-ahead-of-time)
-- [Cleaning up after substitution](#user-content-cleaning-up-after-substitution)
-- [What exists](#user-content-what-exists)
-- [Testing](#user-content-testing)
-- [What a run-time experiment found](#user-content-what-a-run-time-experiment-found)
-- [Open questions](#user-content-open-questions)
+- [Why the old plan no longer applies](#why-the-old-plan-no-longer-applies)
+- [An instance is a substitution](#an-instance-is-a-substitution)
+- [Why substitution is sound](#why-substitution-is-sound)
+- [Additive: every call site is optional](#additive-every-call-site-is-optional)
+- [Ahead of time](#ahead-of-time)
+- [Cleaning up after substitution](#cleaning-up-after-substitution)
+- [What exists](#what-exists)
+- [Testing](#testing)
+- [What a run-time experiment found](#what-a-run-time-experiment-found)
+- [Open questions](#open-questions)
 
 ## Why the old plan no longer applies
 
@@ -94,7 +94,7 @@ instruction kind.
 
 `substitute` panics on a missing argument, so partial instances (some
 parameters bound, the rest renumbered) need a variant of it. They are left to
-[Open questions](#user-content-open-questions).
+[Open questions](#open-questions).
 
 ## Why substitution is sound
 
@@ -107,7 +107,7 @@ on the assumption that a `T` is not a copy type, now that it may be one:
   binding. Each of these is still correct for a copy type: a move of a `u32`
   copies it, and the backends treat a drop of a copy type as nothing
   (`compile_drop` returns early on `is_copy`). The IR is redundant, not
-  wrong. [Cleaning up](#user-content-cleaning-up-after-substitution) removes
+  wrong. [Cleaning up](#cleaning-up-after-substitution) removes
   the redundancy.
 - **Arithmetic.** A bounded operation on `T` is an ordinary `BinOp` or
   `BinOpChecked`, and lowering picks between them from the operator, not the
@@ -181,7 +181,7 @@ the backstop.
 **Interactions.**
 
 - *Const specialization.* A const copy keeps its type parameters
-  ([IR: passes](ir.md#user-content-13-passes)), so it can then be
+  ([IR: passes](ir.md#13-passes)), so it can then be
   instantiated like any generic. Running 5c first means instances never see
   a `ComptimeCall` that 5c could have resolved.
 - *Inlining.* Inline functions are never instantiated. Inlining runs after
@@ -264,7 +264,7 @@ there, and the chains form in script units, which instantiate `push`, `of`,
 
 This tests generics by reference too. Most faults there have been silent,
 some identical in all four backends ([Where the tests
-are](generics.md#user-content-where-the-tests-are)), so comparing backends
+are](generics.md#where-the-tests-are)), so comparing backends
 did not catch them. An instance computes strides and offsets from static
 types without any descriptor, so a descriptor-path fault shows up as a
 disagreement.

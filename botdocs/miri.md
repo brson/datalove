@@ -5,13 +5,13 @@ Written October 2026, after the recipes had rotted and were brought back.
 
 ## Contents
 
-- [The problem](#user-content-the-problem)
-- [What runs](#user-content-what-runs)
-- [Making it affordable](#user-content-making-it-affordable)
-- [Compiling natively, running under Miri](#user-content-compiling-natively-running-under-miri)
-- [What it found](#user-content-what-it-found)
-- [Where coverage is missing](#user-content-where-coverage-is-missing)
-- [Next steps](#user-content-next-steps)
+- [The problem](#the-problem)
+- [What runs](#what-runs)
+- [Making it affordable](#making-it-affordable)
+- [Compiling natively, running under Miri](#compiling-natively-running-under-miri)
+- [What it found](#what-it-found)
+- [Where coverage is missing](#where-coverage-is-missing)
+- [Next steps](#next-steps)
 
 ## The problem
 
