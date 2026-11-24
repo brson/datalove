@@ -15,9 +15,14 @@ use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic, Recove
 
 /// The root name `root` of the place spanned by `place`: `t` of `t.0`.
 ///
-/// A place is spanned from its root, which is written first.
+/// A place is spanned from its root, which is written first, or from the
+/// parentheses around it: `(t).0` is a place through `t`, spanned from its
+/// `(`.
 fn root_span(db: &dyn crate::Db, place: TextSpan, root: &str) -> TextSpan {
-    let span = place.span.start..place.span.start + root.len();
+    let text = &place.source.as_str(db)[place.span.C()];
+    let open = text.len() - text.trim_start_matches(|c: char| c == '(' || c.is_whitespace()).len();
+    let start = place.span.start + open;
+    let span = start..start + root.len();
     assert_eq!(&place.source.as_str(db)[span.C()], root, "a place's span begins with its root");
     TextSpan::new(place.source, span)
 }

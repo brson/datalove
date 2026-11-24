@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// A place through a parenthesized root, `(p).x`, is spanned from its `(`.
+// F001 points at the root, which it found past the parenthesis.
+debuglog (p2).x
+
+----------
+scriptunit-expr
+----------
+
+true
