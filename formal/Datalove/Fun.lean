@@ -1796,6 +1796,12 @@ def elseTypeFree : Option (List Stmt) → Bool
   | some b => blockTypeFree b
 end
 
+/-- A script's top level with a type alias only as a statement of its own,
+as the parser makes it: `type` inside a block is P074. -/
+def topTypeFree : List Stmt → Bool
+  | [] => true
+  | s :: ss => (s.typeFree || s matches .type_ ..) && topTypeFree ss
+
 /-- A function's body under its parameters (Fun), and F063 if it has a
 return type and can reach its end. A function whose signature is not well
 formed is not in `sigs`, and its body is not checked. It sees the aliases
@@ -1938,8 +1944,10 @@ def Stmt.isDecl : Stmt → Bool
   | _ => false
 
 /-- The diagnostics of a script, in order: its names resolved
-(`resolveNames`), so that functions may call each other in any order, and
-then each statement checked. The top level is a body returning `!()`. -/
+(`resolveNames`), so that functions may call each other in any order, then
+each statement checked, and P074 for a type alias inside a top-level block,
+which the parser refuses and the runner does not look for. The top level is
+a body returning `!()`. -/
 def checkScript (ss : List Stmt) : Array Code :=
   let (sigs, diags) := resolveNames ss
   let run : StateM (Array Code) Unit := do
@@ -1947,6 +1955,6 @@ def checkScript (ss : List Stmt) : Array Code :=
     for s in ss do
       if let .fun_ f := s then checkDecl sigs Γ.aliases (constsOf Γ.vars) f
       else Γ ← checkStmt Γ s
-  (run.run diags).2
+  (run.run diags).2 ++ (if topTypeFree ss then #[] else #["P074"])
 
 end Datalove.Fun

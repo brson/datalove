@@ -31,18 +31,30 @@ def checkTop (sigs : List (String × Sig)) : Ctx → List Stmt → DiagM Unit
 
 theorem checkScript_eq (ss : List Stmt) : checkScript ss =
     ((checkTop (resolveNames ss).1 { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } ss).run
-      (resolveNames ss).2).2 := by
+      (resolveNames ss).2).2 ++ (if topTypeFree ss then #[] else #["P074"]) := by
   unfold checkScript
   generalize resolveNames ss = r
   obtain ⟨sigs, diags⟩ := r
   dsimp only
-  congr 2
+  congr 3
   generalize ({ ret := .ty (.result unitTy), sigs := sigs } : Ctx) = Γ
   induction ss generalizing Γ with
   | nil => simp [checkTop]
   | cons s ss ih =>
     simp at ih
     cases s <;> simp [List.forIn_cons, checkTop, ← ih]
+
+/-- A script that checks: its statements check, and no type alias is inside
+a top-level block. -/
+theorem checkScript_parts {ss : List Stmt} (h : checkScript ss = #[]) :
+    ((checkTop (resolveNames ss).1 { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } ss).run
+      (resolveNames ss).2).2 = #[] ∧ topTypeFree ss = true := by
+  rw [checkScript_eq, Array.append_eq_empty_iff] at h
+  refine ⟨h.1, ?_⟩
+  have := h.2
+  split at this
+  · assumption
+  · simp at this
 
 theorem forM_appends {α} (f : α → DiagM PUnit) (hf : ∀ a, Appends (f a)) :
     ∀ (l : List α), Appends (l.forM f)
@@ -79,7 +91,8 @@ theorem checkTop_appends (sigs : List (String × Sig)) : ∀ (Γ : Ctx) (ss : Li
 statements. -/
 theorem checkScript_quiet {ss : List Stmt} (h : checkScript ss = #[]) :
     SQuiet (checkTop (resolveNames ss).1 { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } ss) () := by
-  rw [checkScript_eq, (checkTop_appends _ _ _).run] at h
+  have h := (checkScript_parts h).1
+  rw [(checkTop_appends _ _ _).run] at h
   have h2 : ((checkTop (resolveNames ss).1 { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } ss).run
       #[]).2 = #[] := by
     have := congrArg Array.size h
@@ -92,7 +105,8 @@ theorem checkScript_quiet {ss : List Stmt} (h : checkScript ss = #[]) :
 
 /-- A script that checks resolves its names quietly. -/
 theorem checkScript_names {ss : List Stmt} (h : checkScript ss = #[]) : (resolveNames ss).2 = #[] := by
-  rw [checkScript_eq, (checkTop_appends _ _ _).run] at h
+  have h := (checkScript_parts h).1
+  rw [(checkTop_appends _ _ _).run] at h
   have := congrArg Array.size h
   simp only [Array.size_append, List.size_toArray, List.length_nil] at this
   exact Array.eq_empty_of_size_eq_zero (by omega)

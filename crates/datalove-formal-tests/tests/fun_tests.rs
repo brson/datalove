@@ -2333,6 +2333,14 @@ fn moves_agree() {
         if model.is_none() && !held && run == "uninit" {
             mismatches.push(fmt!("{what}:\n{text}    the model's run read what was moved"));
         }
+        // The move analysis of the consts, each on the consts evaluated
+        // before it (`Fun.constMovesScript`), is the model's own, and
+        // `Fun.runScriptMoves_noUninit` takes it: where the model refuses
+        // nothing else, it refuses nothing.
+        let const_moves = oracle["consts"].as_str().map(|c| c.S());
+        if model.is_none() && !held && oracle["init"].is_null() && oracle["f089"].is_null() && const_moves.is_some() {
+            mismatches.push(fmt!("{what}:\n{text}    the move analysis of the consts refuses {const_moves:?} alone"));
+        }
         *outcomes.entry(fmt!("run {run}")).or_default() += 1;
         if model.as_ref() != rust.first() {
             if let Ok(dir) = std::env::var("FORMAL_MOVES_WRITE") {
@@ -2710,6 +2718,13 @@ fn consts_agrees() {
         if model_f089 != rust_f089 {
             mismatches.push(fmt!("{what}:\n{text}    rust F089: {rust_f089}, model F089: {model_f089}"));
         }
+        // The move analysis of the consts (`Fun.constMovesScript`) refuses
+        // nothing the model's other analyses let through.
+        let const_moves = oracle["constMoves"].as_str().map(|c| c.S());
+        if !model_f089 && oracle["moves"].is_null() && oracle["held"] == false && const_moves.is_some() {
+            mismatches.push(fmt!("{what}:\n{text}    the move analysis of the consts refuses {const_moves:?} alone"));
+        }
+        *outcomes.entry(fmt!("const moves {}", const_moves.as_deref().unwrap_or("accepted"))).or_default() += 1;
     }
     println!(
         "{} scripts over seeds {}..{}: {} differ; {outcomes:?}",

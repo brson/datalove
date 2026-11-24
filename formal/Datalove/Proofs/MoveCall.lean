@@ -1,3 +1,4 @@
+import Datalove.FunConstMoves
 import Datalove.Proofs.EnvCongr
 import Datalove.Proofs.MoveStmt
 
@@ -382,36 +383,49 @@ theorem lift_run {α} {x : Except Lit.Code α} {st st' : DSt} {a : α}
 
 /-! ## Calls -/
 
+/-- The consts a body sees as the analysis starts from them, marked as
+holding a value or not. -/
+def constsStart (cmarks : List (String × Bool)) : MSt :=
+  cmarks.map fun (x, s) =>
+    { name := x, init := s, live := true, back := false, lent := false, writable := false, byRef := false }
+
+theorem mFun_eq_mFunIn (S : List (String × Sig)) (env : InferEnv) (aliases : Aliases)
+    (consts : List (String × Ty × Kind)) (cmarks : List (String × Bool)) (d : FunDecl) :
+    mFun S env aliases consts cmarks d = mFunIn S S env aliases consts cmarks d := by
+  cases d; rfl
+
 /-- A program each of whose bodies the move analysis lets through: the
-functions `sigs` has a signature for have their modes and type parameters
-in the table, see consts holding values, declare no type alias, check
-quietly in the context the analysis follows them in, and the analysis lets
-each through with no call writing back into what a later argument moved. -/
-def ProgMove (sigs : List (String × Sig)) (funs : List (String × FunInfo)) : Prop :=
-  ∀ f sig fi, sigs.lookup f = some sig → funs.lookup f = some fi →
-    fi.params.map (·.1) = sig.params.map (·.1) ∧ sig.tparams = fi.tps ∧
-    (∀ q ∈ fi.cvals, q.2.isSome = true) ∧ fi.cvals.map (·.1) = fi.consts.map (·.1) ∧ blockTypeFree fi.body = true ∧
-    SQuiet (checkBlockF inferEnv fuel (funCtx sigs fi.aliases fi.consts fi.tps fi.params sig) fi.body) () ∧
-    ∃ ret s, (mFun sigs movesEnv fi.aliases fi.consts (fi.consts.map (·.1, true))
-      (.mk f fi.tps fi.params ret fi.body)).run {} = .ok ((), s) ∧ s.movedHeld = false
+functions `A` has a signature for have their modes and type parameters in
+the table, declare no type alias, check quietly in the context the analysis
+follows them in, built from the script's signatures `S`, and the analysis,
+its calls looked up in `A`, lets each through from consts marked as holding
+a value where the table's value has one, with no call writing back into what
+a later argument moved. -/
+def ProgMove (A S : List (String × Sig)) (funs : List (String × FunInfo)) : Prop :=
+  ∀ f sig fi, A.lookup f = some sig → funs.lookup f = some fi →
+    fi.params.map (·.1) = sig.params.map (·.1) ∧ sig.tparams = fi.tps ∧ blockTypeFree fi.body = true ∧
+    SQuiet (checkBlockF inferEnv fuel (funCtx S fi.aliases fi.consts fi.tps fi.params sig) fi.body) () ∧
+    ∃ cmarks ret s, MAg (constsStart cmarks) fi.cvals ∧
+      (mFunIn A S movesEnv fi.aliases fi.consts cmarks (.mk f fi.tps fi.params ret fi.body)).run {} = .ok ((), s) ∧
+      s.movedHeld = false
 
 section
-variable (sigs : List (String × Sig)) (funs : List (String × FunInfo)) (k : Nat)
+variable (A S : List (String × Sig)) (funs : List (String × FunInfo)) (k : Nat)
 
 /-- **Calls into a program the move analysis lets through keep the
 promise**: given a value for every parameter but an `out` one, at type
 arguments the bounds admit, a call never stops at a variable that holds
 nothing, and returns with every `mut` and `out` parameter holding a value. -/
-theorem runCall_move (hp : ProgMove sigs funs) (hsg : SigsOk sigs) :
-    ∀ d, CallMove sigs (runCall movesEnv sigs funs k d)
+theorem runCall_move (hS : SigsIn A S) (hp : ProgMove A S funs) (hsg : SigsOk S) :
+    ∀ d, CallMove A (runCall movesEnv S funs k d)
   | 0 => fun f sig θ vals _ _ _ _ => by simp only [runCall]; simp [throw, throwThe, MonadExceptOf.throw]
   | d + 1 => by
     intro f sig θ vals hs hg hadm hv
-    simp only [runCall, hs]
+    simp only [runCall, hS f sig hs]
     cases hfi : funs.lookup f with
     | none => simp [throw, throwThe, MonadExceptOf.throw]
     | some fi =>
-      obtain ⟨hm, htp, hcv, hcn, tf, hq, ret, s, hmf, hsf⟩ := hp f sig fi hs hfi
+      obtain ⟨hm, htp, tf, hq, cmarks, ret, s, hcm, hmf, hsf⟩ := hp f sig fi hs hfi
       have hpl : fi.params.length = sig.params.length := by simpa using congrArg List.length hm
       simp only
       by_cases hn : vals.length ≠ fi.params.length
@@ -419,7 +433,7 @@ theorem runCall_move (hp : ProgMove sigs funs) (hsg : SigsOk sigs) :
       have hlen' : vals.length = fi.params.length := by simpa using hn
       simp only [hlen', bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
       -- The analysis of the body: the parameters, the body, the end.
-      simp only [mFun, hs] at hmf
+      simp only [mFunIn, hS f sig hs] at hmf
       replace hmf := MoveM.bind_ok hmf
       obtain ⟨σ0, st0, hfold, hmf⟩ := hmf
       replace hmf := MoveM.bind_ok hmf
@@ -445,21 +459,20 @@ theorem runCall_move (hp : ProgMove sigs funs) (hsg : SigsOk sigs) :
         rw [hm, List.zip_map_right] at hq
         obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
         exact hv q' hq' hmq
-      obtain ⟨hρ0, hbl0, hsh0, -⟩ := paramsFold_mag (funCtx sigs fi.aliases fi.consts fi.tps fi.params sig) fi.params
-        vals _ σ0 fi.cvals {} st0 hfold hlen' hvals
-        (MAg.consts _ _ (by simpa [List.map_map, Function.comp_def] using hcn) hcv) (BackLent.consts _)
+      obtain ⟨hρ0, hbl0, hsh0, -⟩ := paramsFold_mag (funCtx S fi.aliases fi.consts fi.tps fi.params sig) fi.params
+        vals _ σ0 fi.cvals {} st0 hfold hlen' hvals hcm (BackLent.consts _)
       have hfr0 : MFr σ0.shape σ0 := ⟨⟨[], by simp, rfl⟩, hbl0⟩
       have hl0 : σ0.length = (argVals fi.params vals fi.cvals).length := MAg.length hρ0
-      have hr : Respects θ (funCtx sigs fi.aliases fi.consts fi.tps fi.params sig) :=
-        respects_funCtx sigs fi.aliases fi.consts fi.tps fi.params sig (by rw [← htp]; exact hadm)
-      have hq' : SQuiet (checkBlockF movesEnv fuel (funCtx sigs fi.aliases fi.consts fi.tps fi.params sig) fi.body) () := by
+      have hr : Respects θ (funCtx S fi.aliases fi.consts fi.tps fi.params sig) :=
+        respects_funCtx S fi.aliases fi.consts fi.tps fi.params sig (by rw [← htp]; exact hadm)
+      have hq' : SQuiet (checkBlockF movesEnv fuel (funCtx S fi.aliases fi.consts fi.tps fi.params sig) fi.body) () := by
         rw [← checkBlockF_same movesEnv_same]; exact hq
       have hg' := Ground.of_groundArgs hg
-      have hb := execBlock_move movesEnv sigs (runCall movesEnv sigs funs k d) (runCall_move hp hsg d) σ0.shape hg'
-        (movesEnv_inst hg') fuel k (funCtx sigs fi.aliases fi.consts fi.tps fi.params sig) (argVals fi.params vals fi.cvals)
-        fi.body σ0 0 (σ1, bs, cs) st0 st2 (SigsIn.refl sigs) rfl hr hsg tf hq' hbody hf2 hfr0 hρ0
-      obtain ⟨ir, -⟩ := mBlock_sstep sigs movesEnv fuel _ σ0 0 fi.body st0 _ st2 hbody
-      generalize execBlock movesEnv (runCall movesEnv sigs funs k d) fuel k _ _ fi.body = m at hb ⊢
+      have hb := execBlock_move movesEnv A (runCall movesEnv S funs k d) (runCall_move hS hp hsg d) σ0.shape hg'
+        (movesEnv_inst hg') fuel k (funCtx S fi.aliases fi.consts fi.tps fi.params sig) (argVals fi.params vals fi.cvals)
+        fi.body σ0 0 (σ1, bs, cs) st0 st2 hS rfl hr hsg tf hq' hbody hf2 hfr0 hρ0
+      obtain ⟨ir, -⟩ := mBlock_sstep A movesEnv fuel _ σ0 0 fi.body st0 _ st2 hbody
+      generalize execBlock movesEnv (runCall movesEnv S funs k d) fuel k _ _ fi.body = m at hb ⊢
       cases m with
       | ok ρ' =>
         obtain ⟨h1, hc⟩ := hb
@@ -506,22 +519,34 @@ theorem mTop_flagMono (sigs : List (String × Sig)) (env : InferEnv) : ∀ (ss :
         (fun r => ih _ r.1)
 
 /-- A top-level statement declares a type alias, or declares none anywhere
-in it: the parser refuses an alias in a block (P074), which the runner does
-not check. -/
+in it: `topTypeFree`, which `checkScript` reports P074 for, as the parser
+does. -/
 def TopTypeFree (ss : List Stmt) : Prop := ∀ s ∈ ss, (∃ x h, s = .type_ x h) ∨ s.typeFree = true
+
+theorem TopTypeFree.of_bool : ∀ {ss : List Stmt}, topTypeFree ss = true → TopTypeFree ss
+  | [], _, _, h => by simp at h
+  | s :: ss, h, t, ht => by
+    simp only [topTypeFree, Bool.and_eq_true, Bool.or_eq_true] at h
+    rcases List.mem_cons.mp ht with rfl | ht
+    · rcases h.1 with h1 | h1
+      · exact .inr h1
+      · left
+        cases t <;> simp at h1
+        exact ⟨_, _, rfl⟩
+    · exact TopTypeFree.of_bool h.2 t ht
 
 /-- **The top level of a script the move analysis lets through never reads
 what was moved**: run against a program whose bodies the analysis lets
 through, its statements never stop at `Stop.uninit`. -/
 theorem runTopMoves_move (sigs : List (String × Sig)) (funs : List (String × FunInfo)) (k d : Nat)
-    (hp : ProgMove sigs funs) (hsg : SigsOk sigs) :
+    (hp : ProgMove sigs sigs funs) (hsg : SigsOk sigs) :
     ∀ (ss : List Stmt) (Γ : Ctx) (σ : MSt) (ρ : VEnv) (log : List (Ty × Val)) (st st' : DSt),
     Γ.sigs = sigs → Γ.lends = false → Γ.bounds = [] → TopTypeFree ss → SQuiet (checkTop sigs Γ ss) () →
     (mTop sigs movesEnv Γ σ ss).run st = .ok ((), st') → st'.movedHeld = false → MFr [] σ → MAg σ ρ →
     (runTopMoves sigs k d Γ ρ funs log ss).result ≠ .error .uninit
   | [], _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => by simp [runTopMoves, pure, Except.pure]
   | s :: ss, Γ, σ, ρ, log, st, st', hsig, hl, hb, htf, hq, h, hf, hfr, hρ => by
-    have hcall := runCall_move sigs funs k hp hsg d
+    have hcall := runCall_move sigs sigs funs k (SigsIn.refl sigs) hp hsg d
     have hs : SigsIn sigs Γ.sigs := by rw [hsig]; exact SigsIn.refl sigs
     have htf' : TopTypeFree ss := fun s' hs' => htf s' (List.mem_cons_of_mem _ hs')
     cases s
@@ -731,7 +756,7 @@ theorem funTable_move {ss : List Stmt} (hn : (resolveNames ss).2 = #[]) {Γ : Ct
     (hq : SQuiet (checkTop (resolveNames ss).1 Γ ss) ()) {store : CStore}
     (hc : ∀ fd ∈ funDefs (resolveNames ss).1 Γ 0 ss,
       ∀ q ∈ constEnv fd.consts (store.drop (store.length - fd.seen)), q.2.isSome = true) :
-    ProgMove (resolveNames ss).1 (funTable (funDefs (resolveNames ss).1 Γ 0 ss) store) := by
+    ProgMove (resolveNames ss).1 (resolveNames ss).1 (funTable (funDefs (resolveNames ss).1 Γ 0 ss) store) := by
   intro f sig fi hs hl
   have hm := lookup_mem_of hl
   simp only [funTable, List.mem_map] at hm
@@ -739,7 +764,8 @@ theorem funTable_move {ss : List Stmt} (hn : (resolveNames ss).2 = #[]) {Γ : Ct
   simp only [FunDef.entry, Prod.mk.injEq] at he
   obtain ⟨rfl, rfl⟩ := he
   obtain ⟨hmodes, htp, tf, hqb, ret, s, hmf, hsf⟩ := funDefs_move hn ss Γ σ 0 st st' (fun _ h => h) h hf hq fd hfd sig hs
-  exact ⟨hmodes, htp, hc fd hfd, by simp [constEnv, List.map_map, Function.comp_def], tf, hqb, ret, s, hmf, hsf⟩
+  refine ⟨hmodes, htp, tf, hqb, fd.consts.map (·.1, true), ret, s, ?_, by rw [← mFun_eq_mFunIn]; exact hmf, hsf⟩
+  exact MAg.consts _ _ (by simp [constEnv, List.map_map, Function.comp_def]) (hc fd hfd)
 
 /-- **The consts a function sees hold values**, with the run that moves:
 `constPass_has` of `constPassMoves`, which evaluates the same consts in the
@@ -820,13 +846,14 @@ anything else, does. Past the consts no variable is read while it holds
 nothing, moved or never given a value, and no call returns with a `mut` or
 `out` parameter it left holding nothing. -/
 theorem runScriptMoves_move (ss : List Stmt) (h : checkScript ss = #[]) (hm : moveScript ss = none)
-    (hh : moveScriptHeld ss = false) (htf : TopTypeFree ss) (k d : Nat)
+    (hh : moveScriptHeld ss = false) (k d : Nat)
     (hu : (runScriptMoves k d ss).result = .error .uninit) :
     constPassMoves (resolveNames ss).1 (funDefs (resolveNames ss).1
       { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } 0 ss) k d
       { ret := .ty (.result unitTy), sigs := (resolveNames ss).1 } [] ss = .error .uninit := by
   have hn := checkScript_names h
   have hq := checkScript_quiet h
+  have htf := TopTypeFree.of_bool (checkScript_parts h).2
   unfold moveScript at hm
   unfold moveScriptHeld at hh
   simp only [StateT.run'] at hm

@@ -36,10 +36,12 @@ something the init proof never needed.
 ## What is proved
 
 Where a script checks (`checkScript`), the move analysis lets it through
-(`moveScript`), no call of it writes back into a variable a later argument
-moved (`moveScriptHeld`), and its top-level statements declare a type alias
-only directly (`TopTypeFree`): `runScriptMoves` stops at `Stop.uninit` only
-where evaluating the consts (`constPassMoves`) does. Past the consts, no
+(`moveScript`), and no call of it writes back into a variable a later
+argument moved (`moveScriptHeld`): `runScriptMoves` stops at `Stop.uninit`
+only where evaluating the consts (`constPassMoves`) does
+(`runScriptMoves_move`). Where the move analysis of the consts, each on the
+consts evaluated before it, lets them through too (`constMovesScript`), it
+never stops there (`runScriptMoves_noUninit`, `Proofs/MoveConst.lean`). No
 variable is read while it holds nothing, moved or never given a value, and
 no call returns with a `mut` or `out` parameter it left holding nothing.
 
@@ -61,6 +63,10 @@ The pieces are the init proof's:
 - **The top level** (`runTopMoves_move`) and the script
   (`runScriptMoves_move`), with the table a script's functions make shown to
   be such a program (`funTable_move`).
+- **The consts** (`constPassMoves_move`): each initializer run on the
+  consts' values, lining up with the marks its own analysis starts from
+  (`constMarks_MAg`), the functions it reaches a program let through from the
+  consts each sees as evaluated (`constProgMove`).
 
 ## Why it holds
 
@@ -124,17 +130,22 @@ the Rust reports neither code, the model sets no flag.
 
 ## What it leaves out
 
-- **The consts.** A const's initializer runs on the consts' values alone,
-  where the top level's state has every binding, and that it reads only
-  consts rests on F058 in the checker. `Proofs/ConstSound.lean` carries F089
-  for what holds a value; the same for moves is not done, so the theorem
-  stops at the const pass.
+- **The consts' analysis from F089.** `mTop` follows a const's initializer
+  with every const holding a value and a function's body with every const it
+  sees holding one, which is not how the consts are evaluated: each on the
+  consts before it, calling functions that see consts not evaluated yet.
+  F089 sees to the order by the analysis of what holds a value, run from the
+  consts evaluated so far. Carrying that into the move proof needs that the
+  two analyses agree about what holds a value, an induction over both. The
+  model instead runs the move analysis as F089 runs the other
+  (`constMovesScript`), the theorem takes it, and `consts_agrees` holds it to
+  the rest: where the checker, F089 and the move analysis let a script
+  through, so does it.
 - **The flag from its own analyses.** A lemma from `FunAlias.lean`'s and
   `FunHeld.lean`'s acceptance to the flag clear would make O010 and O017
-  hypotheses rather than the flag.
-- **Type aliases in top-level blocks.** The parser refuses an alias in a
-  block (P074) and the runner does not check it; the theorem takes
-  `TopTypeFree` instead.
+  hypotheses rather than the flag. Those two analyses follow a top-level
+  `call`, `debuglog` or `set` alone; the flag is set at any call, in a body
+  or an initializer, so they would first have to walk the whole script.
 
 ## What setting it out found
 
@@ -167,3 +178,6 @@ the Rust reports neither code, the model sets no flag.
 - `Proofs/MoveStmt.lean`: loops, `MSStop`, and the statement theorems.
 - `Proofs/MoveCall.lean`: `Ctx.inst_nil`, `ProgMove`, `runCall_move`,
   `runTopMoves_move`, `funTable_move`, `runScriptMoves_move`.
+- `FunConstMoves.lean`: the consts' analysis, `constMovesTop`.
+- `Proofs/MoveConst.lean`: `constMarks_MAg`, `constProgMove`,
+  `constPassMoves_move`, `runScriptMoves_noUninit`.

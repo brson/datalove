@@ -48,8 +48,12 @@ A `moves` is the script checked, what the move analysis refuses first, if
 anything (`Fun.moveScript`), whether some call of a script it lets through
 writes back into a variable a later argument moved (`Fun.moveScriptHeld`,
 what O010 and O017 refuse, which `Fun.runScriptMoves_move` takes as given),
-and how the script run moving what reads take ended (`Fun.runScriptMoves`),
-as a `run`'s `end` says. A `drops` is each
+what the move analysis of its consts refuses, each on the consts evaluated
+before it (`Fun.constMovesScript`, the model's own, which F089 and the
+ownership pass between them refuse what it does), with `init` and `f089` as
+of a `consts`, and how the script run moving what reads take ended
+(`Fun.runScriptMoves`), as a `run`'s `end` says. A `consts` has the three
+move answers too. A `drops` is each
 function the script declares at its top level, with its body's statements
 in the order the Rust's ownership analysis numbers them
 (`Fun.scriptFunKinds`), and what each point of it drops (`Fun.scriptDrops`),
@@ -129,7 +133,14 @@ def answer (q : Json) : Except String Json := do
           ("init", match Fun.initScript ss with
             | .some c => Json.str c
             | .none => Json.null),
-          ("all", Json.arr ((Fun.scriptCodes ss).map Json.str))]
+          ("all", Json.arr ((Fun.scriptCodes ss).map Json.str)),
+          ("moves", match Fun.moveScript ss with
+            | .some c => Json.str c
+            | .none => Json.null),
+          ("held", Json.bool (Fun.moveScriptHeld ss)),
+          ("constMoves", match Fun.constMovesScript ss with
+            | .some c => Json.str c
+            | .none => Json.null)]
       | .error e => Json.mkObj [("unsupported", e)]
   if let .ok script := q.getObjVal? "moves" then
     return match Fun.scriptFromSerde script with
@@ -138,6 +149,15 @@ def answer (q : Json) : Except String Json := do
             | .some c => Json.str c
             | .none => Json.null),
           ("held", Json.bool (Fun.moveScriptHeld ss)),
+          ("consts", match Fun.constMovesScript ss with
+            | .some c => Json.str c
+            | .none => Json.null),
+          ("init", match Fun.initScript ss with
+            | .some c => Json.str c
+            | .none => Json.null),
+          ("f089", match Fun.constScript ss with
+            | .some c => Json.str c
+            | .none => Json.null),
           ("run", match (Fun.runScriptMoves 10000 100 ss).result with
             | .ok _ => "ok"
             | .error s => s.name)]

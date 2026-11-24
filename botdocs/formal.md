@@ -90,7 +90,7 @@ tests in `crates/datalove-formal-tests`.
 | Datafun checking: scripts, functions, generics, consts, modules | `Fun`, `FunJson`, `FunTrace` | the typing-rules doc | `fun_tests`: every code in order, binding types, `instances_check`, `world_typing_agrees` | early returns fit, `completes` is sound, a `match` covers its enum, checking a generic once is enough, inference steps with its instances |
 | Running a script: expressions, statements, calls, consts, the script | `FunEval`, `FunExec`, `FunCall`, `FunRun`, `FunShow` | the language's meaning, following the checker case for case | `runs_agree`, on every engine | a script that checks runs soundly |
 | What holds a value (O005, O006, O009), and F089 | `FunInit`, `FunConsts` | the ownership pass | `init_agrees`, `consts_agrees`, `world_consts_agrees` | a script let through never reads what holds nothing, its consts included |
-| Moves (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016) | `FunMove` | the ownership pass | `moves_agree`, and `runScriptMoves` | a script let through never reads what was moved, past its consts |
+| Moves (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016) | `FunMove` | the ownership pass | `moves_agree`, and `runScriptMoves` | a script let through never reads what was moved, its consts included |
 | Drops: the schedule | `FunMove`, `FunDrop` | the ownership pass | `drops_agree`, through `datalove script-drops` | each value owned is dropped exactly once on every path |
 | Aliasing (O010) | `FunAlias` | the ownership pass | `aliasing_agrees` | a call it accepts passes nothing written by two pointers, so passing by pointer is copying in and out |
 | Held operands (O017) | `FunHeld` | the ownership pass | `held_agrees` | a held operand read late reads what it read early |
@@ -981,7 +981,9 @@ reads the same through a pointer as the model reads in place.
   (`Proofs/MoveCall.lean`, `runScriptMoves_move`): where a script checks, the
   move analysis lets it through, and no call writes back into a variable a
   later argument moved, `runScriptMoves` stops at `Stop.uninit` only where
-  evaluating its consts does. The proof has the shape of the init proof's,
+  evaluating its consts does; and with the consts' own analysis below, not
+  there either (`Proofs/MoveConst.lean`, `runScriptMoves_noUninit`). The
+  proof has the shape of the init proof's,
   over the analysis's own state: a run's variables line up with the state
   where every variable the analysis has given a value and not moved holds one
   (`MAg`, `Proofs/MoveSound.lean`), expressions keep that as the analysis
@@ -1013,9 +1015,35 @@ reads the same through a pointer as the model reads in place.
   `Stop.wrong` where the type arguments inference gave are not ones the
   bounds admit or leave a parameter undecided (F092, F101), which the checker
   refuses, so that a call's type arguments are ones its body may be run
-  under; `evalCall_sound` takes it in. And the top level is proved for
-  statements that declare a type alias only directly (`TopTypeFree`), which
-  the parser has (P074) and the runner does not check.
+  under; `evalCall_sound` takes it in. And `checkScript` reports P074 for a
+  type alias inside a top-level block, as the parser does and the runner
+  does not look for, so that a script that checks has one only as a
+  statement of its own (`topTypeFree`), which the top level's proof needs.
+
+- **The consts, by the move analysis of each on the consts evaluated before
+  it** (`FunConstMoves.lean`, `constMovesScript`; the proof is
+  `constPassMoves_move`, in `Proofs/MoveConst.lean`). `mTop` follows a const's
+  initializer on the top level's variables, every const holding a value, and
+  a function's body with every const it sees holding one; a const evaluated
+  first, on the consts' values alone and calling functions that see consts
+  not evaluated yet, is not what it followed, which is F089's business, by the
+  analysis of what holds a value. Carrying F089's answer into the move proof
+  needs that the two analyses agree about what holds a value, a second
+  induction over both; instead the model runs the move analysis as F089 runs
+  the other, each const on the variables in scope marked as holding a value
+  where it is a const evaluated before (`constMarks`), and each function the
+  const can reach on the consts that function sees, with only the reachable
+  functions' signatures (`constMovesTop`). It is the model's own: the Rust
+  has no such pass. `consts_agrees` and `moves_agree` hold it to the rest,
+  requiring that it refuse nothing where the checker, the move analysis, the
+  analysis of what holds a value and F089 all let a script through, which
+  over the generated scripts it does; what it refuses, O016 for a const read
+  by value, O001 and O005, another analysis refuses too. The proof is
+  `Proofs/ConstSound.lean`'s over the move analysis: the marks line up with
+  the store (`constMarks_MAg`), the reachable functions are a program the
+  analysis lets through from the same marks (`constProgMove`, with `ProgMove`
+  and `runCall_move` taking the marks and the signatures the calls are looked
+  up in apart from the context's), and `execStmt_move` does the rest.
 
 ### Drops
 
@@ -1241,12 +1269,12 @@ it, as it did not find the atom and term case.
 
 In rough order of what to do next:
 
-- **The consts, under a run that moves.** `runScriptMoves_move` stops at the
-  const pass: a const's initializer runs on the consts' values alone
-  (`constPassMoves`), where the top level's state has every binding, and
-  that it reads only consts rests on F058 in the checker, which the move
-  proof would have to carry as `Proofs/ConstSound.lean` carries F089 for what
-  holds a value.
+- **The move analysis of the consts from F089.** `runScriptMoves_noUninit`
+  takes the model's own analysis of the consts (`constMovesScript`), the
+  move analysis run as F089 runs the analysis of what holds a value, from the
+  consts evaluated before each. That F089 and the move analysis imply it is
+  tested, not proved: a proof needs that the two analyses agree about what
+  holds a value, which neither's soundness theorem says.
 - **O010 and O017 from their own analyses.** The move proof takes as given
   that no call writes back into a variable a later argument moved
   (`DSt.movedHeld`), which the aliasing and held-operand analyses refuse
