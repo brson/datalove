@@ -2301,6 +2301,9 @@ theorem evalCall_sound : ∀ (n : Nat) (Γ : Ctx) (f : String) (args : List (Opt
       split
       · exact SoundT.unsupported
       rename_i hg
+      have hbh : boundsHold Γ sig.tparams θ = true := by simpa using h92
+      have had : allDecided sig.tparams θ = true := by simpa using h101
+      simp only [hbh, had, Bool.and_self, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
       refine SoundT.bind' (evalArgs_sound n Γ args _ ha hb) (fun vals ⟨hl, hv, hks⟩ => ?_)
       have hlen' : args.length = sig.params.length := by simpa using hlen
       have hbd : ∀ p b, (p, some b) ∈ sig.tparams → ∃ t, θ.lookup p = some t ∧ b.admitsTy t = true := by

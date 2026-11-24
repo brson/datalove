@@ -56,3 +56,9 @@ import Datalove.Proofs.DropLoop
 import Datalove.Proofs.DropProof
 import Datalove.Proofs.DropFun
 import Datalove.Proofs.ConstSound
+import Datalove.Proofs.EnvCongr
+import Datalove.Proofs.MoveShape
+import Datalove.Proofs.MoveSound
+import Datalove.Proofs.MoveMono
+import Datalove.Proofs.MoveStmt
+import Datalove.Proofs.MoveCall

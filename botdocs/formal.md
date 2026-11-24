@@ -90,7 +90,7 @@ tests in `crates/datalove-formal-tests`.
 | Datafun checking: scripts, functions, generics, consts, modules | `Fun`, `FunJson`, `FunTrace` | the typing-rules doc | `fun_tests`: every code in order, binding types, `instances_check`, `world_typing_agrees` | early returns fit, `completes` is sound, a `match` covers its enum, checking a generic once is enough, inference steps with its instances |
 | Running a script: expressions, statements, calls, consts, the script | `FunEval`, `FunExec`, `FunCall`, `FunRun`, `FunShow` | the language's meaning, following the checker case for case | `runs_agree`, on every engine | a script that checks runs soundly |
 | What holds a value (O005, O006, O009), and F089 | `FunInit`, `FunConsts` | the ownership pass | `init_agrees`, `consts_agrees`, `world_consts_agrees` | a script let through never reads what holds nothing, its consts included |
-| Moves (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016) | `FunMove` | the ownership pass | `moves_agree`, and `runScriptMoves` | not yet |
+| Moves (O001, O003, O004, O007, O008, O011, O012, O014, O015, O016) | `FunMove` | the ownership pass | `moves_agree`, and `runScriptMoves` | a script let through never reads what was moved, past its consts |
 | Drops: the schedule | `FunMove`, `FunDrop` | the ownership pass | `drops_agree`, through `datalove script-drops` | each value owned is dropped exactly once on every path |
 | Aliasing (O010) | `FunAlias` | the ownership pass | `aliasing_agrees` | a call it accepts passes nothing written by two pointers, so passing by pointer is copying in and out |
 | Held operands (O017) | `FunHeld` | the ownership pass | `held_agrees` | a held operand read late reads what it read early |
@@ -795,9 +795,9 @@ The ownership pass (`crates/datalove-datafun-ownership`) decides what holds
 a value, what is moved, what is dropped where, and which arguments may
 name one place or be held across an expression. Each of its analyses is
 transcribed into the model case for case and held to the Rust on generated
-functions, and of each but moves something is proved: that a program let
-through never reads what holds nothing, drops each value once, and reads
-the same through a pointer as the model reads in place.
+functions, and of each something is proved: that a program let through
+never reads what holds nothing or was moved, drops each value once, and
+reads the same through a pointer as the model reads in place.
 
 ### What holds a value, and consts
 
@@ -900,9 +900,11 @@ the same through a pointer as the model reads in place.
 
 ### Moves
 
-- **What is moved is modelled, run, and held to the Rust, but not yet proved**
-  (`FunMove.lean`, of O001, O003, O004, O007, O008, O011, O012, O014, O015 and
-  O016, with O005, O006 and O009 as `FunInit.lean` has them). A read of a
+- **What is moved is modelled, run, held to the Rust, and proved never to be
+  read** (`FunMove.lean`, of O001, O003, O004, O007, O008, O011, O012, O014,
+  O015 and O016, with O005, O006 and O009 as `FunInit.lean` has them; the
+  proof is `runScriptMoves_move`, in `Proofs/MoveCall.lean`, and
+  [plan-move-proof.md](plan-move-proof.md) says how it goes). A read of a
   variable whose type is not copy, where the ownership analysis has the read
   take the value rather than borrow it, moves it: a `let`'s or `set`'s value,
   an `in` argument, a `ret`, a part of what an expression builds, a condition
@@ -958,10 +960,12 @@ the same through a pointer as the model reads in place.
   what is walked makes the corpus's seven differ, letting everything be passed
   `mut` ten, reporting O011 for what is bound by reference three, and letting
   a temporary through three. It also runs each script with `runScriptMoves`
-  and requires that where the analysis lets it through, and the Rust reports
-  neither O010 nor O017, which see that no argument a call writes back through
-  is moved before the call takes it, the run never reads what was moved: the
-  theorem not yet proved, held to the model's run. Over twenty-five thousand
+  and requires that where the analysis lets it through, and no call writes
+  back into a variable a later argument moved (`moveScriptHeld`, the oracle's
+  `held`), the run never reads what was moved, which is the theorem below
+  held to the model's run, and that where the Rust reports neither O010 nor
+  O017, which see that no argument a call writes back through is moved before
+  the call takes it, the model sees no such call. Over twenty-five thousand
   seeds, four thousand O001, two thousand O008, a thousand O007, five hundred
   O003 and fifty O014, none differ and no run reads what was moved. Taking no
   value on a move makes 412 of a thousand differ from the Rust and five runs
@@ -972,6 +976,46 @@ the same through a pointer as the model reads in place.
   m[k] = 1` then `debuglog k` was let through, which the run, moving as the
   checker has it, read empty; the review that found it, run on the model by
   hand, is why the run is now held to the analysis directly.
+
+- **A script the move analysis lets through never reads what was moved**
+  (`Proofs/MoveCall.lean`, `runScriptMoves_move`): where a script checks, the
+  move analysis lets it through, and no call writes back into a variable a
+  later argument moved, `runScriptMoves` stops at `Stop.uninit` only where
+  evaluating its consts does. The proof has the shape of the init proof's,
+  over the analysis's own state: a run's variables line up with the state
+  where every variable the analysis has given a value and not moved holds one
+  (`MAg`, `Proofs/MoveSound.lean`), expressions keep that as the analysis
+  follows them (`evalS_move`), statements and blocks keep it or stop as the
+  analysis allows (`execStmt_move`, `Proofs/MoveStmt.lean`), calls keep the
+  promise `CallMove` makes (`runCall_move`) and the top level runs in its own
+  context (`runTopMoves_move`). Where it differs from the init proof: a step
+  never takes back that a variable was given a value and never un-lends it
+  (`MSt.Le`, `Proofs/MoveShape.lean`), so a way back to a loop's start that
+  moved nothing live there (O007, `MSt.keepsLive`) lines up with the start
+  again, which stands in for the init proof's `Keeps`; a generic body is
+  analyzed in its own context and run in an instance's (`Ctx.inst θ`), so the
+  statement theorems take both, the analysis's context looking a variable up
+  as copy only where the run's does (`CtxLe`, by `Ty.isCopy_inst`), and the
+  contexts a statement binds, its `if`'s, `match`'s and `for`'s and the one
+  it leaves, instantiate as the check-once theorem says they do
+  (`checkStmtF_inst`, `synthF_inst`, `forBindings_inst`), under the quiet
+  check `checkScript` gives, with inference as `Lockstep.lean` proves it
+  (`inferEnv_inst`, carried to `movesEnv` by `Proofs/EnvCongr.lean`, which
+  shows the checker never reads `InferEnv.moves`); and the key a plain `set
+  m[k] = v` inserts, which the analysis takes and the run lends, is bridged by
+  a monotonicity lemma (`Proofs/MoveMono.lean`), that an expression followed
+  from a state with fewer moves comes to one with fewer moves. What O010 and
+  O017 refuse the analysis records instead (`DSt.movedHeld`, set where a
+  call's `mut` or `out` argument's variable is not live once every argument
+  has run): the theorem takes the flag clear, and `moves_agree` holds that to
+  the Rust, which reports one of the two wherever the model sets it. Two
+  things about the model moved for the proof. `evalCall` stops at
+  `Stop.wrong` where the type arguments inference gave are not ones the
+  bounds admit or leave a parameter undecided (F092, F101), which the checker
+  refuses, so that a call's type arguments are ones its body may be run
+  under; `evalCall_sound` takes it in. And the top level is proved for
+  statements that declare a type alias only directly (`TopTypeFree`), which
+  the parser has (P074) and the runner does not check.
 
 ### Drops
 
@@ -1197,24 +1241,19 @@ it, as it did not find the atom and term case.
 
 In rough order of what to do next:
 
-- **That a script the move analysis lets through never reads what was
-  moved.** The run moves (`runScriptMoves`), and `moves_agree` holds it to
-  the analysis, but nothing proves it. The init proof cannot be extended:
-  under a moving run its theorem is false, and every step of it rests on
-  `Keeps`, a step only ever giving a variable a value. A proof against
-  `FunMove.lean`'s state replaces it: `IAg` over what is given a value and
-  not moved, the O007 check in place of `Keeps` for a loop, with a lemma
-  that the analysis never takes back that a variable was given a value,
-  and O010 and O017 as hypotheses, through a lemma between analyses that
-  where they accept, the root of every `mut` or `out` argument is unmoved
-  when the call writes back to it (`f(mut p.x, p)` and `f(mut p.x, g(p))`
-  are let through by the move analysis alone). Generic functions run in
-  their instance's context and are analyzed in their own; instances are
-  only ever more copy (`Ty.isCopy_inst`), so the analysis moves what the
-  run does, and the contexts stay related by `checkStmtF_inst`, whose
-  hypotheses `checkScript` gives. `runScriptMoves` and its parts
-  (`constPassMoves`, `runTopMoves`) copy `runScript`'s with `movesEnv` until
-  then.
+- **The consts, under a run that moves.** `runScriptMoves_move` stops at the
+  const pass: a const's initializer runs on the consts' values alone
+  (`constPassMoves`), where the top level's state has every binding, and
+  that it reads only consts rests on F058 in the checker, which the move
+  proof would have to carry as `Proofs/ConstSound.lean` carries F089 for what
+  holds a value.
+- **O010 and O017 from their own analyses.** The move proof takes as given
+  that no call writes back into a variable a later argument moved
+  (`DSt.movedHeld`), which the aliasing and held-operand analyses refuse
+  between them (`f(mut p.x, p)` and `f(mut p.x, g(p))` are let through by the
+  move analysis alone); `moves_agree` holds the flag to the Rust's codes. A
+  lemma from `FunAlias.lean`'s and `FunHeld.lean`'s acceptance to the flag
+  clear would close it.
 
 - **`f32 ⇝ f64` is exact.** Needs a model of IEEE 754.
 - **Order independence.** The doc claims that where unification's constraints

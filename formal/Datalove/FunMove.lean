@@ -159,6 +159,12 @@ structure DSt where
   value has run: what lowering's store drops first is what the target holds,
   and here nothing (the Rust's `set_over_moved`). -/
   overMoved : List Nat := []
+  /-- Whether some call's `mut` or `out` argument's variable was moved by a
+  later argument of the same call (`heldMoved`), so that the call writes back
+  into what holds nothing. O010 and O017 refuse it between them, and this
+  analysis alone lets it through; the move proof (`Proofs/MoveCall.lean`)
+  takes it as given. -/
+  movedHeld : Bool := false
 
 /-- The move analysis, keeping the drop schedule as it goes. -/
 abbrev MoveM := StateT DSt (Except Lit.Code)
@@ -275,6 +281,21 @@ def giveArgsM : MSt → List (Option Mode × Expr) → List Mode → MSt
     giveArgsM σ args ms
   | σ, _, _ => σ
 
+/-- Whether a `mut` or `out` argument's variable holds nothing once every
+argument has run: moved by a later argument, which the call then writes
+back into. -/
+def heldMoved : MSt → List (Option Mode × Expr) → List Mode → Bool
+  | σ, (_, e) :: args, m :: ms =>
+    ((m == .mut || m == .out) && match placeOf e with
+      | some (x, _) => (σ.find x).any (!·.live)
+      | none => false) || heldMoved σ args ms
+  | _, _, _ => false
+
+/-- Note a call whose `mut` or `out` argument's variable a later argument
+moved (`DSt.movedHeld`). -/
+def noteHeldMoved (σ : MSt) (args : List (Option Mode × Expr)) (ms : List Mode) : MoveM Unit :=
+  if heldMoved σ args ms then modify fun s => { s with movedHeld := true } else pure ()
+
 mutual
 
 /-- An expression, as `evalS` runs it, from a position borrowing or not as
@@ -310,6 +331,7 @@ def mE (sigs : List (String × Sig)) (Γ : Ctx) (b : Bool) (σ : MSt) (e : Expr)
       | some sig =>
         let ms := sig.params.map (·.1)
         mArgs sigs Γ σ args ms >>= fun σ =>
+        noteHeldMoved σ args ms >>= fun _ =>
         (if argsExit args ms then exitM σ else pure σ) >>= fun σ =>
         pure (giveArgsM σ args ms)
       | none => throw "F089"
@@ -735,7 +757,8 @@ call runs it, with a schedule of its own. -/
 def mTop (sigs : List (String × Sig)) (env : InferEnv) : Ctx → MSt → List Stmt → MoveM Unit
   | _, _, [] => pure ()
   | Γ, σ, .fun_ f :: ss => do
-    StateT.lift ((mFun sigs env Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f).run' {})
+    let (_, s) ← StateT.lift ((mFun sigs env Γ.aliases (constsOf Γ.vars) ((constsOf Γ.vars).map (·.1, true)) f).run {})
+    modify fun t => { t with movedHeld := t.movedHeld || s.movedHeld }
     mTop sigs env Γ σ ss
   | Γ, σ, s :: ss => do
     let r ← mStmt sigs env fuel Γ σ 0 s
@@ -748,6 +771,16 @@ def moveScript (ss : List Stmt) : Option Lit.Code :=
   match (mTop sigs movesEnv { ret := .ty (.result unitTy), sigs } [] ss).run' {} with
   | .ok _ => none
   | .error c => some c
+
+/-- Whether some call of a script the move analysis lets through writes
+back a `mut` or `out` argument into a variable a later argument of the call
+moved (`DSt.movedHeld`): what O010 and O017 refuse between them, and the
+analysis alone does not. False where the analysis refuses the script. -/
+def moveScriptHeld (ss : List Stmt) : Bool :=
+  let sigs := (resolveNames ss).1
+  match (mTop sigs movesEnv { ret := .ty (.result unitTy), sigs } [] ss).run {} with
+  | .ok (_, s) => s.movedHeld
+  | .error _ => false
 
 /-- A script's top-level functions' drop schedules, by name, each as
 `mTop` reaches the function: in the context the statements before it leave;

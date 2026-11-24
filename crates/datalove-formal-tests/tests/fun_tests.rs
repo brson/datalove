@@ -2319,12 +2319,18 @@ fn moves_agree() {
             None => "accepted".S(),
         }).or_default() += 1;
         // The model's run, moving what reads take, never reads what was moved
-        // where the move analysis lets a script through, and the Rust's O010
-        // and O017 do, which see that no argument a call writes back through
-        // is moved before the call takes it.
+        // where the move analysis lets a script through and no call writes
+        // back into a variable a later argument moved
+        // (`Fun.runScriptMoves_move`). That a call does is `held`, which the
+        // proof takes as given and the Rust's O010 and O017 refuse between
+        // them: where the Rust reports neither, the model sees none.
         let run = oracle["run"].as_str().X();
+        let held = oracle["held"].as_bool().X();
         let aliased = rust.iter().any(|c| c == "O010" || c == "O017");
-        if model.is_none() && !aliased && run == "uninit" {
+        if model.is_none() && !aliased && held {
+            mismatches.push(fmt!("{what}:\n{text}    the model sees a call write back what a later argument moved"));
+        }
+        if model.is_none() && !held && run == "uninit" {
             mismatches.push(fmt!("{what}:\n{text}    the model's run read what was moved"));
         }
         *outcomes.entry(fmt!("run {run}")).or_default() += 1;

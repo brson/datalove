@@ -173,6 +173,15 @@ theorem KeepsSched.noteOverMoved (id : Nat) (σ : MSt) (x : String) (steps : Lis
     cases h; rfl
   · exact KeepsSched.pure _
 
+theorem KeepsSched.noteHeldMoved (σ : MSt) (args : List (Option Mode × Expr)) (ms : List Mode) :
+    KeepsSched (Fun.noteHeldMoved σ args ms) := by
+  unfold Fun.noteHeldMoved
+  split
+  · intro st a st' h
+    simp only [modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, StateT.run] at h
+    cases h; rfl
+  · exact KeepsSched.pure _
+
 theorem KeepsSched.writableM (σ : MSt) (x : String) : KeepsSched (Fun.writableM σ x) := by
   unfold Fun.writableM
   split
@@ -413,13 +422,15 @@ theorem mE_shr : ∀ (b : Bool) (σ : MSt) (e : Expr), Shr σ (mE sigs Γ b σ e
     · intro st τ st' e
       obtain ⟨σ1, st1, h1, h2⟩ := MoveM.bind_ok e
       obtain ⟨b1, c1, l1⟩ := mArgs_shr σ args _ st σ1 st1 h1
+      obtain ⟨_, st1n, h1n, h2⟩ := MoveM.bind_ok h2
+      have c1n := KeepsSched.noteHeldMoved σ1 args _ st1 _ st1n h1n
       obtain ⟨σ2, st2, h3, h4⟩ := MoveM.bind_ok h2
-      have r2 : σ2.Below σ ∧ st2.sched = st1.sched := by
+      have r2 : σ2.Below σ ∧ st2.sched = st1n.sched := by
         split at h3
-        · exact ((Shr.exitM σ1).trans b1) st1 σ2 st2 h3
-        · exact ((Shr.pure σ1).trans b1) st1 σ2 st2 h3
+        · exact ((Shr.exitM σ1).trans b1) st1n σ2 st2 h3
+        · exact ((Shr.pure σ1).trans b1) st1n σ2 st2 h3
       cases h4
-      exact ⟨giveArgsM_below args _ r2.1 l1, r2.2.trans c1⟩
+      exact ⟨giveArgsM_below args _ r2.1 l1, (r2.2.trans c1n).trans c1⟩
     · exact Shr.throw σ _
   | b, σ, .tuple es => by unfold mE; exact Shr.wrap (mAll_shr σ es)
   | b, σ, .list es => by unfold mE; exact Shr.wrap (mAll_shr σ es)

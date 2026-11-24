@@ -45,8 +45,11 @@ F089 if one of its consts reads one not evaluated before it
 to the Rust's F089 alike only where the analysis lets the script through,
 and `all`, everything the model refuses of it (`Fun.scriptCodes`).
 A `moves` is the script checked, what the move analysis refuses first, if
-anything (`Fun.moveScript`), and how the script run moving what reads take
-ended (`Fun.runScriptMoves`), as a `run`'s `end` says. A `drops` is each
+anything (`Fun.moveScript`), whether some call of a script it lets through
+writes back into a variable a later argument moved (`Fun.moveScriptHeld`,
+what O010 and O017 refuse, which `Fun.runScriptMoves_move` takes as given),
+and how the script run moving what reads take ended (`Fun.runScriptMoves`),
+as a `run`'s `end` says. A `drops` is each
 function the script declares at its top level, with its body's statements
 in the order the Rust's ownership analysis numbers them
 (`Fun.scriptFunKinds`), and what each point of it drops (`Fun.scriptDrops`),
@@ -134,6 +137,7 @@ def answer (q : Json) : Except String Json := do
           ("moves", match Fun.moveScript ss with
             | .some c => Json.str c
             | .none => Json.null),
+          ("held", Json.bool (Fun.moveScriptHeld ss)),
           ("run", match (Fun.runScriptMoves 10000 100 ss).result with
             | .ok _ => "ok"
             | .error s => s.name)]

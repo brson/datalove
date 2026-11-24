@@ -1251,6 +1251,8 @@ theorem evalCall_init : ∀ (n : Nat) (Γ : Ctx) (f : String) (args : List (Opti
       | ok θ =>
         by_cases hg : groundArgs θ = true
         · simp only [show (!groundArgs θ) = false by simp [hg], Bool.false_eq_true, ↓reduceIte]
+          split
+          · exact IT.wrong
           have hms : (sig.params.map fun (m, t) => (m, t.inst θ)).map (·.1) = sig.params.map (·.1) := by
             simp [List.map_map, Function.comp_def]
           refine IT.bind' (evalArgs_init n _ args _ σ σ1 hs (hms ▸ h1)) hs1 (fun vals ρ1 hv hfr1 hρ1 => ?_)

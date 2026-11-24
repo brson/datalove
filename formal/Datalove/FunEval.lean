@@ -607,6 +607,11 @@ def evalCall (env : InferEnv) (call : CallFn) : Nat → Ctx → String → List 
     match Γ.sigs.lookup f, decided (env.call Γ f args expected) with
     | some sig, .ok θ =>
       if !groundArgs θ then throw (.unsupported .recTypeArg)
+      -- A type argument its bound refuses, or a type parameter nothing
+      -- decided, which the checker refuses (F092, F101): a form a checked
+      -- call never has, and one the ownership proofs, which take no typing,
+      -- need to know a call never runs with.
+      else if !(boundsHold Γ sig.tparams θ && allDecided sig.tparams θ) then throw .wrong
       else do
         let ps := sig.params.map fun (m, t) => (m, t.inst θ)
         let vals ← evalArgs env call n Γ args ps
