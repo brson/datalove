@@ -2,17 +2,11 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use crate::lookup::{LookupMap, LookupSet};
-use crate::package2::{PackageName, Package, PackageModule, ModuleName};
+use crate::package2::{Package, PackageModule, PackageWorld, ModuleName};
 
 pub type ImportSpace = String;
 pub type PackageAlias = String;
 pub type ModuleAlias = String;
-
-#[salsa::tracked]
-pub struct PackageWorldMap<'db> {
-    #[returns(ref)]
-    pub map: BTreeMap<ImportSpace, BTreeMap<PackageName, Package<'db>>>,
-}
 
 pub type ImportDemand = (ImportSpace, PackageAlias, ModuleAlias);
 
@@ -51,12 +45,12 @@ pub enum ValidationError {
 #[salsa::tracked(returns(copy))]
 pub fn resolve_package_world<'db>(
     db: &'db dyn crate::Db,
-    package_world_map: PackageWorldMap<'db>,
+    package_world: PackageWorld<'db>,
     import_demand_map: ImportDemandMap<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
-    let module_map = package_world_map.module_map(db);
+    let module_map = package_world.module_map(db);
     let mut module_edges: LookupMap<PackageModule<'db>, BTreeMap<ImportDemand, ResolvedPackageModule<'db>>> = default();
-    for package_world_record in package_world_map.flatten_iter(db) {
+    for package_world_record in package_world.flatten_iter(db) {
         let PackageWorldRecord { package_module, .. } = package_world_record;
         let mut module_deps = BTreeMap::new();
         let import_demands = &import_demand_map.map(db)[&package_module];
@@ -179,12 +173,12 @@ pub struct PackageWorldRecord<'db> {
     pub package_module: PackageModule<'db>,
 }
 
-impl<'db> PackageWorldMap<'db> {
+impl<'db> PackageWorld<'db> {
     fn module_map(
         &self,
         db: &'db dyn crate::Db,
     ) -> BTreeMap<ImportSpace, BTreeMap<ModuleName, PackageModule<'db>>> {
-        self.map(db).iter()
+        self.libraries(db).iter()
             .map(|(import_space, packages)| -> (ImportSpace, BTreeMap<_, _>) {
                 (
                     import_space.S(),
@@ -204,7 +198,7 @@ impl<'db> PackageWorldMap<'db> {
         &self,
         db: &'db dyn crate::Db,
     ) -> impl Iterator<Item = PackageWorldRecord<'db>> {
-        let map = self.map(db);
+        let map = self.libraries(db);
         map.iter()
             .flat_map(move |(import_space, packages)| {
                 packages.iter().flat_map(move |(package_name, package)| {
@@ -246,8 +240,8 @@ use crate::input::Source;
 #[salsa::tracked(returns(copy))]
 fn test_map<'db>(
     db: &'db dyn crate::Db,
-) -> PackageWorldMap<'db> {
-    PackageWorldMap::new(
+) -> PackageWorld<'db> {
+    PackageWorld::new(
         db,
         BTreeMap::from([
             (S("main"), BTreeMap::from([
@@ -309,7 +303,7 @@ fn test_map<'db>(
 }
 
 #[test]
-fn package_world_map_iter_lazy() {
+fn package_world_iter_lazy() {
     let ref db = crate::Database::default();
     let map = test_map(db);
     let expected = vec![
@@ -331,7 +325,7 @@ fn package_world_map_iter_lazy() {
 #[salsa::tracked]
 struct TestInput<'db> {
     #[returns(copy)]
-    package_world_map: PackageWorldMap<'db>,
+    package_world: PackageWorld<'db>,
     #[returns(copy)]
     import_demand_map: ImportDemandMap<'db>,
 }
@@ -342,7 +336,7 @@ struct TestInput<'db> {
 fn test_input_unresolvable<'db>(
     db: &'db dyn crate::Db,
 ) -> TestInput<'db> {
-    let package_world_map = PackageWorldMap::new(
+    let package_world = PackageWorld::new(
         db,
         BTreeMap::from([
             (S("main"), BTreeMap::from([
@@ -363,7 +357,7 @@ fn test_input_unresolvable<'db>(
             ])),
         ]),
     );
-    let module_map = package_world_map.module_map(db);
+    let module_map = package_world.module_map(db);
     let import_demand_map = ImportDemandMap::new(
         db,
         [
@@ -372,7 +366,7 @@ fn test_input_unresolvable<'db>(
             ]),
         ].into_iter().collect(),
     );
-    TestInput::new(db, package_world_map, import_demand_map)
+    TestInput::new(db, package_world, import_demand_map)
 }
 
 #[test]
@@ -381,7 +375,7 @@ fn test_unresolved_import() {
     let test_input = test_input_unresolvable(db);
     let resolved = resolve_package_world(
         db,
-        test_input.package_world_map(db),
+        test_input.package_world(db),
         test_input.import_demand_map(db),
     );
     let unresolved_expected = vec![
@@ -414,7 +408,7 @@ fn test_unresolved_import() {
 fn test_input_cycle<'db>(
     db: &'db dyn crate::Db,
 ) -> TestInput<'db> {
-    let package_world_map = PackageWorldMap::new(
+    let package_world = PackageWorld::new(
         db,
         BTreeMap::from([
             (S("sys"), BTreeMap::from([
@@ -451,7 +445,7 @@ fn test_input_cycle<'db>(
             ])),
         ]),
     );
-    let package_core = package_world_map.map(db)["sys"]["core"];
+    let package_core = package_world.libraries(db)["sys"]["core"];
     let module_core = package_core.modules(db)["core"];
     let module_a = package_core.modules(db)["a"];
     let module_b = package_core.modules(db)["b"];
@@ -469,7 +463,7 @@ fn test_input_cycle<'db>(
             ]),
         ].into_iter().collect(),
     );
-    TestInput::new(db, package_world_map, import_demand_map)
+    TestInput::new(db, package_world, import_demand_map)
 }
 
 #[test]
@@ -478,7 +472,7 @@ fn test_cycles() {
     let test_input = test_input_cycle(db);
     let resolved = resolve_package_world(
         db,
-        test_input.package_world_map(db),
+        test_input.package_world(db),
         test_input.import_demand_map(db),
     );
 

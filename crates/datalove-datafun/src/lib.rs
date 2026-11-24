@@ -18,7 +18,7 @@ pub use salsa::Database as Db;
 pub use datalove_datafun_pkg::{
     Package, PackageModule, PackageName, ModuleName,
     PackageWorld, PackageWorldConfig, load_world,
-    package_world_map, import_from_loader,
+    import_from_loader,
     to_module_graph,
     // Re-export submodules for access to types.
     package, package_load, package_load_worldfile,

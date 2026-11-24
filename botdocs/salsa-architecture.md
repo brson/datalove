@@ -64,8 +64,8 @@ own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 3 | `Source`, a path's text, changed with `set_text`; `ScriptUnit`, a script unit and its link to the unit before it, changed with `set_prev` when a unit is spliced in or out; and `ChunkPolicy`. |
 | `#[salsa::interned]` | 15 | Deduplicated by content: `InternedText`, `ModuleId`, `ModuleIdTable`, `Module`, `ModuleGraph`, `ModuleFuncIds`, `Package`, `PackageModule`, `PackageWorld`, `CompileRoots`, `InlineModules`, `DataFileQuery`, `ScriptEnv`, `ReachableFuncIds`, `RiderSources`. |
-| `#[salsa::tracked]` struct | 36 | Computed values with an identity. Two have a `#[tracked]` field; see below. |
-| `#[salsa::tracked]` fn | 133 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
+| `#[salsa::tracked]` struct | 35 | Computed values with an identity. Two have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` fn | 132 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
 ### The two structs with a tracked field, and why
 
@@ -118,7 +118,7 @@ look at each module; they must not look at each function.
 | `compute_func_id_map` | compiler | `FuncIdMap`: every function's `(IrModuleId, FuncId)` |
 | `func_id_lookup` | compiler | the same as a lookup map, memoized so it is built once per revision rather than once per const |
 | `graph_declares_consts` | compiler | whether phase 5b has anything to do |
-| `dependencies_of`, `import_demands`, `package_world_map`, `resolve_package_world` | datafun/pkg | package resolution |
+| `dependencies_of`, `import_demands`, `resolve_package_world` | datafun/pkg | package resolution |
 
 ### A handful of memos: keyed on a phase's arguments
 

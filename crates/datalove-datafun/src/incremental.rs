@@ -497,12 +497,10 @@ fn dependencies_from_roots<'db>(
     package_world: datalove_datafun_pkg::PackageWorld<'db>,
     roots: CompileRoots<'db>,
 ) -> BTreeMap<String, BTreeSet<String>> {
-    let world_map = datalove_datafun_pkg::package_world_map(db, package_world);
-
     // Every module the world has, by the path a `require` names it with. Built
     // from the package world rather than parsed, so this is a few string
     // formats -- 0.01ms for the system library.
-    let by_path: BTreeMap<String, Module<'db>> = world_map.flatten_iter(db)
+    let by_path: BTreeMap<String, Module<'db>> = package_world.flatten_iter(db)
         .map(|record| {
             let path = format!(
                 "{}/{}/{}",

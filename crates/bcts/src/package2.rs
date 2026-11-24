@@ -2,7 +2,7 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use crate::input::Source;
-use crate::package_resolve2::{ImportSpace, PackageWorldMap};
+use crate::package_resolve2::ImportSpace;
 
 pub type PackageName = String;
 pub type ModuleName = String;
@@ -45,14 +45,5 @@ pub struct PackageModule<'db> {
 pub struct PackageWorld<'db> {
     #[returns(ref)]
     pub libraries: BTreeMap<ImportSpace, BTreeMap<PackageName, Package<'db>>>,
-}
-
-/// Create a PackageWorldMap from a PackageWorld.
-#[salsa::tracked(returns(copy))]
-pub fn package_world_map<'db>(
-    db: &'db dyn salsa::Database,
-    package_world: PackageWorld<'db>,
-) -> PackageWorldMap<'db> {
-    PackageWorldMap::new(db, package_world.libraries(db).C())
 }
 

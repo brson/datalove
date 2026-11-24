@@ -32,8 +32,7 @@ pub fn resolve_package_world_with_imports<'db>(
     package_world: PackageWorld<'db>,
     import_demand_map: ImportDemandMap<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
-    let package_world_map = crate::package::package_world_map(db, package_world);
-    resolve_package_world(db, package_world_map, import_demand_map)
+    resolve_package_world(db, package_world, import_demand_map)
 }
 
 /// Result of converting PackageWorldModuleGraph to ModuleGraph.
@@ -57,8 +56,7 @@ pub fn to_module_graph<'db>(
     let mut pkg_module_to_path: LookupMap<PackageModule<'db>, String> = LookupMap::new();
 
     // Traverse the package world to build paths.
-    let world_map = crate::package::package_world_map(db, package_world);
-    for (import_space, packages) in world_map.map(db) {
+    for (import_space, packages) in package_world.libraries(db) {
         for (package_name, package) in packages {
             for (module_name, package_module) in package.modules(db) {
                 let path = format!("{}/{}/{}", import_space, package_name, module_name);

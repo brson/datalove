@@ -57,11 +57,10 @@ fn one_run(modules: &[(String, String)]) -> Steps {
 
     let t = Instant::now();
     let package_world = datafun::package::import_with_sources(&db, libraries);
-    let map = datafun::package_world_map(&db, package_world);
     steps.intern = t.elapsed();
 
     let t = Instant::now();
-    let demands = datafun::import_demands::import_demands(&db, map);
+    let demands = datafun::import_demands::import_demands(&db, package_world);
     steps.demands = t.elapsed();
 
     let t = Instant::now();

@@ -7,7 +7,8 @@
 use rmx::prelude::*;
 
 use bct::module_graph::{Module, ModuleId};
-use bct::package_resolve2::{ImportDemand, ImportDemandMap, PackageWorldMap};
+use bct::package2::PackageWorld;
+use bct::package_resolve2::{ImportDemand, ImportDemandMap};
 
 use datalove_datafun_parser as parser;
 use datalove_datafun_ast::ast;
@@ -15,10 +16,10 @@ use datalove_datafun_ast::ast;
 #[salsa::tracked(returns(copy))]
 pub fn import_demands<'db>(
     db: &'db dyn salsa::Database,
-    package_world_map: PackageWorldMap<'db>,
+    package_world: PackageWorld<'db>,
 ) -> ImportDemandMap<'db> {
     let mut map = bct::lookup::LookupMap::new();
-    for record in package_world_map.flatten_iter(db) {
+    for record in package_world.flatten_iter(db) {
         let package_module = record.package_module;
 
         // The `Module` phase 1 will use, built from the path resolution already

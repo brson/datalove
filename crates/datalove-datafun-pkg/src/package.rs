@@ -9,7 +9,7 @@ use bct::input::Source;
 use salsa::Durability;
 pub use bct::package2::{
     Package, PackageModule, PackageName, ModuleName,
-    PackageWorld, package_world_map,
+    PackageWorld,
 };
 
 use crate::package_load as pl;
