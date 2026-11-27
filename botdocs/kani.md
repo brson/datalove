@@ -3,7 +3,8 @@
 What the runtime's arithmetic is proved of under Kani, how to run and write
 the harnesses, and what they cannot say. Written November 2026, when the
 first harnesses went in: the layout functions, the byte copies, the
-allocator's size classes and the big integer's limb arithmetic.
+allocator's size classes and the big integer's limb arithmetic. The value
+layouts, shared since with the IR, came after.
 
 ## Contents
 
@@ -57,7 +58,10 @@ it calls free of overflow and invalid access on those inputs.
 |---------|------|--------|-------|------|
 | `align_up_rounds_up` | `crates/datalove-rtdt/src/layout.rs` | `align_up` lands on a multiple of the alignment, at or past the value, less than one alignment past | any power of two to a page; values short of overflow | under a second |
 | `payload_offsets_follow_their_tags` | same | the option, enum and result payload offsets follow their tags, aligned, with no spare padding | any alignment to a page | under a second |
-| `map_internal_node_is_tight`, `map_leaf_node_is_tight`, `set_internal_node_is_tight`, `set_leaf_node_is_tight` | same | each node part follows the last, aligned to itself, with less than one alignment of padding; the node's alignment is the largest part's and its size a multiple of it | key and value sizes to a mebibyte, any alignment to a page | about a second each |
+| `sequence_pads_minimally` | same | a tuple's or struct's parts each follow the last, aligned to itself, with less than one alignment of padding; the whole is aligned to its most aligned part and padded only to it | up to four parts, sizes to a mebibyte, any alignment to a page | 3 seconds |
+| `enum_pads_minimally` | same | the same of an enum's discriminant and largest payload, and every variant's payload, at its own offset, fits | up to three payloads | 2 seconds |
+| `option_pads_minimally`, `result_pads_minimally` | same | the same of a tag and its payload; a result holds the ok value and the error both, each aligned | any payload | under a second |
+| `map_internal_node_pads_minimally`, `map_leaf_node_pads_minimally`, `set_internal_node_pads_minimally`, `set_leaf_node_pads_minimally` | same | each node part follows the last, aligned to itself, with less than one alignment of padding; the node's alignment is the largest part's and its size a multiple of it | key and value sizes to a mebibyte, any alignment to a page | about a second each |
 | `table_columns_follow_one_another` | same | a table's columns follow one another in its data allocation, each aligned, and the allocation holds the last and is a multiple of the table's alignment; a capacity of zero allocates nothing | three columns to a kilobyte each, capacity to a thousand | 12 seconds |
 | `copy_value_copies_the_value` | `crates/datalove-rtdt/src/bytes.rs` | the copy writes the source's bytes to the destination and changes nothing else, with source and destination overlapping by any amount in either direction | sizes to 32, in a 64-byte buffer | 4 minutes |
 | `swap_value_swaps_the_values` | same | the swap exchanges the two values' bytes and leaves the rest | sizes to 40 | 35 seconds |
@@ -70,10 +74,24 @@ it calls free of overflow and invalid access on those inputs.
 | `mul_magnitude_into_stays_in_bounds` | same | a wider product writes in bounds, overflows nothing and panics nowhere | two limbs by two | 6 seconds |
 | `div_magnitude_into_by_a_limb_stays_in_bounds` | same | division by a limb writes in bounds, overflows nothing, panics nowhere, and leaves no leading zero | dividends to three limbs | 3 seconds |
 
-The node harnesses prove more than that nothing overlaps. With each part
-following the last by less than one alignment, the layout is the unique one
-the alignments allow, so a second computation of it, the C backend's or a
-writer of descriptors', has one answer to agree with.
+"Pads minimally" is not "packed". Every part is aligned, and a `u8`
+followed by a `u64` still has seven bytes between them. What the harnesses
+rule out is more padding than alignment needs: each part starts at the first
+aligned offset past the last, which is the C rule. The order is the declared
+one, never rearranged to save space. With each part following the last by
+less than one alignment, the layout is the unique one the order and the
+alignments allow, so a second computation of it, a backend's or a writer of
+descriptors', has one answer to agree with.
+
+The value layouts are the ones both sides use. `datalove_datafun_ir::layout`
+used to carry its own copy of the tuple, struct, enum, option and result
+arithmetic, held to the runtime's only by `layout_conformance_tests` over a
+corpus. Now it calls the pure functions in `datalove_rtdt::layout`
+(`sequence_layout`, `enum_layout_of`, `option_layout_of`,
+`result_layout_of`), which take sizes and alignments rather than
+descriptors, and the runtime's descriptor walk calls them too. Proving them
+covers both, and the conformance tests are left checking the walk from a
+type to its parts.
 
 The big integer's arithmetic was refactored to make it provable: each
 operation now writes into a limb slice the caller allocated and returns how
@@ -85,7 +103,12 @@ the borrow and carry logic that `set a += b` runs is proved too.
 The harnesses were held to planted faults before they went in: a 12-byte
 swap changed to move 8 bytes, the value alignment dropped from the leaf's
 layout, and an in-place subtraction that forgets to borrow. Each failed the
-harness that covers it.
+harness that covers it. The value layout harnesses were held to an
+aggregate not padded at the end, an enum sized to its last payload rather
+than its largest, and a result sized without the error. The first draft of
+the result harness passed the last of these: its expected payload was built
+the way the code builds it, so it agreed with a wrong one too. It now checks
+that each arm fits.
 
 ### Where the arithmetic proofs stop
 
@@ -166,7 +189,9 @@ What was learned writing the first ones:
   largest fixed case of a copy, the page, the small-allocation limit. A
   reader of a passing harness should know what it does not say.
 - **Hold a new harness to a planted fault** before trusting it. A harness
-  whose assertions are all implied by its assumptions passes everything.
+  whose assertions are all implied by its assumptions passes everything, and
+  so does one whose expected value is computed the way the code computes
+  it. State what the result must satisfy, not how to build it.
 - **No second multiplier or divider in the spec.** A check of the form
   `value(out) == value(a) * value(b)` is a multiplier equivalence, and the
   solver will not finish it past 32 bits. Prove the value where the operands
@@ -186,11 +211,11 @@ In rough order of what to do next:
   `#[kani::stub]`, proving blocks aligned and inside their page and the
   list last-in first-out. A proof with the stub says nothing about the real
   mappings.
-- **The IR's layouts.** `datalove_datafun_ir::layout` is what the backends
-  compile against, and it is pure Rust the same harnesses would take.
-  `layout_conformance_tests` holds it to the runtime's over a corpus; a
-  harness would hold it to the same tightness over every size, which with
-  the runtime's harnesses makes the two agree wherever both are defined.
+- **The big integer's values, at a narrower limb.** Made generic over the
+  limb, the schoolbook product and Knuth's division could be held to their
+  values at `u8` limbs, where the spec's multiplier and divider are small
+  enough to solve. That proves the algorithm rather than its `u64`
+  instantiation, but the algorithm is most of what can go wrong.
 - **Function contracts.** Kani's `#[kani::requires]` and `#[kani::ensures]`
   put a harness's assumptions on the function itself, where they document
   it and let callers be checked against it. They are behind

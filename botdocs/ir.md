@@ -230,6 +230,12 @@ functions in both authorities:
 Also exported: `align_up`, `aggregate_layout`, `aggregate_field_offsets`,
 `enum_layout`, `enum_variant_offsets`, `option_layout`, `result_layout`.
 
+The arithmetic behind all of these is the runtime's. `ir::layout` turns an
+`IrType` into the layouts of its parts and hands them to the pure functions
+in `rtdt::layout`: `sequence_layout`, `enum_layout_of`, `option_layout_of`
+and `result_layout_of`. The runtime computes from descriptors with the same
+functions, and Kani proves them for every size; see [kani.md](kani.md).
+
 **A container's layout does not depend on what it holds.** A `[u32]` and a
 `[string]` occupy the same slot, and so do the set, map and table cases. A
 tuple is the opposite case: `(u32, u32)` and `(u8, u32)` are different shapes.

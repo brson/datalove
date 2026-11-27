@@ -1229,7 +1229,10 @@ Generated code writes at offsets from the first and the runtime reads at
 offsets from the second, so a disagreement corrupts values rather than
 failing a build. `layout_conformance_tests` walks a corpus of types and
 checks size, alignment, field offsets, variant payload offsets and tag
-payload offsets in both directions.
+payload offsets in both directions. The two share the arithmetic itself:
+both call the pure functions in `rtdt::layout`, which Kani proves for every
+size (botdocs/kani.md), so the corpus is checking the walk from a type to
+its parts.
 
 Nothing should open-code the arithmetic. Payload offsets have named
 functions in both authorities:

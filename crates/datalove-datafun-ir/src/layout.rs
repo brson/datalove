@@ -7,42 +7,21 @@
 //! reads back through a `TyDesc`, so a disagreement is a wrong read, not a
 //! failed compile.
 //!
-//! The two are kept in step by `layout_conformance_tests`, which walks a
-//! corpus of types and checks that both agree field by field.
+//! The arithmetic is the runtime's: tuples, structs, enums, options and
+//! results are laid out by the pure functions in `datalove_rtdt::layout`,
+//! which are proved under Kani (botdocs/kani.md), so what is left here is the
+//! walk from an `IrType` to the layouts of its parts.
+//! `layout_conformance_tests` checks the walk against the descriptors' over a
+//! corpus of types.
 
 use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 
+use rtdt::layout as rtl;
+
 use crate::{CursorKind, IrType};
 
-/// Size and alignment of a type, in bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TypeLayout {
-    pub size: u32,
-    pub align: u32,
-}
-
-/// Round `value` up to a multiple of `align`, which must be a power of two.
-#[inline]
-pub fn align_up(value: u32, align: u32) -> u32 {
-    (value + align - 1) & !(align - 1)
-}
-
-/// Discriminant size and alignment for an enum.
-const ENUM_DISCRIMINANT_SIZE: u32 = 4;
-const ENUM_DISCRIMINANT_ALIGN: u32 = 4;
-
-/// Tag size for `?T` and `!T`.
-const OPTION_TAG_SIZE: u32 = 1;
-const RESULT_TAG_SIZE: u32 = 1;
-
-/// Layout of the error payload carried by the `Err` arm of a `!T`.
-fn error_layout() -> TypeLayout {
-    TypeLayout {
-        size: std::mem::size_of::<rtdt::Error>() as u32,
-        align: std::mem::align_of::<rtdt::Error>() as u32,
-    }
-}
+pub use rtl::{align_up, TypeLayout};
 
 /// The layout of a pointer: what a dynamic type is laid out as, and a
 /// reference to one.
@@ -142,57 +121,21 @@ fn struct_layout<T>() -> TypeLayout {
 /// Layout of a tuple or struct: fields in order, each at its own alignment.
 pub fn aggregate_layout(fields: &[IrType]) -> TypeLayout {
     assert_static(fields.iter(), "a tuple or struct");
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-
-    for field in fields {
-        let field_layout = layout_of(field);
-        offset = align_up(offset, field_layout.align);
-        offset += field_layout.size;
-        max_align = max_align.max(field_layout.align);
-    }
-
-    TypeLayout {
-        size: align_up(offset, max_align),
-        align: max_align,
-    }
+    rtl::sequence_layout(fields.iter().map(layout_of), |_| ())
 }
 
 /// Byte offset of each field of a tuple or struct.
 pub fn aggregate_field_offsets(fields: &[IrType]) -> Vec<u32> {
     assert_static(fields.iter(), "a tuple or struct");
     let mut offsets = Vec::with_capacity(fields.len());
-    let mut offset = 0u32;
-
-    for field in fields {
-        let field_layout = layout_of(field);
-        offset = align_up(offset, field_layout.align);
-        offsets.push(offset);
-        offset += field_layout.size;
-    }
-
+    rtl::sequence_layout(fields.iter().map(layout_of), |offset| offsets.push(offset));
     offsets
 }
 
 /// Layout of an enum: a u32 discriminant followed by the largest payload.
 pub fn enum_layout(variants: &[(String, Option<IrType>)]) -> TypeLayout {
     assert_static(variants.iter().filter_map(|(_, p)| p.as_ref()), "an enum");
-    let mut max_payload_size = 0u32;
-    let mut max_payload_align = ENUM_DISCRIMINANT_ALIGN;
-
-    for (_, payload) in variants {
-        if let Some(payload_ty) = payload {
-            let payload_layout = layout_of(payload_ty);
-            max_payload_size = max_payload_size.max(payload_layout.size);
-            max_payload_align = max_payload_align.max(payload_layout.align);
-        }
-    }
-
-    let payload_offset = align_up(ENUM_DISCRIMINANT_SIZE, max_payload_align);
-    TypeLayout {
-        size: align_up(payload_offset + max_payload_size, max_payload_align),
-        align: max_payload_align,
-    }
+    rtl::enum_layout_of(variants.iter().filter_map(|(_, p)| p.as_ref()).map(layout_of)).layout
 }
 
 /// Byte offset of each enum variant's payload.
@@ -202,36 +145,25 @@ pub fn enum_layout(variants: &[(String, Option<IrType>)]) -> TypeLayout {
 /// differing offsets. Variants without a payload get 0.
 pub fn enum_variant_offsets(variants: &[(String, Option<IrType>)]) -> Vec<u32> {
     assert_static(variants.iter().filter_map(|(_, p)| p.as_ref()), "an enum");
-    variants.iter().map(|(_, payload)| {
-        match payload {
-            Some(payload_ty) => enum_payload_offset(payload_ty),
-            None => 0,
-        }
-    }).collect()
+    variants.iter().map(|(_, payload)| payload.as_ref().map_or(0, enum_payload_offset)).collect()
 }
 
 /// Byte offset of an enum variant's payload, given its payload type.
 pub fn enum_payload_offset(payload_ty: &IrType) -> u32 {
     assert_static(std::iter::once(payload_ty), "an enum payload");
-    align_up(ENUM_DISCRIMINANT_SIZE, layout_of(payload_ty).align)
+    rtl::enum_payload_offset(layout_of(payload_ty).align)
 }
 
 /// Byte offset of the payload of a `?T`.
 pub fn option_payload_offset(inner: &IrType) -> u32 {
     assert_static(std::iter::once(inner), "an option");
-    align_up(OPTION_TAG_SIZE, layout_of(inner).align)
+    rtl::option_layout_of(layout_of(inner)).payload_offset
 }
 
 /// Layout of a `?T`: a tag byte followed by the payload.
 pub fn option_layout(inner: &IrType) -> TypeLayout {
     assert_static(std::iter::once(inner), "an option");
-    let inner_layout = layout_of(inner);
-    let payload_offset = align_up(OPTION_TAG_SIZE, inner_layout.align);
-    let align = inner_layout.align.max(1);
-    TypeLayout {
-        size: align_up(payload_offset + inner_layout.size, align),
-        align,
-    }
+    rtl::option_layout_of(layout_of(inner)).layout
 }
 
 /// Byte offset of the payload of a `!T`.
@@ -240,25 +172,13 @@ pub fn option_layout(inner: &IrType) -> TypeLayout {
 /// as the ok payload.
 pub fn result_payload_offset(ok_ty: &IrType) -> u32 {
     assert_static(std::iter::once(ok_ty), "a result");
-    let align = layout_of(ok_ty).align.max(error_layout().align);
-    align_up(RESULT_TAG_SIZE, align)
+    rtl::result_layout_of(layout_of(ok_ty)).payload_offset
 }
 
 /// Layout of a `!T`: a tag byte followed by the larger of ok and error.
 pub fn result_layout(ok_ty: &IrType) -> TypeLayout {
     assert_static(std::iter::once(ok_ty), "a result");
-    let ok_layout = layout_of(ok_ty);
-    let err_layout = error_layout();
-
-    let max_payload_size = ok_layout.size.max(err_layout.size);
-    let max_payload_align = ok_layout.align.max(err_layout.align);
-
-    let payload_offset = align_up(RESULT_TAG_SIZE, max_payload_align);
-    let align = max_payload_align.max(1);
-    TypeLayout {
-        size: align_up(payload_offset + max_payload_size, align),
-        align,
-    }
+    rtl::result_layout_of(layout_of(ok_ty)).layout
 }
 
 #[cfg(test)]

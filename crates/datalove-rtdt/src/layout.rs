@@ -9,12 +9,38 @@ pub fn align_up(value: u32, align: u32) -> u32 {
     (value + align - 1) & !(align - 1)
 }
 
+/// Size and alignment of a value, in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TypeLayout {
+    pub size: u32,
+    pub align: u32,
+}
+
+/// The layout of a sum: its size and alignment, and where its payload starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SumLayout {
+    pub layout: TypeLayout,
+    pub payload_offset: u32,
+}
+
+/// The size of an enum's discriminant, a `u32`, which is also its alignment.
+pub const ENUM_DISCRIMINANT_SIZE: u32 = 4;
+
+/// The size of the tag of a `?T` or `!T`, a `u8`.
+pub const TAG_SIZE: u32 = 1;
+
+/// The layout of the error a `!T` carries in its `Err` arm.
+pub const ERROR_LAYOUT: TypeLayout = TypeLayout {
+    size: std::mem::size_of::<Error>() as u32,
+    align: std::mem::align_of::<Error>() as u32,
+};
+
 /// Compute the payload offset for an Option<T> type.
 ///
 /// The payload starts after the tag (u8), aligned to the inner type's alignment.
 #[inline]
 pub fn option_payload_offset(inner_align: u32) -> u32 {
-    align_up(1, inner_align)
+    align_up(TAG_SIZE, inner_align)
 }
 
 /// Compute the payload offset for an enum variant, given the payload's
@@ -23,7 +49,7 @@ pub fn option_payload_offset(inner_align: u32) -> u32 {
 /// The payload starts after the u32 discriminant, aligned to the payload.
 #[inline]
 pub fn enum_payload_offset(payload_align: u32) -> u32 {
-    align_up(4, payload_align)
+    align_up(ENUM_DISCRIMINANT_SIZE, payload_align)
 }
 
 /// Compute the payload offset for a Result<T> type.
@@ -32,232 +58,120 @@ pub fn enum_payload_offset(payload_align: u32) -> u32 {
 /// the ok type's alignment and the error alignment.
 #[inline]
 pub fn result_payload_offset(ok_align: u32) -> u32 {
-    let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const TyDesc>()) as u32;
-    let max_payload_align = ok_align.max(error_align);
-    align_up(1, max_payload_align)
+    align_up(TAG_SIZE, ok_align.max(ERROR_LAYOUT.align))
+}
+
+/// Lay out parts in order, each at the first offset past the last that its
+/// alignment allows.
+///
+/// This is the layout of a tuple or struct, and the C rule: `place` is given
+/// each part's offset in turn, and the whole is aligned to its most aligned
+/// part, at least 1, and sized to end on that alignment.
+pub fn sequence_layout(parts: impl IntoIterator<Item = TypeLayout>, mut place: impl FnMut(u32)) -> TypeLayout {
+    let mut offset = 0u32;
+    let mut align = 1u32;
+    for part in parts {
+        offset = align_up(offset, part.align);
+        place(offset);
+        offset += part.size;
+        align = align.max(part.align);
+    }
+    TypeLayout { size: align_up(offset, align), align }
+}
+
+/// Lay out an enum: a `u32` discriminant, then room for its largest payload.
+///
+/// The shared payload offset is the one the most aligned payload needs; a
+/// variant's own payload sits at `enum_payload_offset` of its alignment,
+/// which is no later.
+pub fn enum_layout_of(payloads: impl IntoIterator<Item = TypeLayout>) -> SumLayout {
+    let mut size = 0u32;
+    let mut align = ENUM_DISCRIMINANT_SIZE;
+    for payload in payloads {
+        size = size.max(payload.size);
+        align = align.max(payload.align);
+    }
+    tagged_layout(ENUM_DISCRIMINANT_SIZE, TypeLayout { size, align })
+}
+
+/// Lay out a `?T`: a tag byte, then the payload.
+pub fn option_layout_of(inner: TypeLayout) -> SumLayout {
+    tagged_layout(TAG_SIZE, inner)
+}
+
+/// Lay out a `!T`: a tag byte, then room for the larger of the ok value and
+/// the error, at the alignment of the more aligned.
+pub fn result_layout_of(ok: TypeLayout) -> SumLayout {
+    tagged_layout(TAG_SIZE, TypeLayout {
+        size: ok.size.max(ERROR_LAYOUT.size),
+        align: ok.align.max(ERROR_LAYOUT.align),
+    })
+}
+
+/// A tag of `tag_size` bytes followed by a payload, as one sequence.
+fn tagged_layout(tag_size: u32, payload: TypeLayout) -> SumLayout {
+    let tag = TypeLayout { size: tag_size, align: 1 };
+    let mut payload_offset = 0;
+    let layout = sequence_layout([tag, payload], |offset| payload_offset = offset);
+    SumLayout { layout, payload_offset }
+}
+
+/// The size and alignment a descriptor gives a value.
+fn layout_of_tydesc(tydesc: TyDescRef) -> TypeLayout {
+    TypeLayout { size: tydesc.size(), align: tydesc.align() }
 }
 
 /// Compute the memory layout for a tuple type.
-///
-/// This function implements the standard struct layout algorithm:
-/// 1. Start at offset 0 with alignment 1
-/// 2. For each field in order:
-///    - Align current offset to field's alignment requirement
-///    - Record this as the field's offset
-///    - Advance offset by field's size
-///    - Track maximum alignment seen
-/// 3. Final size is current offset aligned up to maximum alignment
-/// 4. Overall alignment is the maximum alignment
 pub fn compute_tuple_layout(tydesc: TyDescRef) -> TupleLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Tuple);
-
-    let tuple_info = tydesc.tuple_info();
-    let num_fields = tuple_info.num_fields();
-
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    let mut field_offsets = Vec::with_capacity(num_fields as usize);
-
-    for field in tydesc.iter_tuple_fields() {
-        let field_tydesc = field.tydesc();
-        let field_size = field_tydesc.size();
-        let field_align = field_tydesc.align();
-
-        // Align offset to field's alignment requirement.
-        offset = align_up(offset, field_align);
-        field_offsets.push(offset);
-
-        // Advance offset by field size.
-        offset += field_size;
-
-        // Track maximum alignment.
-        max_align = max_align.max(field_align);
-    }
-
-    // Total size must be aligned to the maximum alignment.
-    let total_size = align_up(offset, max_align);
-
-    TupleLayout {
-        size: total_size,
-        align: max_align,
-        field_offsets,
-    }
+    let mut field_offsets = Vec::with_capacity(tydesc.tuple_info().num_fields() as usize);
+    let fields = tydesc.iter_tuple_fields().map(|field| layout_of_tydesc(field.tydesc()));
+    let TypeLayout { size, align } = sequence_layout(fields, |offset| field_offsets.push(offset));
+    TupleLayout { size, align, field_offsets }
 }
 
-/// Compute the memory layout for a struct type.
-///
-/// Struct layout is identical to tuple layout - fields are laid out
-/// sequentially with proper alignment, and the struct is padded to
-/// its natural alignment.
+/// Compute the memory layout for a struct type, which is a tuple's.
 pub fn compute_struct_layout(tydesc: TyDescRef) -> StructLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Struct);
-
-    let struct_info = tydesc.struct_info();
-    let num_fields = struct_info.num_fields();
-
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    let mut field_offsets = Vec::with_capacity(num_fields as usize);
-
-    for field in tydesc.iter_struct_fields() {
-        let field_tydesc = field.tydesc();
-        let field_size = field_tydesc.size();
-        let field_align = field_tydesc.align();
-
-        // Align offset to field's alignment requirement.
-        offset = align_up(offset, field_align);
-        field_offsets.push(offset);
-
-        // Advance offset by field size.
-        offset += field_size;
-
-        // Track maximum alignment.
-        max_align = max_align.max(field_align);
-    }
-
-    // Total size must be aligned to the maximum alignment.
-    let total_size = align_up(offset, max_align);
-
-    StructLayout {
-        size: total_size,
-        align: max_align,
-        field_offsets,
-    }
+    let mut field_offsets = Vec::with_capacity(tydesc.struct_info().num_fields() as usize);
+    let fields = tydesc.iter_struct_fields().map(|field| layout_of_tydesc(field.tydesc()));
+    let TypeLayout { size, align } = sequence_layout(fields, |offset| field_offsets.push(offset));
+    StructLayout { size, align, field_offsets }
 }
 
 /// Compute the memory layout for an enum type.
 ///
-/// Enum layout consists of:
-/// 1. A discriminant (u32) indicating which variant is active
-/// 2. Padding to align the payload
-/// 3. Space for the largest variant payload
-///
-/// All variants share the same payload space, with each variant's
-/// payload starting at its specific offset.
+/// A variant without a payload is given an offset of 0.
 pub fn compute_enum_layout(tydesc: TyDescRef) -> EnumLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Enum);
-
-    let enum_info = tydesc.enum_info();
-    let num_variants = enum_info.num_variants();
-
-    let discriminant_size = 4u32; // u32
-    let discriminant_align = 4u32;
-
-    let mut max_variant_size = 0u32;
-    let mut max_variant_align = discriminant_align;
-    let mut variant_offsets = Vec::with_capacity(num_variants as usize);
-
-    // Find the largest variant to determine payload space needed.
-    for variant in tydesc.iter_enum_variants() {
-        if let Some(payload_tydesc) = variant.payload() {
-            let payload_size = payload_tydesc.size();
-            let payload_align = payload_tydesc.align();
-
-            max_variant_size = max_variant_size.max(payload_size);
-            max_variant_align = max_variant_align.max(payload_align);
-
-            // Each variant's payload starts at the aligned offset after discriminant.
-            let payload_offset = align_up(discriminant_size, payload_align);
-            variant_offsets.push(payload_offset);
-        } else {
-            // No payload - variant has no offset.
-            variant_offsets.push(0);
-        }
-    }
-
-    // Payload starts after discriminant, aligned to max payload alignment.
-    let payload_offset = align_up(discriminant_size, max_variant_align);
-
-    // Total size is payload offset + max payload size, aligned to max alignment.
-    let total_size = align_up(payload_offset + max_variant_size, max_variant_align);
-
+    let payloads = || tydesc.iter_enum_variants().filter_map(|variant| variant.payload()).map(layout_of_tydesc);
+    let SumLayout { layout, payload_offset } = enum_layout_of(payloads());
+    let variant_offsets = tydesc.iter_enum_variants().map(|variant| {
+        variant.payload().map_or(0, |payload| enum_payload_offset(payload.align()))
+    }).collect();
     EnumLayout {
-        size: total_size,
-        align: max_variant_align,
-        discriminant_size,
+        size: layout.size,
+        align: layout.align,
+        discriminant_size: ENUM_DISCRIMINANT_SIZE,
         payload_offset,
         variant_offsets,
     }
 }
 
 /// Compute the memory layout for an Option<T> type.
-///
-/// Option layout consists of:
-/// 1. A tag (u8) indicating None or Some
-/// 2. Padding to align the payload
-/// 3. Space for the inner type T (if Some)
 #[inline]
 pub fn compute_option_layout(tydesc: TyDescRef) -> OptionLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Option);
-
-    let inner_tydesc = tydesc.option_inner_ty();
-
-    let tag_size = 1u32; // u8
-    let tag_align = 1u32;
-
-    let inner_size = inner_tydesc.size();
-    let inner_align = inner_tydesc.align();
-
-    // Payload starts after tag, aligned to inner type's alignment.
-    let payload_offset = align_up(tag_size, inner_align);
-
-    // Overall alignment is max of tag and inner alignment.
-    let overall_align = tag_align.max(inner_align);
-
-    // Total size is payload offset + inner size, aligned to overall alignment.
-    let total_size = align_up(payload_offset + inner_size, overall_align);
-
-    OptionLayout {
-        size: total_size,
-        align: overall_align,
-        tag_size,
-        payload_offset,
-    }
+    let SumLayout { layout, payload_offset } = option_layout_of(layout_of_tydesc(tydesc.option_inner_ty()));
+    OptionLayout { size: layout.size, align: layout.align, tag_size: TAG_SIZE, payload_offset }
 }
 
 /// Compute the memory layout for a Result<T> type.
-///
-/// Result layout consists of:
-/// 1. A tag (u8) indicating Ok or Err
-/// 2. Padding to align the payload
-/// 3. Space for max(T, Error) - whichever is larger
-///
-/// The Ok variant contains T, the Err variant contains Error.
 #[inline]
 pub fn compute_result_layout(tydesc: TyDescRef) -> ResultLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Result);
-
-    let ok_tydesc = tydesc.result_ok_ty();
-
-    let tag_size = 1u32; // u8
-    let tag_align = 1u32;
-
-    let ok_size = ok_tydesc.size();
-    let ok_align = ok_tydesc.align();
-
-    // Error type layout: usize + pointer
-    let error_size = (std::mem::size_of::<usize>() + std::mem::size_of::<*const TyDesc>()) as u32;
-    let error_align = std::mem::align_of::<usize>().max(std::mem::align_of::<*const TyDesc>()) as u32;
-
-    // Payload must accommodate the larger of Ok and Err variants.
-    let max_payload_size = ok_size.max(error_size);
-    let max_payload_align = ok_align.max(error_align);
-
-    // Payload starts after tag, aligned to maximum payload alignment.
-    let payload_offset = align_up(tag_size, max_payload_align);
-
-    // Overall alignment is max of tag and payload alignment.
-    let overall_align = tag_align.max(max_payload_align);
-
-    // Total size is payload offset + max payload size, aligned to overall alignment.
-    let total_size = align_up(payload_offset + max_payload_size, overall_align);
-
-    ResultLayout {
-        size: total_size,
-        align: overall_align,
-        tag_size,
-        payload_offset,
-    }
+    let SumLayout { layout, payload_offset } = result_layout_of(layout_of_tydesc(tydesc.result_ok_ty()));
+    ResultLayout { size: layout.size, align: layout.align, tag_size: TAG_SIZE, payload_offset }
 }
 
 /// Compute the memory layout for a Map internal node.
@@ -797,10 +711,110 @@ mod kani_proofs {
         follows(1, result_payload_offset(align), result_align);
     }
 
+    /// A size and alignment a descriptor can give a value: the size a
+    /// multiple of the alignment, and under a mebibyte.
+    fn any_layout() -> TypeLayout {
+        let align = any_align();
+        TypeLayout { size: any_size(align), align }
+    }
+
+    /// Up to four parts are laid out each after the last, aligned, with
+    /// only the padding alignment needs; the whole is aligned to the most
+    /// aligned part and padded only to that.
+    ///
+    /// Four is past where a mistake in carrying the offset from one part to
+    /// the next would first show. The loops run at most four times.
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn sequence_pads_minimally() {
+        let parts = [any_layout(), any_layout(), any_layout(), any_layout()];
+        let len: usize = kani::any();
+        kani::assume(len <= parts.len());
+        let parts = &parts[..len];
+
+        let mut offsets = [0u32; 4];
+        let mut placed = 0;
+        let whole = sequence_layout(parts.iter().copied(), |offset| {
+            offsets[placed] = offset;
+            placed += 1;
+        });
+        assert!(placed == len);
+
+        let mut end = 0;
+        let mut align = 1;
+        for (part, offset) in parts.iter().zip(offsets) {
+            follows(end, offset, part.align);
+            end = offset + part.size;
+            align = align.max(part.align);
+        }
+        assert!(whole.align == align);
+        follows(end, whole.size, whole.align);
+    }
+
+    /// That a sum's payload follows its tag of `tag_size` bytes at the
+    /// payload's alignment, and the whole is padded only to that.
+    fn sum_follows(sum: SumLayout, tag_size: u32, payload: TypeLayout) {
+        follows(tag_size, sum.payload_offset, payload.align);
+        assert!(sum.layout.align == payload.align);
+        follows(sum.payload_offset + payload.size, sum.layout.size, sum.layout.align);
+    }
+
+    /// An enum of up to three payloads holds its largest after the
+    /// discriminant, and each variant's own payload, at the offset its
+    /// alignment gives, fits inside it.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn enum_pads_minimally() {
+        let payloads = [any_layout(), any_layout(), any_layout()];
+        let len: usize = kani::any();
+        kani::assume(len <= payloads.len());
+        let payloads = &payloads[..len];
+
+        let sum = enum_layout_of(payloads.iter().copied());
+        let mut largest = TypeLayout { size: 0, align: ENUM_DISCRIMINANT_SIZE };
+        for payload in payloads {
+            largest.size = largest.size.max(payload.size);
+            largest.align = largest.align.max(payload.align);
+            let offset = enum_payload_offset(payload.align);
+            assert!(offset <= sum.payload_offset);
+            assert!(offset + payload.size <= sum.layout.size);
+        }
+        sum_follows(sum, ENUM_DISCRIMINANT_SIZE, largest);
+    }
+
+    /// A `?T` holds its payload after the tag, at the offset the payload
+    /// offset function gives.
+    #[kani::proof]
+    fn option_pads_minimally() {
+        let inner = any_layout();
+        let sum = option_layout_of(inner);
+        assert!(sum.payload_offset == option_payload_offset(inner.align));
+        sum_follows(sum, TAG_SIZE, inner);
+    }
+
+    /// A `!T` holds the ok value and the error both, each aligned, after the
+    /// tag, at the offset the payload offset function gives, and is padded
+    /// only as the more aligned of the two needs.
+    #[kani::proof]
+    fn result_pads_minimally() {
+        let ok = any_layout();
+        let sum = result_layout_of(ok);
+        assert!(sum.payload_offset == result_payload_offset(ok.align));
+        let align = ok.align.max(ERROR_LAYOUT.align);
+        assert!(sum.layout.align == align);
+        follows(TAG_SIZE, sum.payload_offset, align);
+        for arm in [ok, ERROR_LAYOUT] {
+            assert!(sum.payload_offset & (arm.align - 1) == 0);
+            assert!(sum.payload_offset + arm.size <= sum.layout.size);
+        }
+        let end = sum.payload_offset + ok.size.max(ERROR_LAYOUT.size);
+        follows(end, sum.layout.size, align);
+    }
+
     /// The map's internal node: tag, length, keys, then children, each part
     /// after the last and the whole sized to its alignment.
     #[kani::proof]
-    fn map_internal_node_is_tight() {
+    fn map_internal_node_pads_minimally() {
         let key_align = any_align();
         let key_size = any_size(key_align);
         let l = map_internal_node_layout(key_size, key_align);
@@ -814,7 +828,7 @@ mod kani_proofs {
 
     /// The map's leaf node: tag, length, next leaf, keys, then values.
     #[kani::proof]
-    fn map_leaf_node_is_tight() {
+    fn map_leaf_node_pads_minimally() {
         let key_align = any_align();
         let key_size = any_size(key_align);
         let value_align = any_align();
@@ -831,7 +845,7 @@ mod kani_proofs {
 
     /// The set's internal node, laid out as the map's.
     #[kani::proof]
-    fn set_internal_node_is_tight() {
+    fn set_internal_node_pads_minimally() {
         let key_align = any_align();
         let key_size = any_size(key_align);
         let l = set_internal_node_layout(key_size, key_align);
@@ -845,7 +859,7 @@ mod kani_proofs {
 
     /// The set's leaf node: tag, length, next leaf, then keys.
     #[kani::proof]
-    fn set_leaf_node_is_tight() {
+    fn set_leaf_node_pads_minimally() {
         let key_align = any_align();
         let key_size = any_size(key_align);
         let l = set_leaf_node_layout(key_size, key_align);
