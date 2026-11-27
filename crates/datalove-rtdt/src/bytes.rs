@@ -97,3 +97,53 @@ mod tests {
         }
     }
 }
+
+#[cfg(kani)]
+mod kani_proofs {
+    //! Bounded proofs that the copies move exactly the bytes they say, for
+    //! every size up to the largest fixed case and every overlap; see
+    //! botdocs/kani.md.
+
+    use super::*;
+
+    /// A copy writes the source's bytes to the destination and nothing else,
+    /// when the two overlap by any amount in either direction.
+    ///
+    /// The source is at `at` in a buffer and the destination at `to`, both
+    /// anywhere a value of the size fits, so this covers the forward and
+    /// backward overlaps the word copies read all their words before writing
+    /// to survive.
+    #[kani::proof]
+    #[kani::unwind(65)]
+    fn copy_value_copies_the_value() {
+        let before: [u8; 64] = kani::any();
+        let size: usize = kani::any();
+        let at: usize = kani::any();
+        let to: usize = kani::any();
+        kani::assume(size <= 32 && at <= 64 - size && to <= 64 - size);
+        let mut buf = before;
+        let base = buf.as_mut_ptr();
+        unsafe { copy_value(base.add(at) as *const u8, base.add(to), size) };
+        for i in 0..64 {
+            let expected = if i >= to && i < to + size { before[at + i - to] } else { before[i] };
+            assert!(buf[i] == expected);
+        }
+    }
+
+    /// A swap exchanges the two values' bytes and leaves the rest alone.
+    #[kani::proof]
+    #[kani::unwind(41)]
+    fn swap_value_swaps_the_values() {
+        let a0: [u8; 40] = kani::any();
+        let b0: [u8; 40] = kani::any();
+        let size: usize = kani::any();
+        kani::assume(size <= 40);
+        let (mut a, mut b) = (a0, b0);
+        unsafe { swap_value(a.as_mut_ptr(), b.as_mut_ptr(), size) };
+        for i in 0..40 {
+            let swapped = i < size;
+            assert!(a[i] == if swapped { b0[i] } else { a0[i] });
+            assert!(b[i] == if swapped { a0[i] } else { b0[i] });
+        }
+    }
+}

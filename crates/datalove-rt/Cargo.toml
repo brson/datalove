@@ -25,3 +25,6 @@ datalove-rti.workspace = true
 # where its getrandom dependency does not compile.
 [dev-dependencies]
 rmx = { workspace = true, features = ["proptest"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

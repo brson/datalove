@@ -1,0 +1,175 @@
+# Bounded Proofs Under Kani
+
+What the runtime's arithmetic is proved of under Kani, how to run and write
+the harnesses, and what they cannot say. Written November 2026, when the
+first harnesses went in: the layout functions, the byte copies and the
+allocator's size classes.
+
+## Contents
+
+- [The problem](#the-problem)
+- [What Kani checks](#what-kani-checks)
+- [What is proved](#what-is-proved)
+- [Running it](#running-it)
+- [Writing a harness](#writing-a-harness)
+- [What is not covered](#what-is-not-covered)
+
+## The problem
+
+The runtime's layout functions are the ABI between compiled code and the
+runtime: generated code writes a key at the offset `map_leaf_node_layout`
+gives and the runtime reads it back at the same. The unit tests try a few
+sizes, the proptests sample a few hundred, Miri checks the paths a test
+happens to run, and `layout_conformance_tests` holds the backends to the
+runtime over a corpus of types. None of them says anything about a key size
+nobody wrote down. A value offset that is misaligned for one key size, or a
+copy that moves eight bytes of twelve, passes all four if the size is not in
+the corpus.
+
+Kani checks every size. A harness looks like a unit test, but its inputs are
+`kani::any()`, which stands for every value of the type at once, and the
+verifier either proves every assertion for every input within a bound or
+prints the input that breaks one.
+
+## What Kani checks
+
+Kani is a bounded model checker for Rust. It compiles a harness and the code
+it calls to a formula through CBMC and asks a SAT solver whether any input
+reaches a failing check. The checks are the ones the code already carries:
+every `assert!` and `debug_assert!`, arithmetic overflow, an index out of
+bounds, and the validity of every dereference in unsafe code, of a null,
+dangling, misaligned or out-of-bounds pointer. So a harness that only calls
+a function and asserts nothing still proves the function has no overflow or
+invalid access on any input it admits.
+
+A loop has to be bounded with `#[kani::unwind(n)]`, one more than the
+iterations it can take, so a proof is over inputs up to a size, not over all
+sizes. Within the bound it is exhaustive, which is what makes it different
+from a proptest.
+
+## What is proved
+
+Each harness, where it lives, what it proves and over what, and how long
+it takes in a debug build on four CPUs. Every harness also proves the code
+it calls free of overflow and invalid access on those inputs.
+
+| Harness | File | Proves | Bound | Time |
+|---------|------|--------|-------|------|
+| `align_up_rounds_up` | `crates/datalove-rtdt/src/layout.rs` | `align_up` lands on a multiple of the alignment, at or past the value, less than one alignment past | any power of two to a page; values short of overflow | under a second |
+| `payload_offsets_follow_their_tags` | same | the option, enum and result payload offsets follow their tags, aligned, with no spare padding | any alignment to a page | under a second |
+| `map_internal_node_is_tight`, `map_leaf_node_is_tight`, `set_internal_node_is_tight`, `set_leaf_node_is_tight` | same | each node part follows the last, aligned to itself, with less than one alignment of padding; the node's alignment is the largest part's and its size a multiple of it | key and value sizes to a mebibyte, any alignment to a page | about a second each |
+| `table_columns_follow_one_another` | same | a table's columns follow one another in its data allocation, each aligned, and the allocation holds the last and is a multiple of the table's alignment; a capacity of zero allocates nothing | three columns to a kilobyte each, capacity to a thousand | 12 seconds |
+| `copy_value_copies_the_value` | `crates/datalove-rtdt/src/bytes.rs` | the copy writes the source's bytes to the destination and changes nothing else, with source and destination overlapping by any amount in either direction | sizes to 32, in a 64-byte buffer | 4 minutes |
+| `swap_value_swaps_the_values` | same | the swap exchanges the two values' bytes and leaves the rest | sizes to 40 | 35 seconds |
+| `size_class_is_the_smallest_that_fits` | `crates/datalove-rt/src/c/impls/alloc.rs` | every small size goes to the smallest class that holds it | every size to the small limit | under a second |
+| `align_up_ptr_moves_less_than_the_alignment` | same | aligning a pointer up lands on a multiple, moving less than the alignment | any power of two to a mebibyte; addresses short of overflow | under a second |
+
+The node harnesses prove more than that nothing overlaps. With each part
+following the last by less than one alignment, the layout is the unique one
+the alignments allow, so a second computation of it, the C backend's or a
+writer of descriptors', has one answer to agree with.
+
+The harnesses were held to planted faults before they went in: a 12-byte
+swap changed to move 8 bytes, and the value alignment dropped from the
+leaf's layout. Each failed the harness that covers it.
+
+## Running it
+
+Kani installs beside cargo and brings its own pinned nightly:
+
+```
+cargo install --locked kani-verifier --version 0.68.0
+cargo kani setup
+```
+
+The bundle goes under `~/.kani` and the nightly into rustup. Then:
+
+```
+just verify-kani
+```
+
+runs every harness of both crates, and the table harness again under
+`index-64`, where a capacity is a `u64`. One harness alone is
+
+```
+cargo kani -p datalove-rtdt --harness copy_value_copies_the_value
+```
+
+`datalove-rt` is run with `--no-assert-overrides`. Kani replaces `assert!`,
+`panic!` and their relatives with its own, to report the condition and the
+message of a failure, and the replacements are ambiguous with the ones the
+rmx prelude glob-imports: every file with `use rmx::prelude::*` fails to
+compile with E0659. The flag leaves the standard macros in place. A failed
+assertion in that crate then reports as a plain panic, at its line, without
+the condition. `datalove-rtdt` has no rmx and keeps the overrides.
+
+CI runs the recipe as its own job, since it alone needs Kani.
+
+## Writing a harness
+
+A harness is a `#[kani::proof]` function in a `#[cfg(kani)] mod kani_proofs`
+beside the code, as the unit tests are beside it, so that it reaches private
+functions. The crate's `Cargo.toml` tells rustc the cfg is expected. The
+inputs are `kani::any()` narrowed by `kani::assume`, and the assertions are
+plain `assert!`.
+
+What was learned writing the first ones:
+
+- **Masks, not remainders.** `offset % align == 0` with both symbolic is a
+  64-bit divider circuit. `offset & (align - 1) == 0` is the same statement
+  for a power of two and costs nothing. The first draft of the table harness
+  used remainders and the `Vec`-building entry point and ran CBMC out of
+  memory on a 16 GB machine; the second uses masks and the slice entry
+  point and takes 12 seconds. Which of the two mattered more was not
+  separated.
+- **Keep multiplications few and narrow.** A symbolic size times a symbolic
+  capacity is a multiplier circuit whatever the assumed bounds, because the
+  bounds constrain the solution and not the circuit. The table harness has
+  six.
+- **Bound every loop, and write why.** `#[kani::unwind(n)]` is the loop's
+  iteration count plus one. A harness without it that reaches a loop fails
+  with an unwinding assertion, which looks like a bug and is not.
+- **Prefer the slice entry point.** A function that collects into a `Vec`
+  before its loop brings the allocator and `RawVec` into the formula.
+  `table_column_offset_of` takes the pairs directly and proves the same.
+- **State the bound in the doc comment**, and why it is where it is: the
+  largest fixed case of a copy, the page, the small-allocation limit. A
+  reader of a passing harness should know what it does not say.
+- **Hold a new harness to a planted fault** before trusting it. A harness
+  whose assertions are all implied by its assumptions passes everything.
+
+## What is not covered
+
+In rough order of what to do next:
+
+- **The big integer's limb arithmetic.** `compare_magnitude`,
+  `add_magnitude`, `sub_magnitude` and `div_magnitude` in
+  `crates/datalove-rt/src/c/impls/int_math.rs` are the arithmetic most worth
+  holding to `u128` over one to three symbolic limbs, and they allocate
+  their result from the runtime as they go, which Kani cannot model without
+  stubbing `mmap`. The fix is the refactor the functions want anyway: write
+  into a limb slice the caller allocates, so the arithmetic is pure and the
+  allocation stays in one place.
+- **Node search.** `search_keys` and `child_index` in `btreemap.rs` over a
+  node of symbolic length to the capacity of eleven and symbolic sorted
+  `u32` keys, proved to return the binary-search position. Needs one map
+  type specialized, not the dispatch over all of them.
+- **The allocator's free lists.** Three or four `alloc` and `free` calls
+  with `map` and `unmap` stubbed to Rust's global allocator by
+  `#[kani::stub]`, proving blocks aligned and inside their page and the
+  list last-in first-out. A proof with the stub says nothing about the real
+  mappings.
+- **The IR's layouts.** `datalove_datafun_ir::layout` is what the backends
+  compile against, and it is pure Rust the same harnesses would take.
+  `layout_conformance_tests` holds it to the runtime's over a corpus; a
+  harness would hold it to the same tightness over every size, which with
+  the runtime's harnesses makes the two agree wherever both are defined.
+- **Function contracts.** Kani's `#[kani::requires]` and `#[kani::ensures]`
+  put a harness's assumptions on the function itself, where they document
+  it and let callers be checked against it. They are behind
+  `-Z function-contracts` in 0.68, so the harnesses carry the assumptions
+  for now.
+
+Out of reach, and not worth a harness: whole B-tree insertions and
+removals, anything through `RtLocal::new` and its thread setup, and
+anything that reaches salsa.

@@ -541,7 +541,7 @@ mod unix_impl {
         assert_eq!(result, 0, "munmap of a mapping the allocator made failed");
     }
 
-    unsafe fn align_up_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
+    pub(super) unsafe fn align_up_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
         let addr = ptr as usize;
         let aligned_addr = (addr + align - 1) & !(align - 1);
         aligned_addr as *mut u8
@@ -1563,5 +1563,44 @@ mod tests {
                 assert!(msg.contains("... and 5 more"));
             }
         }
+    }
+}
+
+#[cfg(all(kani, not(target_arch = "wasm32")))]
+mod kani_proofs {
+    //! Bounded proofs of the allocator's arithmetic; see botdocs/kani.md.
+
+    use super::unix_impl::{align_up_ptr, size_to_class_index};
+    use super::*;
+
+    /// Every small size goes to the smallest class that holds it.
+    ///
+    /// The function's own debug assertions say the same, on the sizes a
+    /// test happens to allocate; this is every size.
+    #[kani::proof]
+    fn size_class_is_the_smallest_that_fits() {
+        let size: usize = kani::any();
+        kani::assume(size <= MAX_SMALL_SIZE);
+        let index = size_to_class_index(size);
+        assert!(index < NUM_SIZE_CLASSES);
+        assert!(size <= SIZE_CLASSES[index]);
+        assert!(index == 0 || size > SIZE_CLASSES[index - 1]);
+    }
+
+    /// Aligning a pointer up moves it less than the alignment, to a multiple
+    /// of it, for every alignment a large allocation can ask for.
+    ///
+    /// The bound on the address is where `addr + align - 1` would overflow,
+    /// which no mapping's address comes near.
+    #[kani::proof]
+    fn align_up_ptr_moves_less_than_the_alignment() {
+        let addr: usize = kani::any();
+        let align: usize = kani::any();
+        kani::assume(align.is_power_of_two() && align <= 1 << 20);
+        kani::assume(addr <= usize::MAX - align);
+        let aligned = unsafe { align_up_ptr(addr as *mut u8, align) } as usize;
+        assert!(aligned >= addr);
+        assert!(aligned & (align - 1) == 0);
+        assert!(aligned - addr < align);
     }
 }

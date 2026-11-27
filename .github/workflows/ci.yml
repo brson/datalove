@@ -121,3 +121,33 @@ jobs:
 
       - name: Check the proofs and run the oracle tests
         run: just test-formal
+
+  # The bounded proofs of the runtime's arithmetic under Kani; see
+  # botdocs/kani.md. Its own job, since Kani brings its own toolchain and
+  # builds only the two runtime crates.
+  kani:
+    name: kani
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: kani
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      # The version the harnesses were written against. `setup` fetches the
+      # bundle and the nightly it pins, into ~/.kani and rustup.
+      - name: Install Kani
+        run: |
+          cargo install --locked kani-verifier --version 0.68.0
+          cargo kani setup
+
+      - name: Run the proofs
+        run: just verify-kani

@@ -39,6 +39,7 @@ script, so it stays true by running.
 - [Salsa: idiomatic and effective use](salsa-patterns.md)
 - [Where Compile Time Goes](compile-time.md)
 - [Testing Under Miri](miri.md)
+- [Bounded Proofs Under Kani](kani.md)
 - [Rust Style: the Prelude and Powerletters](rust-style.md)
 
 ---

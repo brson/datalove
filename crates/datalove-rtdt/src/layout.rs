@@ -736,3 +736,176 @@ mod tests {
         assert_eq!(table_data_alignment(&tydescs), 4);
     }
 }
+
+#[cfg(kani)]
+mod kani_proofs {
+    //! Bounded proofs of the layout arithmetic, for every size and alignment
+    //! a descriptor can carry; see botdocs/kani.md.
+
+    use super::*;
+
+    /// The pointer size and alignment the node layouts place children by.
+    const PTR: u32 = std::mem::size_of::<*const u8>() as u32;
+
+    /// A power of two no larger than a page, which is every alignment a
+    /// descriptor can carry.
+    fn any_align() -> u32 {
+        let align: u32 = kani::any();
+        kani::assume(align.is_power_of_two() && align <= 4096);
+        align
+    }
+
+    /// A size a descriptor can give a value of alignment `align`: a multiple
+    /// of it, and small enough that a node of eleven cannot overflow.
+    fn any_size(align: u32) -> u32 {
+        let size: u32 = kani::any();
+        kani::assume(size <= 1 << 20 && size & (align - 1) == 0);
+        size
+    }
+
+    /// That a part at `offset` follows one ending at `end`, aligned to
+    /// `align`, with no more padding between than the alignment needs.
+    ///
+    /// With every part checked this way, the layout is the unique one the
+    /// alignments allow, which is what the runtime, the backends and a
+    /// writer of descriptors each compute on their own.
+    fn follows(end: u32, offset: u32, align: u32) {
+        assert!(offset >= end);
+        assert!(offset & (align - 1) == 0);
+        assert!(offset - end < align);
+    }
+
+    /// `align_up` rounds up to the nearest multiple, and no further.
+    ///
+    /// Bounded away from the top of `u32`, where `value + align - 1`
+    /// overflows; the harness checks that too, by its absence.
+    #[kani::proof]
+    fn align_up_rounds_up() {
+        let align = any_align();
+        let value: u32 = kani::any();
+        kani::assume(value <= u32::MAX - align);
+        follows(value, align_up(value, align), align);
+    }
+
+    /// Each payload follows its tag, aligned to the payload.
+    #[kani::proof]
+    fn payload_offsets_follow_their_tags() {
+        let align = any_align();
+        follows(1, option_payload_offset(align), align);
+        follows(4, enum_payload_offset(align), align);
+        let result_align = align.max(PTR);
+        follows(1, result_payload_offset(align), result_align);
+    }
+
+    /// The map's internal node: tag, length, keys, then children, each part
+    /// after the last and the whole sized to its alignment.
+    #[kani::proof]
+    fn map_internal_node_is_tight() {
+        let key_align = any_align();
+        let key_size = any_size(key_align);
+        let l = map_internal_node_layout(key_size, key_align);
+        follows(8, l.keys_offset, key_align);
+        let keys_end = l.keys_offset + key_size * MAP_NODE_CAPACITY;
+        follows(keys_end, l.child_ptrs_offset, PTR);
+        let children_end = l.child_ptrs_offset + PTR * (MAP_NODE_CAPACITY + 1);
+        assert!(l.align == key_align.max(PTR));
+        follows(children_end, l.size, l.align);
+    }
+
+    /// The map's leaf node: tag, length, next leaf, keys, then values.
+    #[kani::proof]
+    fn map_leaf_node_is_tight() {
+        let key_align = any_align();
+        let key_size = any_size(key_align);
+        let value_align = any_align();
+        let value_size = any_size(value_align);
+        let l = map_leaf_node_layout(key_size, key_align, value_size, value_align);
+        follows(8, l.next_leaf_offset, PTR);
+        follows(l.next_leaf_offset + PTR, l.keys_offset, key_align);
+        let keys_end = l.keys_offset + key_size * MAP_NODE_CAPACITY;
+        follows(keys_end, l.values_offset, value_align);
+        let values_end = l.values_offset + value_size * MAP_NODE_CAPACITY;
+        assert!(l.align == key_align.max(value_align).max(PTR));
+        follows(values_end, l.size, l.align);
+    }
+
+    /// The set's internal node, laid out as the map's.
+    #[kani::proof]
+    fn set_internal_node_is_tight() {
+        let key_align = any_align();
+        let key_size = any_size(key_align);
+        let l = set_internal_node_layout(key_size, key_align);
+        follows(8, l.keys_offset, key_align);
+        let keys_end = l.keys_offset + key_size * SET_NODE_CAPACITY;
+        follows(keys_end, l.child_ptrs_offset, PTR);
+        let children_end = l.child_ptrs_offset + PTR * (SET_NODE_CAPACITY + 1);
+        assert!(l.align == key_align.max(PTR));
+        follows(children_end, l.size, l.align);
+    }
+
+    /// The set's leaf node: tag, length, next leaf, then keys.
+    #[kani::proof]
+    fn set_leaf_node_is_tight() {
+        let key_align = any_align();
+        let key_size = any_size(key_align);
+        let l = set_leaf_node_layout(key_size, key_align);
+        follows(8, l.next_leaf_offset, PTR);
+        follows(l.next_leaf_offset + PTR, l.keys_offset, key_align);
+        let keys_end = l.keys_offset + key_size * SET_NODE_CAPACITY;
+        assert!(l.align == key_align.max(PTR));
+        follows(keys_end, l.size, l.align);
+    }
+
+    /// A table's columns follow one another in its data allocation, each
+    /// aligned, and the allocation holds the last and is sized to the whole.
+    ///
+    /// Three columns of up to a kilobyte each, at a capacity up to a thousand
+    /// rows. The alignment checks are masks rather than remainders: a 64-bit
+    /// remainder by a symbolic divisor is a circuit the solver runs out of
+    /// memory on, three times over. The loop bounds are the column count.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn table_columns_follow_one_another() {
+        let mut columns = [(0u32, 0u32); 3];
+        for column in columns.iter_mut() {
+            let align = any_align();
+            let size: u32 = kani::any();
+            kani::assume(size <= 1024 && size & (align - 1) == 0);
+            *column = (size, align);
+        }
+        let tydescs = columns.map(|(size, align)| tydesc(size, align));
+        let tydescs: [&TyDesc; 3] = [&tydescs[0], &tydescs[1], &tydescs[2]];
+        let capacity: IndexRepr = kani::any();
+        kani::assume(capacity <= 1000);
+
+        let total = table_data_allocation_size(&tydescs, capacity) as usize;
+        let align = table_data_alignment(&tydescs) as usize;
+        let mut end = 0usize;
+        for (i, (size, align)) in columns.iter().enumerate() {
+            let offset = table_column_offset_of(&columns, i, capacity);
+            let align = *align as usize;
+            assert!(offset >= end);
+            assert!(offset & (align - 1) == 0);
+            assert!(offset - end < align);
+            end = offset + *size as usize * capacity as usize;
+        }
+        if capacity == 0 {
+            assert!(total == 0);
+        } else {
+            assert!(total >= end);
+            assert!(total & (align - 1) == 0);
+            assert!(total - end < align);
+        }
+    }
+
+    /// A descriptor of a scalar shape with the given size and alignment.
+    fn tydesc(size: u32, align: u32) -> TyDesc {
+        TyDesc {
+            type_tag: TyTag::U8,
+            flags: 0,
+            size,
+            align,
+            type_info: TyInfo { nothing: TyInfoNothing { unused: 0 } },
+        }
+    }
+}
