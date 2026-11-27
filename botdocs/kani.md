@@ -2,8 +2,8 @@
 
 What the runtime's arithmetic is proved of under Kani, how to run and write
 the harnesses, and what they cannot say. Written November 2026, when the
-first harnesses went in: the layout functions, the byte copies and the
-allocator's size classes.
+first harnesses went in: the layout functions, the byte copies, the
+allocator's size classes and the big integer's limb arithmetic.
 
 ## Contents
 
@@ -63,15 +63,45 @@ it calls free of overflow and invalid access on those inputs.
 | `swap_value_swaps_the_values` | same | the swap exchanges the two values' bytes and leaves the rest | sizes to 40 | 35 seconds |
 | `size_class_is_the_smallest_that_fits` | `crates/datalove-rt/src/c/impls/alloc.rs` | every small size goes to the smallest class that holds it | every size to the small limit | under a second |
 | `align_up_ptr_moves_less_than_the_alignment` | same | aligning a pointer up lands on a multiple, moving less than the alignment | any power of two to a mebibyte; addresses short of overflow | under a second |
+| `compare_magnitude_orders_values` | `crates/datalove-rt/src/c/impls/int_math.rs` | the magnitude comparison orders as the values do | magnitudes to three limbs | a second |
+| `add_magnitude_into_adds`, `sub_magnitude_into_subtracts` | same | the sum and difference of two magnitudes are the `u128` sum and difference, fit the capacity given, and carry no leading zero | magnitudes to three limbs | 3 seconds each |
+| `add_assign_magnitude_adds_in_place`, `sub_assign_magnitude_subtracts_in_place` | same | the same for the in-place forms `set a += b` and `set a -= b` run, in either order of magnitude | magnitudes to three limbs | 3 and 10 seconds |
+| `mul_magnitude_into_multiplies_limbs` | same | a one-limb product is the `u128` product, with no leading zero | one limb by one | 6 seconds |
+| `mul_magnitude_into_stays_in_bounds` | same | a wider product writes in bounds, overflows nothing and panics nowhere | two limbs by two | 6 seconds |
+| `div_magnitude_into_by_a_limb_stays_in_bounds` | same | division by a limb writes in bounds, overflows nothing, panics nowhere, and leaves no leading zero | dividends to three limbs | 3 seconds |
 
 The node harnesses prove more than that nothing overlaps. With each part
 following the last by less than one alignment, the layout is the unique one
 the alignments allow, so a second computation of it, the C backend's or a
 writer of descriptors', has one answer to agree with.
 
+The big integer's arithmetic was refactored to make it provable: each
+operation now writes into a limb slice the caller allocated and returns how
+many limbs it used, with the allocation in one place,
+`magnitude_in_runtime`. Before, each allocated from the runtime as it went,
+and Kani cannot model `mmap`. The in-place forms gained the same shape, so
+the borrow and carry logic that `set a += b` runs is proved too.
+
 The harnesses were held to planted faults before they went in: a 12-byte
-swap changed to move 8 bytes, and the value alignment dropped from the
-leaf's layout. Each failed the harness that covers it.
+swap changed to move 8 bytes, the value alignment dropped from the leaf's
+layout, and an in-place subtraction that forgets to borrow. Each failed the
+harness that covers it.
+
+### Where the arithmetic proofs stop
+
+A product or quotient wider than one limb is proved to stay in bounds and
+panic nowhere, and not to be the right value. Holding the schoolbook product
+to a `u128` product asks the solver to show two multipliers equivalent,
+which is the problem SAT solvers are worst at: it ran for two hours at two
+limbs by two and ten minutes at two by one without finishing, and the
+one-limb quotient against `u32` division, a 64-bit divider against a 32-bit
+one, ran ten minutes too. Knuth's algorithm D could not be proved even to
+stay in bounds: with a divisor of two limbs and a dividend of two or three,
+CBMC ran out of memory or past fifteen minutes under both solvers, because
+the quotient-digit estimate multiplies and divides 64-bit values and the
+inner assertions need that arithmetic reasoned about. The values of
+multi-limb products and quotients, and the long division's safety, rest on
+`int_math_tests` and the fixtures.
 
 ## Running it
 
@@ -137,19 +167,20 @@ What was learned writing the first ones:
   reader of a passing harness should know what it does not say.
 - **Hold a new harness to a planted fault** before trusting it. A harness
   whose assertions are all implied by its assumptions passes everything.
+- **No second multiplier or divider in the spec.** A check of the form
+  `value(out) == value(a) * value(b)` is a multiplier equivalence, and the
+  solver will not finish it past 32 bits. Prove the value where the operands
+  are a limb, and the bounds and absence of panics where they are wider.
+- **Run a new harness alone under `timeout`** before adding it to the
+  recipe, and read the tail of a failure: "Verification failed" with "CBMC
+  appears to have run out of memory" above it is the solver giving up, not a
+  counterexample. A real failure lists checks with `Status: FAILURE` and
+  their lines.
 
 ## What is not covered
 
 In rough order of what to do next:
 
-- **The big integer's limb arithmetic.** `compare_magnitude`,
-  `add_magnitude`, `sub_magnitude` and `div_magnitude` in
-  `crates/datalove-rt/src/c/impls/int_math.rs` are the arithmetic most worth
-  holding to `u128` over one to three symbolic limbs, and they allocate
-  their result from the runtime as they go, which Kani cannot model without
-  stubbing `mmap`. The fix is the refactor the functions want anyway: write
-  into a limb slice the caller allocates, so the arithmetic is pure and the
-  allocation stays in one place.
 - **Node search.** `search_keys` and `child_index` in `btreemap.rs` over a
   node of symbolic length to the capacity of eleven and symbolic sorted
   `u32` keys, proved to return the binary-search position. Needs one map

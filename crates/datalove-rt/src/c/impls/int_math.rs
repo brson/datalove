@@ -18,9 +18,19 @@ fn too_large(result: &mut rtdt::Int) -> RtStatus {
     RtStatus::Error
 }
 
-/// Compare magnitudes of two limb arrays.
-/// Returns: -1 if a < b, 0 if a == b, 1 if a > b.
-unsafe fn compare_magnitude(a_limbs: &[u32], b_limbs: &[u32]) -> i32 {
+// ============================================================================
+// Magnitude arithmetic
+// ============================================================================
+//
+// The arithmetic on limbs, apart from the memory it goes into. A magnitude is
+// its limbs least significant first with no leading zero limb, and zero has
+// none. Each operation takes the limbs to write as a slice the caller
+// allocated, of the capacity the matching `*_capacity` gives or the doc says,
+// and returns how many it wrote. They are pure, so that Kani holds them to
+// `u128` arithmetic; see botdocs/kani.md.
+
+/// Compare two magnitudes: -1 if a < b, 0 if a == b, 1 if a > b.
+fn compare_magnitude(a_limbs: &[u32], b_limbs: &[u32]) -> i32 {
     if a_limbs.len() != b_limbs.len() {
         return if a_limbs.len() < b_limbs.len() { -1 } else { 1 };
     }
@@ -36,75 +46,318 @@ unsafe fn compare_magnitude(a_limbs: &[u32], b_limbs: &[u32]) -> i32 {
     0
 }
 
-/// Add magnitudes: result = a + b (ignoring signs).
+/// How many limbs a sum of magnitudes can take: one more than the longer, for
+/// a carry out of the top, unless one is zero and there can be none.
+fn sum_capacity(a_len: usize, b_len: usize) -> usize {
+    let max_len = a_len.max(b_len);
+    if a_len == 0 || b_len == 0 { max_len } else { max_len + 1 }
+}
+
+/// Write a + b into `out`, which holds `sum_capacity` limbs; the sum's length.
+fn add_magnitude_into(out: &mut [u32], a_limbs: &[u32], b_limbs: &[u32]) -> usize {
+    let max_len = a_limbs.len().max(b_limbs.len());
+    let mut carry: u64 = 0;
+    for i in 0..max_len {
+        let a_limb = a_limbs.get(i).copied().unwrap_or(0) as u64;
+        let b_limb = b_limbs.get(i).copied().unwrap_or(0) as u64;
+        let sum = a_limb + b_limb + carry;
+        out[i] = sum as u32;
+        carry = sum >> 32;
+    }
+    let mut len = max_len;
+    if carry > 0 {
+        out[len] = carry as u32;
+        len += 1;
+    }
+    len
+}
+
+/// Write a - b into `out`, which holds as many limbs as `a`, for a > b; the
+/// difference's length once its leading zeros are dropped, at least one.
+fn sub_magnitude_into(out: &mut [u32], a_limbs: &[u32], b_limbs: &[u32]) -> usize {
+    let mut borrow: i64 = 0;
+    for i in 0..a_limbs.len() {
+        let b_limb = b_limbs.get(i).copied().unwrap_or(0) as i64;
+        let diff = a_limbs[i] as i64 - b_limb - borrow;
+        borrow = (diff < 0) as i64;
+        out[i] = (diff + (borrow << 32)) as u32;
+    }
+    let mut len = a_limbs.len();
+    while len > 1 && out[len - 1] == 0 {
+        len -= 1;
+    }
+    assert!(!(len == 1 && out[0] == 0), "sub_magnitude produced zero result");
+    len
+}
+
+/// Write a * b into `out`, which holds as many limbs as both together, neither
+/// being zero; the product's length.
+fn mul_magnitude_into(out: &mut [u32], a_limbs: &[u32], b_limbs: &[u32]) -> usize {
+    out.fill(0);
+    for i in 0..a_limbs.len() {
+        let mut carry: u64 = 0;
+        for j in 0..b_limbs.len() {
+            let product = (a_limbs[i] as u64) * (b_limbs[j] as u64) + (out[i + j] as u64) + carry;
+            out[i + j] = product as u32;
+            carry = product >> 32;
+        }
+        out[i + b_limbs.len()] = carry as u32;
+    }
+    let mut len = out.len();
+    while len > 1 && out[len - 1] == 0 {
+        len -= 1;
+    }
+    len
+}
+
+/// Add `b` into the magnitude of `a_len` limbs at the start of `buf`, which
+/// has room for the sum; the sum's length.
+fn add_assign_magnitude(buf: &mut [u32], a_len: usize, b_limbs: &[u32]) -> usize {
+    let max_len = a_len.max(b_limbs.len());
+    let mut carry: u64 = 0;
+    for i in 0..max_len {
+        let a_limb = if i < a_len { buf[i] as u64 } else { 0 };
+        let b_limb = b_limbs.get(i).copied().unwrap_or(0) as u64;
+        let sum = a_limb + b_limb + carry;
+        buf[i] = sum as u32;
+        carry = sum >> 32;
+    }
+    let mut len = max_len;
+    if carry > 0 {
+        buf[len] = carry as u32;
+        len += 1;
+    }
+    len
+}
+
+/// Subtract the smaller of two magnitudes from the larger, which
+/// `a_is_larger` names: `a` is the `a_len` limbs at the start of `buf`, and
+/// the difference goes there too, which has room for it. The difference's
+/// length, at least one.
+fn sub_assign_magnitude(buf: &mut [u32], a_len: usize, b_limbs: &[u32], a_is_larger: bool) -> usize {
+    let mut len = if a_is_larger {
+        let mut borrow: i64 = 0;
+        for i in 0..a_len {
+            let b_limb = b_limbs.get(i).copied().unwrap_or(0) as i64;
+            let diff = buf[i] as i64 - b_limb - borrow;
+            borrow = (diff < 0) as i64;
+            buf[i] = (diff + (borrow << 32)) as u32;
+        }
+        a_len
+    } else {
+        let mut borrow: i64 = 0;
+        for (i, &b_limb) in b_limbs.iter().enumerate() {
+            let a_limb = if i < a_len { buf[i] as i64 } else { 0 };
+            let diff = b_limb as i64 - a_limb - borrow;
+            borrow = (diff < 0) as i64;
+            buf[i] = (diff + (borrow << 32)) as u32;
+        }
+        b_limbs.len()
+    };
+    while buf[len - 1] == 0 {
+        len -= 1;
+    }
+    len
+}
+
+/// How many limbs a quotient of magnitudes can take, the divisor not zero, or
+/// `None` where the dividend is the smaller and the quotient zero.
+fn quotient_capacity(dividend_limbs: &[u32], divisor_limbs: &[u32]) -> Option<usize> {
+    let (m, n) = (dividend_limbs.len(), divisor_limbs.len());
+    if m < n || (m == n && compare_magnitude(dividend_limbs, divisor_limbs) < 0) {
+        None
+    } else {
+        Some(m - n + 1)
+    }
+}
+
+/// Write dividend / divisor into `out`, which holds `quotient_capacity`
+/// limbs; the quotient's length, at least one.
+fn div_magnitude_into(out: &mut [u32], dividend_limbs: &[u32], divisor_limbs: &[u32]) -> usize {
+    let m = dividend_limbs.len();
+    let n = divisor_limbs.len();
+
+    if n == 1 {
+        let divisor = divisor_limbs[0] as u64;
+        assert!(divisor != 0, "div_magnitude called with zero divisor");
+
+        // From the top limb down.
+        let mut remainder: u64 = 0;
+        for i in (0..m).rev() {
+            let current = (remainder << 32) | (dividend_limbs[i] as u64);
+            out[i] = (current / divisor) as u32;
+            remainder = current % divisor;
+        }
+
+        // Drop leading zeros.
+        let mut q_len = m;
+        while q_len > 1 && out[q_len - 1] == 0 {
+            q_len -= 1;
+        }
+
+        // Zero quotient is handled by the dividend < divisor check.
+        assert!(!(q_len == 1 && out[0] == 0), "single-limb division produced zero quotient");
+
+        q_len
+    } else {
+        // Multi-limb division using Knuth's Algorithm D.
+        // Normalize: scale so divisor's MSB has high bit set.
+        let shift = divisor_limbs[n - 1].leading_zeros();
+        let mut norm_dividend = vec![0u32; m + 1];
+        let mut norm_divisor = vec![0u32; n];
+
+        // Shift divisor.
+        if shift > 0 {
+            let mut carry: u64 = 0;
+            for i in 0..n {
+                let shifted = ((divisor_limbs[i] as u64) << shift) | carry;
+                norm_divisor[i] = shifted as u32;
+                carry = shifted >> 32;
+            }
+        } else {
+            norm_divisor.copy_from_slice(divisor_limbs);
+        }
+
+        // Shift dividend.
+        if shift > 0 {
+            let mut carry: u64 = 0;
+            for i in 0..m {
+                let shifted = ((dividend_limbs[i] as u64) << shift) | carry;
+                norm_dividend[i] = shifted as u32;
+                carry = shifted >> 32;
+            }
+            norm_dividend[m] = carry as u32;
+        } else {
+            norm_dividend[..m].copy_from_slice(dividend_limbs);
+        }
+
+        // The quotient goes to `out`; the normalized operands above are only
+        // working space.
+        let quotient = out;
+        quotient.fill(0);
+
+        // Main division loop.
+        for j in (0..=m - n).rev() {
+            // Estimate quotient digit.
+            let dividend_high = ((norm_dividend[j + n] as u64) << 32) | (norm_dividend[j + n - 1] as u64);
+            let mut q_hat = dividend_high / (norm_divisor[n - 1] as u64);
+            let mut r_hat = dividend_high % (norm_divisor[n - 1] as u64);
+
+            // Refine estimate.
+            while q_hat >= (1u64 << 32)
+                || (n >= 2
+                    && q_hat * (norm_divisor[n - 2] as u64)
+                        > ((r_hat << 32) | (norm_dividend[j + n - 2] as u64)))
+            {
+                q_hat -= 1;
+                r_hat += norm_divisor[n - 1] as u64;
+                if r_hat >= (1u64 << 32) {
+                    break;
+                }
+            }
+
+            // Multiply and subtract.
+            //
+            // Each partial product is a full 64 bits, so only its low half
+            // belongs at this position and the high half is carried into the
+            // next one. Subtracting the whole product from a single limb
+            // would need a range no 64-bit integer has.
+            //
+            // The carry holds that high half plus whatever the subtraction
+            // borrowed, which the arithmetic shift reads off the difference's
+            // sign. Both stay within a few billion of zero.
+            let mut carry: i64 = 0;
+            for i in 0..n {
+                let product = q_hat * (norm_divisor[i] as u64);
+                let difference =
+                    (norm_dividend[j + i] as i64) - carry - ((product & 0xFFFF_FFFF) as i64);
+                norm_dividend[j + i] = difference as u32;
+                carry = ((product >> 32) as i64) - (difference >> 32);
+            }
+            let difference = (norm_dividend[j + n] as i64) - carry;
+            norm_dividend[j + n] = difference as u32;
+
+            // Store quotient digit.
+            quotient[j] = q_hat as u32;
+
+            // Add back if we subtracted too much.
+            if difference < 0 {
+                quotient[j] -= 1;
+                let mut carry: u64 = 0;
+                for i in 0..n {
+                    let sum = (norm_dividend[j + i] as u64) + (norm_divisor[i] as u64) + carry;
+                    norm_dividend[j + i] = sum as u32;
+                    carry = sum >> 32;
+                }
+                norm_dividend[j + n] = ((norm_dividend[j + n] as u64) + carry) as u32;
+            }
+        }
+
+        // Drop leading zeros.
+        let mut q_len = quotient.len();
+        while q_len > 1 && quotient[q_len - 1] == 0 {
+            q_len -= 1;
+        }
+
+        // Zero quotient is handled by the dividend < divisor check.
+        assert!(!(q_len == 1 && quotient[0] == 0), "multi-limb division produced zero quotient");
+
+        q_len
+    }
+}
+
+// ============================================================================
+// Magnitudes in the runtime's memory
+// ============================================================================
+
+/// A magnitude written into the runtime's memory: `capacity` limbs allocated
+/// and filled by `write`, which says how many it used. Returns the limbs, how
+/// many there are, and how many were allocated, which the `Int` keeps so as
+/// to free them.
 ///
 /// Written straight into the runtime's memory, where it was built in a `Vec`
-/// first and copied, which allocated twice. Returns the limbs, how many there
-/// are, and how many were allocated: one more than the longer operand, for a
-/// carry out of the top, unless one operand is zero and there can be none.
+/// first and copied, which allocated twice.
+unsafe fn magnitude_in_runtime(
+    rt: &mut RtLocal,
+    capacity: usize,
+    write: impl FnOnce(&mut [u32]) -> usize,
+) -> (*const u32, usize, usize) {
+    let ptr = unsafe { rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32 };
+    let len = write(unsafe { std::slice::from_raw_parts_mut(ptr, capacity) });
+    (ptr as *const u32, len, capacity)
+}
+
+/// Add magnitudes: result = a + b (ignoring signs).
 unsafe fn add_magnitude(
     rt: &mut RtLocal,
     a_limbs: &[u32],
     b_limbs: &[u32],
 ) -> (*const u32, usize, usize) {
-    let max_len = a_limbs.len().max(b_limbs.len());
-    let capacity = if a_limbs.is_empty() || b_limbs.is_empty() { max_len } else { max_len + 1 };
-    unsafe {
-        let result = rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32;
-        let mut carry: u64 = 0;
-        for i in 0..max_len {
-            let a_limb = if i < a_limbs.len() { a_limbs[i] as u64 } else { 0 };
-            let b_limb = if i < b_limbs.len() { b_limbs[i] as u64 } else { 0 };
-            let sum = a_limb + b_limb + carry;
-            *result.add(i) = sum as u32;
-            carry = sum >> 32;
-        }
-        let mut len = max_len;
-        if carry > 0 {
-            *result.add(len) = carry as u32;
-            len += 1;
-        }
-        (result as *const u32, len, capacity)
-    }
+    let capacity = sum_capacity(a_limbs.len(), b_limbs.len());
+    unsafe { magnitude_in_runtime(rt, capacity, |out| add_magnitude_into(out, a_limbs, b_limbs)) }
 }
 
 /// Subtract magnitudes: result = a - b (assumes a > b, ignoring signs).
-///
-/// Written straight into the runtime's memory, as `add_magnitude` is. Returns
-/// the limbs, how many there are once the leading zeros are dropped, and how
-/// many were allocated, which is as many as `a` has.
 unsafe fn sub_magnitude(
     rt: &mut RtLocal,
     a_limbs: &[u32],
     b_limbs: &[u32],
 ) -> (*const u32, usize, usize) {
-    let capacity = a_limbs.len();
-    unsafe {
-        let result = rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32;
-        let mut borrow: i64 = 0;
-        for i in 0..a_limbs.len() {
-            let a_limb = a_limbs[i] as i64;
-            let b_limb = if i < b_limbs.len() { b_limbs[i] as i64 } else { 0 };
-            let diff = a_limb - b_limb - borrow;
-            if diff < 0 {
-                *result.add(i) = (diff + (1i64 << 32)) as u32;
-                borrow = 1;
-            } else {
-                *result.add(i) = diff as u32;
-                borrow = 0;
-            }
-        }
+    unsafe { magnitude_in_runtime(rt, a_limbs.len(), |out| sub_magnitude_into(out, a_limbs, b_limbs)) }
+}
 
-        // Drop leading zeros.
-        let mut len = capacity;
-        while len > 1 && *result.add(len - 1) == 0 {
-            len -= 1;
-        }
-
-        // Sub_magnitude is only called when magnitudes differ (caller checks cmp != 0).
-        assert!(!(len == 1 && *result == 0), "sub_magnitude produced zero result");
-
-        (result as *const u32, len, capacity)
+/// Divide magnitudes: result = a / b, the divisor not zero. A zero quotient
+/// is no limbs, allocated nowhere.
+unsafe fn div_magnitude(
+    rt: &mut RtLocal,
+    dividend_limbs: &[u32],
+    divisor_limbs: &[u32],
+) -> (*const u32, usize, usize) {
+    match quotient_capacity(dividend_limbs, divisor_limbs) {
+        None => (std::ptr::null(), 0, 0),
+        Some(capacity) => unsafe {
+            magnitude_in_runtime(rt, capacity, |out| div_magnitude_into(out, dividend_limbs, divisor_limbs))
+        },
     }
 }
 
@@ -258,35 +511,15 @@ pub(crate) unsafe fn int_mul_impl(
         let a_limbs = std::slice::from_raw_parts(a.data, a_abs_size);
         let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
 
-        // Grade-school multiplication, into runtime memory: the result has
-        // up to a_len + b_len limbs.
-        let capacity = a_abs_size + b_abs_size;
-        let result_ptr = rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32;
-        let result_limbs = std::slice::from_raw_parts_mut(result_ptr, capacity);
-        result_limbs.fill(0);
-
-        for i in 0..a_abs_size {
-            let mut carry: u64 = 0;
-            for j in 0..b_abs_size {
-                let product = (a_limbs[i] as u64) * (b_limbs[j] as u64)
-                    + (result_limbs[i + j] as u64)
-                    + carry;
-                result_limbs[i + j] = product as u32;
-                carry = product >> 32;
-            }
-            result_limbs[i + b_abs_size] = carry as u32;
-        }
-
-        // Drop leading zeros.
-        let mut result_len = capacity;
-        while result_len > 1 && result_limbs[result_len - 1] == 0 {
-            result_len -= 1;
-        }
+        // Grade-school multiplication: the product has up to a_len + b_len
+        // limbs.
+        let (result_ptr, result_len, capacity) =
+            magnitude_in_runtime(rt, a_abs_size + b_abs_size, |out| mul_magnitude_into(out, a_limbs, b_limbs));
 
         // Result sign: negative if exactly one operand is negative.
         let result_is_neg = a_is_neg != b_is_neg;
 
-        result.data = result_ptr as *const u32;
+        result.data = result_ptr;
         result.size_and_sign = if result_is_neg {
             -(result_len as i32)
         } else {
@@ -352,71 +585,38 @@ unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_limbs: &[u32]
     }
     let a_neg = a.size_and_sign < 0;
     let capacity = a.capacity.as_usize();
+    // `a`'s buffer as far as it was allocated. Past `a`'s size it is spare
+    // capacity that may never have been written, which nothing below reads.
+    let buf = unsafe { std::slice::from_raw_parts_mut(a.data as *mut u32, capacity) };
 
-    unsafe {
-        let a_data = a.data as *mut u32;
-        if a_neg == b_neg {
-            // The magnitudes add, keeping the sign.
-            let max_len = a_len.max(b_len);
-            if max_len >= MAX_LIMBS {
-                return RtStatus::Error;
-            }
-            if max_len + 1 > capacity {
-                return add_assign_elsewhere(rt, a, b_limbs, b_neg);
-            }
-            let mut carry: u64 = 0;
-            for i in 0..max_len {
-                let a_limb = if i < a_len { *a_data.add(i) as u64 } else { 0 };
-                let b_limb = b_limbs.get(i).copied().unwrap_or(0) as u64;
-                let sum = a_limb + b_limb + carry;
-                *a_data.add(i) = sum as u32;
-                carry = sum >> 32;
-            }
-            let mut len = max_len;
-            if carry > 0 {
-                *a_data.add(len) = carry as u32;
-                len += 1;
-            }
-            a.size_and_sign = if a_neg { -(len as i32) } else { len as i32 };
-            return RtStatus::Ok;
+    if a_neg == b_neg {
+        // The magnitudes add, keeping the sign.
+        let max_len = a_len.max(b_len);
+        if max_len >= MAX_LIMBS {
+            return RtStatus::Error;
         }
-
-        // The magnitudes subtract, the smaller from the larger, whose sign the
-        // result takes. Equal ones cancel.
-        let order = compare_magnitude(std::slice::from_raw_parts(a_data, a_len), b_limbs);
-        if order == 0 {
-            set_zero(rt, a);
-            return RtStatus::Ok;
+        if max_len + 1 > capacity {
+            return unsafe { add_assign_elsewhere(rt, a, b_limbs, b_neg) };
         }
-        let (len, negative) = if order > 0 {
-            let mut borrow: i64 = 0;
-            for i in 0..a_len {
-                let b_limb = b_limbs.get(i).copied().unwrap_or(0) as i64;
-                let diff = *a_data.add(i) as i64 - b_limb - borrow;
-                borrow = (diff < 0) as i64;
-                *a_data.add(i) = (diff + (borrow << 32)) as u32;
-            }
-            (a_len, a_neg)
-        } else {
-            if b_len > capacity {
-                return add_assign_elsewhere(rt, a, b_limbs, b_neg);
-            }
-            let mut borrow: i64 = 0;
-            for (i, &b_limb) in b_limbs.iter().enumerate() {
-                let a_limb = if i < a_len { *a_data.add(i) as i64 } else { 0 };
-                let diff = b_limb as i64 - a_limb - borrow;
-                borrow = (diff < 0) as i64;
-                *a_data.add(i) = (diff + (borrow << 32)) as u32;
-            }
-            (b_len, b_neg)
-        };
-        let mut len = len;
-        while *a_data.add(len - 1) == 0 {
-            len -= 1;
-        }
-        a.size_and_sign = if negative { -(len as i32) } else { len as i32 };
-        RtStatus::Ok
+        let len = add_assign_magnitude(buf, a_len, b_limbs);
+        a.size_and_sign = if a_neg { -(len as i32) } else { len as i32 };
+        return RtStatus::Ok;
     }
+
+    // The magnitudes subtract, the smaller from the larger, whose sign the
+    // result takes. Equal ones cancel.
+    let order = compare_magnitude(&buf[..a_len], b_limbs);
+    if order == 0 {
+        unsafe { set_zero(rt, a) };
+        return RtStatus::Ok;
+    }
+    if order < 0 && b_len > capacity {
+        return unsafe { add_assign_elsewhere(rt, a, b_limbs, b_neg) };
+    }
+    let len = sub_assign_magnitude(buf, a_len, b_limbs, order > 0);
+    let negative = if order > 0 { a_neg } else { b_neg };
+    a.size_and_sign = if negative { -(len as i32) } else { len as i32 };
+    RtStatus::Ok
 }
 
 /// Add into `a` through a new buffer, for a sum that doesn't fit `a`'s.
@@ -526,159 +726,6 @@ pub(crate) unsafe fn int_neg_impl(
         result.capacity = rtdt::Index(abs_size as rtdt::IndexRepr);
 
         RtStatus::Ok
-    }
-}
-
-/// Divide magnitude: returns (quotient_limbs, quotient_len).
-/// Assumes divisor is not zero.
-unsafe fn div_magnitude(
-    rt: &mut RtLocal,
-    dividend_limbs: &[u32],
-    divisor_limbs: &[u32],
-) -> (*const u32, usize, usize) {
-    let m = dividend_limbs.len();
-    let n = divisor_limbs.len();
-
-    // Handle dividend < divisor case.
-    if m < n || (m == n && unsafe { compare_magnitude(dividend_limbs, divisor_limbs) } < 0) {
-        // Quotient is zero.
-        return (std::ptr::null(), 0, 0);
-    }
-
-    // Handle single-limb divisor.
-    if n == 1 {
-        let divisor = divisor_limbs[0] as u64;
-
-        // Caller must check for zero divisor before calling div_magnitude.
-        assert!(divisor != 0, "div_magnitude called with zero divisor");
-
-        // Into runtime memory, from the top limb down.
-        let q_ptr = unsafe { rt.alloc.alloc(4, 4, (m as u32).into()) as *mut u32 };
-        let quotient = unsafe { std::slice::from_raw_parts_mut(q_ptr, m) };
-        let mut remainder: u64 = 0;
-
-        for i in (0..m).rev() {
-            let current = (remainder << 32) | (dividend_limbs[i] as u64);
-            quotient[i] = (current / divisor) as u32;
-            remainder = current % divisor;
-        }
-
-        // Drop leading zeros.
-        let mut q_len = m;
-        while q_len > 1 && quotient[q_len - 1] == 0 {
-            q_len -= 1;
-        }
-
-        // Zero quotient is handled by early dividend < divisor check.
-        assert!(!(q_len == 1 && quotient[0] == 0), "single-limb division produced zero quotient");
-
-        (q_ptr as *const u32, q_len, m)
-    } else {
-        // Multi-limb division using Knuth's Algorithm D.
-        // Normalize: scale so divisor's MSB has high bit set.
-        let shift = divisor_limbs[n - 1].leading_zeros();
-        let mut norm_dividend = vec![0u32; m + 1];
-        let mut norm_divisor = vec![0u32; n];
-
-        // Shift divisor.
-        if shift > 0 {
-            let mut carry: u64 = 0;
-            for i in 0..n {
-                let shifted = ((divisor_limbs[i] as u64) << shift) | carry;
-                norm_divisor[i] = shifted as u32;
-                carry = shifted >> 32;
-            }
-        } else {
-            norm_divisor.copy_from_slice(divisor_limbs);
-        }
-
-        // Shift dividend.
-        if shift > 0 {
-            let mut carry: u64 = 0;
-            for i in 0..m {
-                let shifted = ((dividend_limbs[i] as u64) << shift) | carry;
-                norm_dividend[i] = shifted as u32;
-                carry = shifted >> 32;
-            }
-            norm_dividend[m] = carry as u32;
-        } else {
-            norm_dividend[..m].copy_from_slice(dividend_limbs);
-        }
-
-        // The quotient goes into runtime memory; the normalized operands
-        // above are only working space.
-        let q_capacity = m - n + 1;
-        let q_ptr = unsafe { rt.alloc.alloc(4, 4, (q_capacity as u32).into()) as *mut u32 };
-        let quotient = unsafe { std::slice::from_raw_parts_mut(q_ptr, q_capacity) };
-        quotient.fill(0);
-
-        // Main division loop.
-        for j in (0..=m - n).rev() {
-            // Estimate quotient digit.
-            let dividend_high = ((norm_dividend[j + n] as u64) << 32) | (norm_dividend[j + n - 1] as u64);
-            let mut q_hat = dividend_high / (norm_divisor[n - 1] as u64);
-            let mut r_hat = dividend_high % (norm_divisor[n - 1] as u64);
-
-            // Refine estimate.
-            while q_hat >= (1u64 << 32)
-                || (n >= 2
-                    && q_hat * (norm_divisor[n - 2] as u64)
-                        > ((r_hat << 32) | (norm_dividend[j + n - 2] as u64)))
-            {
-                q_hat -= 1;
-                r_hat += norm_divisor[n - 1] as u64;
-                if r_hat >= (1u64 << 32) {
-                    break;
-                }
-            }
-
-            // Multiply and subtract.
-            //
-            // Each partial product is a full 64 bits, so only its low half
-            // belongs at this position and the high half is carried into the
-            // next one. Subtracting the whole product from a single limb
-            // would need a range no 64-bit integer has.
-            //
-            // The carry holds that high half plus whatever the subtraction
-            // borrowed, which the arithmetic shift reads off the difference's
-            // sign. Both stay within a few billion of zero.
-            let mut carry: i64 = 0;
-            for i in 0..n {
-                let product = q_hat * (norm_divisor[i] as u64);
-                let difference =
-                    (norm_dividend[j + i] as i64) - carry - ((product & 0xFFFF_FFFF) as i64);
-                norm_dividend[j + i] = difference as u32;
-                carry = ((product >> 32) as i64) - (difference >> 32);
-            }
-            let difference = (norm_dividend[j + n] as i64) - carry;
-            norm_dividend[j + n] = difference as u32;
-
-            // Store quotient digit.
-            quotient[j] = q_hat as u32;
-
-            // Add back if we subtracted too much.
-            if difference < 0 {
-                quotient[j] -= 1;
-                let mut carry: u64 = 0;
-                for i in 0..n {
-                    let sum = (norm_dividend[j + i] as u64) + (norm_divisor[i] as u64) + carry;
-                    norm_dividend[j + i] = sum as u32;
-                    carry = sum >> 32;
-                }
-                norm_dividend[j + n] = ((norm_dividend[j + n] as u64) + carry) as u32;
-            }
-        }
-
-        // Drop leading zeros.
-        let mut q_len = q_capacity;
-        while q_len > 1 && quotient[q_len - 1] == 0 {
-            q_len -= 1;
-        }
-
-        // Zero quotient is handled by early dividend < divisor check.
-        assert!(!(q_len == 1 && quotient[0] == 0), "multi-limb division produced zero quotient");
-
-        (q_ptr as *const u32, q_len, q_capacity)
     }
 }
 
@@ -925,3 +972,159 @@ pub(crate) unsafe fn int_from_limbs_impl(
     }
 }
 
+
+#[cfg(kani)]
+mod kani_proofs {
+    //! Bounded proofs of the magnitude arithmetic against `u128`; see
+    //! botdocs/kani.md.
+    //!
+    //! Operands have up to three limbs, so that any two and any sum or
+    //! difference of them fit a `u128`; products take two each, which is
+    //! what fits.
+
+    use super::*;
+
+    const LIMBS: usize = 3;
+
+    /// A length for a magnitude held in `limbs`: up to `max`, and such that
+    /// the magnitude has no leading zero limb.
+    fn any_len(limbs: &[u32], max: usize) -> usize {
+        let len: usize = kani::any();
+        kani::assume(len <= max && (len == 0 || limbs[len - 1] != 0));
+        len
+    }
+
+    fn value(limbs: &[u32]) -> u128 {
+        let mut v = 0u128;
+        for &limb in limbs.iter().rev() {
+            v = (v << 32) | limb as u128;
+        }
+        v
+    }
+
+    fn normalized(limbs: &[u32]) -> bool {
+        limbs.is_empty() || limbs[limbs.len() - 1] != 0
+    }
+
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn compare_magnitude_orders_values() {
+        let a_limbs: [u32; LIMBS] = kani::any();
+        let b_limbs: [u32; LIMBS] = kani::any();
+        let a = &a_limbs[..any_len(&a_limbs, LIMBS)];
+        let b = &b_limbs[..any_len(&b_limbs, LIMBS)];
+        let order = compare_magnitude(a, b);
+        assert!(order == value(a).cmp(&value(b)) as i32);
+    }
+
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn add_magnitude_into_adds() {
+        let a_limbs: [u32; LIMBS] = kani::any();
+        let b_limbs: [u32; LIMBS] = kani::any();
+        let a = &a_limbs[..any_len(&a_limbs, LIMBS)];
+        let b = &b_limbs[..any_len(&b_limbs, LIMBS)];
+        let mut out = [0u32; LIMBS + 1];
+        let capacity = sum_capacity(a.len(), b.len());
+        let len = add_magnitude_into(&mut out[..capacity], a, b);
+        assert!(len <= capacity);
+        assert!(value(&out[..len]) == value(a) + value(b));
+        assert!(normalized(&out[..len]));
+    }
+
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn sub_magnitude_into_subtracts() {
+        let a_limbs: [u32; LIMBS] = kani::any();
+        let b_limbs: [u32; LIMBS] = kani::any();
+        let a = &a_limbs[..any_len(&a_limbs, LIMBS)];
+        let b = &b_limbs[..any_len(&b_limbs, LIMBS)];
+        kani::assume(compare_magnitude(a, b) > 0);
+        let mut out = [0u32; LIMBS];
+        let len = sub_magnitude_into(&mut out[..a.len()], a, b);
+        assert!(1 <= len && len <= a.len());
+        assert!(value(&out[..len]) == value(a) - value(b));
+        assert!(normalized(&out[..len]));
+    }
+
+    /// A one-limb product is right. A wider one is not provable this way:
+    /// holding a schoolbook product to a `u128` product asks the solver for
+    /// a multiplier equivalence, which ran for hours at two limbs by two and
+    /// for ten minutes at two by one without finishing.
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn mul_magnitude_into_multiplies_limbs() {
+        let a: u32 = kani::any();
+        let b: u32 = kani::any();
+        kani::assume(a != 0 && b != 0);
+        let mut out = [0u32; 2];
+        let len = mul_magnitude_into(&mut out, &[a], &[b]);
+        assert!(1 <= len && len <= 2);
+        assert!(value(&out[..len]) == a as u128 * b as u128);
+        assert!(normalized(&out[..len]));
+    }
+
+    /// A wider product stays in bounds and panics nowhere, whatever its
+    /// value; the value is the tests' to check.
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn mul_magnitude_into_stays_in_bounds() {
+        let a_limbs: [u32; 2] = kani::any();
+        let b_limbs: [u32; 2] = kani::any();
+        let a = &a_limbs[..any_len(&a_limbs, 2)];
+        let b = &b_limbs[..any_len(&b_limbs, 2)];
+        kani::assume(!a.is_empty() && !b.is_empty());
+        let mut out = [0u32; 4];
+        let len = mul_magnitude_into(&mut out[..a.len() + b.len()], a, b);
+        assert!(1 <= len && len <= a.len() + b.len());
+    }
+
+    /// Division by a limb of a wider dividend stays in bounds, panics
+    /// nowhere, and gives a quotient with no leading zero.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn div_magnitude_into_by_a_limb_stays_in_bounds() {
+        let a_limbs: [u32; LIMBS] = kani::any();
+        let d: u32 = kani::any();
+        let a = &a_limbs[..any_len(&a_limbs, LIMBS)];
+        kani::assume(!a.is_empty() && d != 0);
+        if let Some(capacity) = quotient_capacity(a, &[d]) {
+            let mut out = [0u32; LIMBS];
+            let len = div_magnitude_into(&mut out[..capacity], a, &[d]);
+            assert!(1 <= len && len <= capacity);
+            assert!(normalized(&out[..len]));
+        }
+    }
+
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn add_assign_magnitude_adds_in_place() {
+        let mut buf: [u32; LIMBS + 1] = kani::any();
+        let b_limbs: [u32; LIMBS] = kani::any();
+        let a_len = any_len(&buf, LIMBS);
+        let b = &b_limbs[..any_len(&b_limbs, LIMBS)];
+        kani::assume(a_len >= 1 && !b.is_empty());
+        let (a_value, b_value) = (value(&buf[..a_len]), value(b));
+        let len = add_assign_magnitude(&mut buf, a_len, b);
+        assert!(len <= sum_capacity(a_len, b.len()));
+        assert!(value(&buf[..len]) == a_value + b_value);
+        assert!(normalized(&buf[..len]));
+    }
+
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn sub_assign_magnitude_subtracts_in_place() {
+        let mut buf: [u32; LIMBS] = kani::any();
+        let b_limbs: [u32; LIMBS] = kani::any();
+        let a_len = any_len(&buf, LIMBS);
+        let b = &b_limbs[..any_len(&b_limbs, LIMBS)];
+        kani::assume(a_len >= 1 && !b.is_empty());
+        let order = compare_magnitude(&buf[..a_len], b);
+        kani::assume(order != 0);
+        let (a_value, b_value) = (value(&buf[..a_len]), value(b));
+        let len = sub_assign_magnitude(&mut buf, a_len, b, order > 0);
+        assert!(1 <= len && len <= a_len.max(b.len()));
+        assert!(value(&buf[..len]) == a_value.max(b_value) - a_value.min(b_value));
+        assert!(normalized(&buf[..len]));
+    }
+}

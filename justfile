@@ -255,9 +255,10 @@ test-miri-replay *ARGS='':
         cargo +nightly miri test -p datalove-datafun --test ir_replay_tests -- {{ARGS}}
 
 # The bounded proofs of the runtime's arithmetic, under Kani: the layouts,
-# the byte copies and the allocator's size classes, for every input up to each
-# harness's bound; see botdocs/kani.md. Not in `just test`, which has no Kani,
-# but in CI's kani job. About five minutes, most of it the byte copies.
+# the byte copies, the allocator's size classes and the big integer's limbs,
+# for every input up to each harness's bound; see botdocs/kani.md. Not in
+# `just test`, which has no Kani, but in CI's kani job. About six minutes,
+# most of it the byte copies.
 #
 # `--no-assert-overrides` for datalove-rt because Kani's replacement `assert!`
 # collides with the one the rmx prelude imports; a failure there reports as a
