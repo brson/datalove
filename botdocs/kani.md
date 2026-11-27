@@ -181,10 +181,6 @@ What was learned writing the first ones:
 
 In rough order of what to do next:
 
-- **Node search.** `search_keys` and `child_index` in `btreemap.rs` over a
-  node of symbolic length to the capacity of eleven and symbolic sorted
-  `u32` keys, proved to return the binary-search position. Needs one map
-  type specialized, not the dispatch over all of them.
 - **The allocator's free lists.** Three or four `alloc` and `free` calls
   with `map` and `unmap` stubbed to Rust's global allocator by
   `#[kani::stub]`, proving blocks aligned and inside their page and the
@@ -203,4 +199,6 @@ In rough order of what to do next:
 
 Out of reach, and not worth a harness: whole B-tree insertions and
 removals, anything through `RtLocal::new` and its thread setup, and
-anything that reaches salsa.
+anything that reaches salsa. Not worth one either: the node search in
+`btreemap.rs`, which is a scan through a comparator the map type supplies,
+with nothing in it a proof would say more about than the fixtures do.
