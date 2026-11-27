@@ -3,8 +3,6 @@
 //! This module combines import_demands extraction (from compiler's parser)
 //! with package resolution (from pkg crate).
 
-use rmx::prelude::*;
-
 use bct::package_resolve2::PackageWorldModuleGraphWithErrors;
 use datalove_datafun_pkg::PackageWorld;
 

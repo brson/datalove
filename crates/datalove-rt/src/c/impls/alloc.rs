@@ -13,7 +13,6 @@
 // page or list leaks sorted by address.
 #![allow(clippy::disallowed_types)]
 
-use rmx::prelude::*;
 use datalove_rtdt::IndexRepr;
 
 // Unix-only imports and constants (used by unix_impl and tests).
@@ -721,6 +720,7 @@ pub use wasm_impl::AllocLocal;
 
 #[cfg(test)]
 mod tests {
+    use rmx::prelude::*;
     use super::*;
     use rmx::proptest::prelude::*;
 

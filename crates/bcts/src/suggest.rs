@@ -6,7 +6,6 @@
 //! long name may be wrong by more characters than a short one before the
 //! nearest match is offered at all.
 
-use rmx::prelude::*;
 
 /// The option nearest `got`, if one is near enough to be worth naming.
 ///

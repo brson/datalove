@@ -1,6 +1,5 @@
 #![allow(clippy::needless_lifetimes)]
 
-use rmx::prelude::*;
 
 pub mod input;
 pub mod text;

@@ -3,7 +3,6 @@
 //! Provides a package-agnostic view of modules for compilation.
 //! `ModuleGraph` represents a dependency-ordered collection of modules.
 
-use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use crate::input::Source;
 use crate::lookup::{LookupMap, LookupSet};
@@ -155,6 +154,7 @@ impl<'db> ModuleGraphBuilder<'db> {
 
 #[cfg(test)]
 mod tests {
+    use rmx::prelude::*;
     use super::*;
 
     #[test]

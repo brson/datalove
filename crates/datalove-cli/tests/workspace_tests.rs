@@ -4,7 +4,6 @@
 //! command finds and loads. How it is found in other layouts is tested in
 //! `datalove-datafun`'s workspace module.
 
-use rmx::prelude::*;
 use std::path::Path;
 use std::process::Command;
 

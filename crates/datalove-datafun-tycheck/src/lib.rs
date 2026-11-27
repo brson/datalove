@@ -2,7 +2,6 @@
 //!
 //! Provides type checking for datafun scripts and expressions.
 
-use rmx::prelude::*;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit;

@@ -6,7 +6,6 @@
 //!
 //! Put tests in the tests directory.
 
-use rmx::prelude::*;
 use rmx::rand::seq::SliceRandom;
 
 use bct::random::SeededRng;

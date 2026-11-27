@@ -258,15 +258,11 @@ test-miri-replay *ARGS='':
 # the byte copies, the allocator's size classes and the big integer's limbs,
 # for every input up to each harness's bound; see botdocs/kani.md. Not in
 # `just test`, which has no Kani, but in CI's kani job. About six minutes,
-# most of it the byte copies.
-#
-# `--no-assert-overrides` for datalove-rt because Kani's replacement `assert!`
-# collides with the one the rmx prelude imports; a failure there reports as a
-# plain panic without the condition. The index-64 run is the one harness that
-# takes an `IndexRepr`.
+# most of it the byte copies. The index-64 run is the one harness that takes
+# an `IndexRepr`.
 verify-kani:
     cargo kani -p datalove-rtdt
-    cargo kani -p datalove-rt --no-assert-overrides
+    cargo kani -p datalove-rt
     cargo kani -p datalove-rtdt --features index-64 --harness table_columns_follow_one_another
 
 # Install the `datalove` binary from this working copy.

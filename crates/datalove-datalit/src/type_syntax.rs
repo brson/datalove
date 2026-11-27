@@ -7,7 +7,6 @@
 //! that syntax is spelled out. A new kind of type is a new variant here, which
 //! each form's mapping has to say how to reach before it compiles.
 
-use rmx::prelude::*;
 use std::borrow::Cow;
 use std::fmt;
 
@@ -132,6 +131,7 @@ impl fmt::Display for Fields<'_, '_> {
 
 #[cfg(test)]
 mod tests {
+    use rmx::prelude::*;
     use super::*;
 
     fn word(w: &'static str) -> TypeSyntax<'static> {

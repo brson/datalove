@@ -3,7 +3,6 @@
 //! Contains the runtime state for single-threaded local execution,
 //! including the allocator and any other runtime-specific state.
 
-use rmx::prelude::*;
 use datalove_rti::{LocalRtHandle, RtHeader};
 
 use crate::c::impls::alloc::AllocLocal;
@@ -156,6 +155,7 @@ fn thread_stack() -> Option<(usize, usize)> {
 
 #[cfg(all(test, target_os = "linux", not(miri)))]
 mod tests {
+    use rmx::prelude::*;
     use super::*;
 
     /// A thread smaller than the margin still runs: the limit is below where

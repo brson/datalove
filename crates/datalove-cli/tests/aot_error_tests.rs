@@ -10,7 +10,6 @@
 //!
 //! Compilation stops before linking, so nothing here needs a C compiler.
 
-use rmx::prelude::*;
 use std::path::Path;
 use std::process::Command;
 

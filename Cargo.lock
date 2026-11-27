@@ -4060,9 +4060,9 @@ dependencies = [
 
 [[package]]
 name = "rustmax"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63c7dcccc7d6b8f6aedf7f62adc378647b255309f0b53b2fea3f79b39d97de51"
+checksum = "6e8276c8058ae91170e5e9f23a5fdfd79194e3219f7a200b4ae89777ad11a976"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4133,9 +4133,9 @@ dependencies = [
 
 [[package]]
 name = "rustmax-macros"
-version = "0.0.13"
+version = "0.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "684283d9c6c991b5673960313aff87cad222d8b36ac68c531b2ef98ac6d0ed08"
+checksum = "bca00a802092d84478cc10becc8cc4060e51bc4f4049c742e3b3de7f7d049f3d"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

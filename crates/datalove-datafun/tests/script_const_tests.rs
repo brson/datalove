@@ -20,8 +20,6 @@
 //! suite runs with `skip_const_inlining`, so the ordinary path for script consts
 //! was thinly covered too. See `botdocs/plan-script-reactivity.md`.
 
-use rmx::prelude::*;
-
 use datalove_datafun as datafun;
 use datalove_datafun::driver::{
     CompilerOptions, LoweringResult, ModuleCompiler, ScriptCompilationResult,

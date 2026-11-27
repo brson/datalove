@@ -4,7 +4,6 @@
 //! interface is checked whether or not a script requires it, so a broken one
 //! beside the fixtures in `workspace_tests` would fail all of them.
 
-use rmx::prelude::*;
 use std::path::Path;
 use std::process::Command;
 

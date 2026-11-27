@@ -23,7 +23,6 @@
 
 #![allow(clippy::disallowed_types)]
 
-use rmx::prelude::*;
 use rmx::rustc_hash::{FxBuildHasher, FxHasher};
 use rmx::std::borrow::Borrow;
 use rmx::std::collections::hash_map::Entry;

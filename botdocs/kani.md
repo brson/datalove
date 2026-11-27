@@ -125,13 +125,13 @@ runs every harness of both crates, and the table harness again under
 cargo kani -p datalove-rtdt --harness copy_value_copies_the_value
 ```
 
-`datalove-rt` is run with `--no-assert-overrides`. Kani replaces `assert!`,
-`panic!` and their relatives with its own, to report the condition and the
-message of a failure, and the replacements are ambiguous with the ones the
-rmx prelude glob-imports: every file with `use rmx::prelude::*` fails to
-compile with E0659. The flag leaves the standard macros in place. A failed
-assertion in that crate then reports as a plain panic, at its line, without
-the condition. `datalove-rtdt` has no rmx and keeps the overrides.
+Kani replaces `assert!`, `panic!` and their relatives with its own, to
+report the condition and the message of a failure. A crate whose prelude
+glob-imports the standard ones fails to compile under it with E0659, every
+macro ambiguous, and `--no-assert-overrides` is the escape hatch, at the
+cost of failures reported as plain panics without the condition. rustmax
+0.0.13 re-exported std's prelude and needed the flag; 0.0.14 does not, and
+the harnesses run with the overrides in every crate.
 
 CI runs the recipe as its own job, since it alone needs Kani.
 

@@ -2,7 +2,6 @@
 //!
 //! Declares external runtime functions that will be linked at load time.
 
-use rmx::prelude::*;
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{FuncId, Linkage, Module};
@@ -968,6 +967,7 @@ fn declare_import<M: Module>(
 
 #[cfg(test)]
 mod tests {
+    use rmx::prelude::*;
     use super::*;
     use cranelift_codegen::isa;
     use cranelift_codegen::settings::{self, Configurable};

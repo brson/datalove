@@ -6,8 +6,6 @@
 //! which units they are -- moves whenever any of them is edited, inserted or
 //! removed, which re-runs every later unit whether or not it uses what changed.
 
-use rmx::prelude::*;
-
 /// One unit of script input: a fragment of statements, or a bare expression.
 ///
 /// An input, and that is the property everything here rests on: **a unit's

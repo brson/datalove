@@ -12,8 +12,6 @@
 //! function is the case that really does change what names there are, and it is
 //! the control below.
 
-use rmx::prelude::*;
-
 use datalove_ct::query_events::QueryRecorder;
 use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
 use datalove_datafun_compiler::Database;

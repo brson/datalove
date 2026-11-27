@@ -1,4 +1,3 @@
-use rmx::prelude::*;
 
 use std::ops::Range;
 
@@ -58,6 +57,7 @@ impl<'db> InternedText<'db> {
 
 #[test]
 fn interned_text_eq() {
+    use rmx::prelude::*;
     let ref db = crate::Database::default();
     let s1 = InternedText::new(db, S("abc"));
     let s2 = InternedText::new(db, S("abc"));

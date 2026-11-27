@@ -12,6 +12,12 @@ that needs anything from it:
 use rmx::prelude::*;
 ```
 
+Since rustmax 0.0.14 the prelude no longer re-exports std's own, so a file
+that uses only std names does not import it, and a test module whose tests
+alone use `S` or `X` imports it itself. Before that the re-export made Kani's
+replacement `assert!` ambiguous in every file with the glob; see
+[kani.md](kani.md).
+
 Ten crates do not depend on `rmx` at all, by design: `datalove`,
 `datalove-buildinfo`, `datalove-datafun-intrinsics`, `datalove-diagnostic`,
 `datalove-diagnostic-codes`, `datalove-pkg-manifest`, `datalove-rtdt`,

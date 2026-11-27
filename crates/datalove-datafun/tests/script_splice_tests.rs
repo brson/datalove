@@ -22,7 +22,6 @@
 //! scenario matrix once missed a real bug by measuring reach and never asking
 //! what a program computed, so every case here checks a value.
 
-use rmx::prelude::*;
 use rmx::std::collections::BTreeSet;
 
 mod scriptsession;
