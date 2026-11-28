@@ -15,7 +15,9 @@
 //! Sizes come from `layout::layout_of`, so a value occupies the same bytes here
 //! as it does anywhere else.
 
-use crate::layout::{align_up, layout_of, TypeLayout};
+use datalove_rtdt::layout::sequence_layout;
+
+use crate::layout::{layout_of, TypeLayout};
 use crate::{IrType, ParamId, SlotId};
 
 /// Layout information for a single parameter, value or slot.
@@ -72,44 +74,41 @@ impl FrameLayout {
         tracked_slots: &[SlotId],
         tracked_params: &[ParamId],
     ) -> Self {
-        let mut offset = 0u32;
-        let mut max_align = 1u32;
-        let mut place = |layout: TypeLayout| {
-            offset = align_up(offset, layout.align);
-            let slot = SlotLayout {
-                offset,
-                size: layout.size,
-                align: layout.align,
-                tracking_byte: None,
-            };
-            offset += layout.size;
-            max_align = max_align.max(layout.align);
-            slot
-        };
-
-        let mut param_tracking: Vec<Option<u32>> = vec![None; param_types.len()];
-        let values: Vec<SlotLayout> = value_types.iter().map(|ty| place(layout_of(ty))).collect();
-        let mut slots: Vec<SlotLayout> = slot_types.iter().map(|ty| place(layout_of(ty))).collect();
-
-        let tracking_offset = offset;
         let slot_tracking_count = tracked_slots.len() as u32;
         let tracking_count = slot_tracking_count + tracked_params.len() as u32;
+
+        // Values, then slots, then the tracking bytes as one last part of
+        // alignment 1, laid out as a struct's fields are.
+        let parts: Vec<TypeLayout> = value_types.iter().chain(slot_types).map(layout_of).collect();
+        let tracking = TypeLayout { size: tracking_count, align: 1 };
+        let mut offsets = Vec::with_capacity(parts.len() + 1);
+        let whole = sequence_layout(parts.iter().copied().chain([tracking]), |offset| offsets.push(offset));
+        let tracking_offset = offsets.pop().expect("the tracking bytes are placed last");
+
+        let mut slot_layouts = parts.iter().zip(offsets).map(|(layout, offset)| SlotLayout {
+            offset,
+            size: layout.size,
+            align: layout.align,
+            tracking_byte: None,
+        });
+        let values: Vec<SlotLayout> = slot_layouts.by_ref().take(value_types.len()).collect();
+        let mut slots: Vec<SlotLayout> = slot_layouts.collect();
 
         for (i, &sid) in tracked_slots.iter().enumerate() {
             slots[sid.0 as usize].tracking_byte = Some(tracking_offset + i as u32);
         }
 
         // Tracked params' bytes come after the slots'.
+        let mut param_tracking: Vec<Option<u32>> = vec![None; param_types.len()];
         let param_tracking_base = tracking_offset + slot_tracking_count;
         for (i, &pid) in tracked_params.iter().enumerate() {
             param_tracking[pid.0 as usize] = Some(param_tracking_base + i as u32);
         }
 
-        offset += tracking_count;
-
         // At least 1, so there is always a valid address in the frame, which
         // debuglog of a zero-size type such as unit needs.
-        let frame_size = align_up(offset, max_align).max(1);
+        let frame_size = whole.size.max(1);
+        let max_align = whole.align;
 
         Self {
             param_tracking,

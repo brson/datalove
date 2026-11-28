@@ -1,12 +1,42 @@
 //! Layout computation for datalit runtime types.
 
 use crate::*;
+use std::option::Option;
 
 /// Align a value up to the given alignment.
-/// Alignment must be a power of 2.
+///
+/// Alignment must be a power of 2. Panics if the result does not fit a
+/// `u32`, as every layout function here does: see `add_bytes`.
 #[inline]
 pub fn align_up(value: u32, align: u32) -> u32 {
-    (value + align - 1) & !(align - 1)
+    checked_align_up(value, align).unwrap_or_else(|| too_large())
+}
+
+/// Align a value up, or `None` if the result does not fit a `u32`.
+#[inline]
+pub fn checked_align_up(value: u32, align: u32) -> Option<u32> {
+    Some(value.checked_add(align - 1)? & !(align - 1))
+}
+
+/// Add two byte counts of a layout, panicking past `u32::MAX`.
+///
+/// Sizes and offsets are `u32`s, so a value or node larger than that cannot
+/// be laid out at all. Wrapping instead would lay it out short, and a write
+/// to its last part would land past its end.
+#[inline]
+fn add_bytes(a: u32, b: u32) -> u32 {
+    a.checked_add(b).unwrap_or_else(|| too_large())
+}
+
+/// Multiply two byte counts of a layout, panicking past `u32::MAX`.
+#[inline]
+fn mul_bytes(a: u32, b: u32) -> u32 {
+    a.checked_mul(b).unwrap_or_else(|| too_large())
+}
+
+#[cold]
+fn too_large() -> ! {
+    panic!("a layout larger than {} bytes, the most a size can say", u32::MAX)
 }
 
 /// Size and alignment of a value, in bytes.
@@ -67,16 +97,27 @@ pub fn result_payload_offset(ok_align: u32) -> u32 {
 /// This is the layout of a tuple or struct, and the C rule: `place` is given
 /// each part's offset in turn, and the whole is aligned to its most aligned
 /// part, at least 1, and sized to end on that alignment.
-pub fn sequence_layout(parts: impl IntoIterator<Item = TypeLayout>, mut place: impl FnMut(u32)) -> TypeLayout {
+pub fn sequence_layout(parts: impl IntoIterator<Item = TypeLayout>, place: impl FnMut(u32)) -> TypeLayout {
+    checked_sequence_layout(parts, place).unwrap_or_else(|| too_large())
+}
+
+/// Lay out parts as `sequence_layout` does, or `None` if the whole does not
+/// fit a `u32`.
+///
+/// `place` may have been given the offsets of some of the parts by then.
+pub fn checked_sequence_layout(
+    parts: impl IntoIterator<Item = TypeLayout>,
+    mut place: impl FnMut(u32),
+) -> Option<TypeLayout> {
     let mut offset = 0u32;
     let mut align = 1u32;
     for part in parts {
-        offset = align_up(offset, part.align);
+        offset = checked_align_up(offset, part.align)?;
         place(offset);
-        offset += part.size;
+        offset = offset.checked_add(part.size)?;
         align = align.max(part.align);
     }
-    TypeLayout { size: align_up(offset, align), align }
+    Some(TypeLayout { size: checked_align_up(offset, align)?, align })
 }
 
 /// Lay out an enum: a `u32` discriminant, then room for its largest payload.
@@ -206,18 +247,18 @@ pub fn map_internal_node_layout(key_size: u32, key_align: u32) -> MapNodeInterna
 
     // len (u32) at 4-byte aligned offset.
     offset = align_up(offset, 4);
-    offset += 4; // sizeof(u32)
+    offset = add_bytes(offset, 4); // sizeof(u32)
 
     // keys array at key-aligned offset.
     offset = align_up(offset, key_align);
     let keys_offset = offset;
-    offset += key_size * MAP_NODE_CAPACITY;
+    offset = add_bytes(offset, mul_bytes(key_size, MAP_NODE_CAPACITY));
 
     // child_ptrs array at pointer-aligned offset.
     // Internal nodes have CAPACITY+1 child pointers.
     offset = align_up(offset, ptr_align);
     let child_ptrs_offset = offset;
-    offset += ptr_size * (MAP_NODE_CAPACITY + 1);
+    offset = add_bytes(offset, mul_bytes(ptr_size, MAP_NODE_CAPACITY + 1));
 
     // Overall alignment is max of all components.
     let overall_align = 1u32.max(4).max(key_align).max(ptr_align);
@@ -267,22 +308,22 @@ pub fn map_leaf_node_layout(key_size: u32, key_align: u32, value_size: u32, valu
 
     // len (u32) at 4-byte aligned offset.
     offset = align_up(offset, 4);
-    offset += 4; // sizeof(u32)
+    offset = add_bytes(offset, 4); // sizeof(u32)
 
     // next_leaf pointer at pointer-aligned offset.
     offset = align_up(offset, ptr_align);
     let next_leaf_offset = offset;
-    offset += ptr_size;
+    offset = add_bytes(offset, ptr_size);
 
     // keys array at key-aligned offset.
     offset = align_up(offset, key_align);
     let keys_offset = offset;
-    offset += key_size * MAP_NODE_CAPACITY;
+    offset = add_bytes(offset, mul_bytes(key_size, MAP_NODE_CAPACITY));
 
     // values array at value-aligned offset.
     offset = align_up(offset, value_align);
     let values_offset = offset;
-    offset += value_size * MAP_NODE_CAPACITY;
+    offset = add_bytes(offset, mul_bytes(value_size, MAP_NODE_CAPACITY));
 
     // Overall alignment is max of all components.
     let overall_align = 1u32.max(4).max(ptr_align).max(key_align).max(value_align);
@@ -330,18 +371,18 @@ pub fn set_internal_node_layout(key_size: u32, key_align: u32) -> SetNodeInterna
 
     // len (u32) at 4-byte aligned offset.
     offset = align_up(offset, 4);
-    offset += 4; // sizeof(u32)
+    offset = add_bytes(offset, 4); // sizeof(u32)
 
     // keys array at key-aligned offset.
     offset = align_up(offset, key_align);
     let keys_offset = offset;
-    offset += key_size * SET_NODE_CAPACITY;
+    offset = add_bytes(offset, mul_bytes(key_size, SET_NODE_CAPACITY));
 
     // child_ptrs array at pointer-aligned offset.
     // Internal nodes have CAPACITY+1 child pointers.
     offset = align_up(offset, ptr_align);
     let child_ptrs_offset = offset;
-    offset += ptr_size * (SET_NODE_CAPACITY + 1);
+    offset = add_bytes(offset, mul_bytes(ptr_size, SET_NODE_CAPACITY + 1));
 
     // Overall alignment is max of all components.
     let overall_align = 1u32.max(4).max(key_align).max(ptr_align);
@@ -387,17 +428,17 @@ pub fn set_leaf_node_layout(key_size: u32, key_align: u32) -> SetNodeLeafLayout 
 
     // len (u32) at 4-byte aligned offset.
     offset = align_up(offset, 4);
-    offset += 4; // sizeof(u32)
+    offset = add_bytes(offset, 4); // sizeof(u32)
 
     // next_leaf pointer at pointer-aligned offset.
     offset = align_up(offset, ptr_align);
     let next_leaf_offset = offset;
-    offset += ptr_size;
+    offset = add_bytes(offset, ptr_size);
 
     // keys array at key-aligned offset.
     offset = align_up(offset, key_align);
     let keys_offset = offset;
-    offset += key_size * SET_NODE_CAPACITY;
+    offset = add_bytes(offset, mul_bytes(key_size, SET_NODE_CAPACITY));
 
     // Overall alignment is max of all components.
     let overall_align = 1u32.max(4).max(ptr_align).max(key_align);
@@ -417,7 +458,7 @@ pub fn set_leaf_node_layout(key_size: u32, key_align: u32) -> SetNodeLeafLayout 
 #[inline]
 fn align_up_usize(value: usize, align: u32) -> usize {
     let a = align as usize;
-    (value + a - 1) & !(a - 1)
+    value.checked_add(a - 1).expect("table data size overflow") & !(a - 1)
 }
 
 /// Compute byte offset of a column within a table's data allocation.
@@ -621,6 +662,19 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "a layout larger than")]
+    fn a_sequence_past_u32_panics() {
+        let parts = [TypeLayout { size: u32::MAX, align: 1 }, TypeLayout { size: 1, align: 1 }];
+        sequence_layout(parts, |_| ());
+    }
+
+    #[test]
+    #[should_panic(expected = "a layout larger than")]
+    fn a_node_past_u32_panics() {
+        map_leaf_node_layout(1 << 30, 8, 8, 8);
+    }
+
+    #[test]
     fn test_table_data_alignment_empty() {
         let tydescs: Vec<&TyDesc> = vec![];
         assert_eq!(table_data_alignment(&tydescs), 1);
@@ -749,6 +803,45 @@ mod kani_proofs {
         }
         assert!(whole.align == align);
         follows(end, whole.size, whole.align);
+    }
+
+    /// Up to three parts of any size their alignment allows, and the size
+    /// of the sequence they make, worked out in `u64`, where it cannot wrap.
+    fn any_parts_and_true_size() -> ([TypeLayout; 3], usize, u64) {
+        let mut parts = [TypeLayout { size: 0, align: 1 }; 3];
+        for part in parts.iter_mut() {
+            let align = any_align();
+            let size: u32 = kani::any();
+            kani::assume(size & (align - 1) == 0);
+            *part = TypeLayout { size, align };
+        }
+        let len: usize = kani::any();
+        kani::assume(len <= parts.len());
+        let mut end = 0u64;
+        let mut align = 1u64;
+        for part in &parts[..len] {
+            let part_align = part.align as u64;
+            end = ((end + part_align - 1) & !(part_align - 1)) + part.size as u64;
+            align = align.max(part_align);
+        }
+        (parts, len, (end + align - 1) & !(align - 1))
+    }
+
+    /// A sequence is laid out exactly when its true size fits a `u32`, and
+    /// then at that size, whatever its parts' sizes.
+    ///
+    /// The checked form is proved rather than the panicking one because
+    /// `kani::should_panic` passes if any path panics, so it cannot show
+    /// that none wraps.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn sequence_fits_exactly_when_its_true_size_does() {
+        let (parts, len, size) = any_parts_and_true_size();
+        let laid_out = checked_sequence_layout(parts[..len].iter().copied(), |_| ());
+        match laid_out {
+            Some(layout) => assert!(layout.size as u64 == size),
+            None => assert!(size > u32::MAX as u64),
+        }
     }
 
     /// That a sum's payload follows its tag of `tag_size` bytes at the

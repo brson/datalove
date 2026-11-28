@@ -59,6 +59,7 @@ it calls free of overflow and invalid access on those inputs.
 | `align_up_rounds_up` | `crates/datalove-rtdt/src/layout.rs` | `align_up` lands on a multiple of the alignment, at or past the value, less than one alignment past | any power of two to a page; values short of overflow | under a second |
 | `payload_offsets_follow_their_tags` | same | the option, enum and result payload offsets follow their tags, aligned, with no spare padding | any alignment to a page | under a second |
 | `sequence_pads_minimally` | same | a tuple's or struct's parts each follow the last, aligned to itself, with less than one alignment of padding; the whole is aligned to its most aligned part and padded only to it | up to four parts, sizes to a mebibyte, any alignment to a page | 3 seconds |
+| `sequence_fits_exactly_when_its_true_size_does` | same | the checked form lays a sequence out exactly when its true size, worked out in `u64`, fits a `u32`, and then at that size; past it, it returns `None` rather than wrapping | up to three parts of any size | 4 seconds |
 | `enum_pads_minimally` | same | the same of an enum's discriminant and largest payload, and every variant's payload, at its own offset, fits | up to three payloads | 2 seconds |
 | `option_pads_minimally`, `result_pads_minimally` | same | the same of a tag and its payload; a result holds the ok value and the error both, each aligned | any payload | under a second |
 | `map_internal_node_pads_minimally`, `map_leaf_node_pads_minimally`, `set_internal_node_pads_minimally`, `set_leaf_node_pads_minimally` | same | each node part follows the last, aligned to itself, with less than one alignment of padding; the node's alignment is the largest part's and its size a multiple of it | key and value sizes to a mebibyte, any alignment to a page | about a second each |
@@ -92,6 +93,15 @@ corpus. Now it calls the pure functions in `datalove_rtdt::layout`
 descriptors, and the runtime's descriptor walk calls them too. Proving them
 covers both, and the conformance tests are left checking the walk from a
 type to its parts.
+
+Every addition and multiplication in the runtime's layouts is checked, and a
+layout past `u32::MAX` panics. A size or offset is a `u32`, so such a value
+or node cannot be laid out at all, and wrapping would lay it out short and
+let a write to its last part land past its end. The other harnesses bound
+sizes to a mebibyte and so never reach the check; the sequence harness
+above takes any size, and proves the check fires exactly when it should.
+The frame layout is a sequence too, of values, slots and tracking bytes,
+and calls the same function.
 
 The big integer's arithmetic was refactored to make it provable: each
 operation now writes into a limb slice the caller allocated and returns how
@@ -192,6 +202,11 @@ What was learned writing the first ones:
   whose assertions are all implied by its assumptions passes everything, and
   so does one whose expected value is computed the way the code computes
   it. State what the result must satisfy, not how to build it.
+- **`should_panic` proves that something panics, not that everything
+  does.** It passes when any path panics, and a `kani::assert(false)` after
+  the call does not help, because Kani counts that failure as a panic too.
+  To prove an operation refuses every input past a limit, give it a form
+  that returns `None` and prove that one, as `checked_sequence_layout` is.
 - **No second multiplier or divider in the spec.** A check of the form
   `value(out) == value(a) * value(b)` is a multiplier equivalence, and the
   solver will not finish it past 32 bits. Prove the value where the operands
