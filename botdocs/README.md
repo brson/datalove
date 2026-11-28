@@ -63,6 +63,7 @@ script, so it stays true by running.
 - [Recursive Structural Types](plan-recursive-types.md)
 - [Organizing the IR Passes](plan-ir-passes.md)
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
+- [An Ordered Binary Encoding for Datalit](plan-datalit-binary.md)
 - [Generated Programs on Every Engine](plan-worldgen-engines.md)
 - [Tables: What the Type System Is Missing](design-table-rows.md)
 
