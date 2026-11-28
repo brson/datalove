@@ -227,7 +227,9 @@ impl IrInterpreter {
                     // Build list from slice of elements.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let element_tydesc = tydesc_ref.list_element_ty().as_ptr();
-                    let stride = rtdt::layout::align_up((*element_tydesc).size, (*element_tydesc).align) as usize;
+                    // A size is already a multiple of its alignment, so
+                    // elements sit end to end, as the runtime reads them.
+                    let stride = (*element_tydesc).size as usize;
 
                     // Allocate buffer for ALL elements.
                     let num_elements = elements.len();
@@ -257,7 +259,9 @@ impl IrInterpreter {
                     // The same way a tensor literal is built.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let element_tydesc = tydesc_ref.tensor_element_ty().as_ptr();
-                    let stride = rtdt::layout::align_up((*element_tydesc).size, (*element_tydesc).align) as usize;
+                    // A size is already a multiple of its alignment, so
+                    // elements sit end to end, as the runtime reads them.
+                    let stride = (*element_tydesc).size as usize;
 
                     let mut elements_buffer = datalove_rt::rust::AlignedBuffer::for_elements(&*element_tydesc, elements.len());
                     for (i, element_value) in elements.iter().enumerate() {
@@ -326,19 +330,14 @@ impl IrInterpreter {
                         .collect();
                     let num_cols = col_tydescs.len();
 
-                    // Compute row tuple layout manually.
-                    let mut row_offset = 0u32;
-                    let mut row_max_align = 1u32;
+                    // A row is laid out as a tuple of the columns.
                     let mut field_offsets = Vec::with_capacity(num_cols);
-                    for &col_tydesc in col_tydescs.iter() {
-                        let field_align = (*col_tydesc).align;
-                        let field_size = (*col_tydesc).size;
-                        row_max_align = row_max_align.max(field_align);
-                        row_offset = rtdt::layout::align_up(row_offset, field_align);
-                        field_offsets.push(row_offset);
-                        row_offset += field_size;
-                    }
-                    let row_size = rtdt::layout::align_up(row_offset, row_max_align);
+                    let columns = col_tydescs.iter().map(|&col| rtdt::layout::TypeLayout {
+                        size: (*col).size,
+                        align: (*col).align,
+                    });
+                    let rtdt::layout::TypeLayout { size: row_size, align: row_max_align } =
+                        rtdt::layout::sequence_layout(columns, |offset| field_offsets.push(offset));
 
                     // Create row tuple type descriptor.
                     let mut row_tuple_fields: Vec<rtdt::TyInfoTupleField> = Vec::with_capacity(num_cols);

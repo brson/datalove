@@ -8,6 +8,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
 
 use datalove_datafun_ir::{layout as ir_layout, ConstValue, IrType, ValueId};
+use datalove_rtdt::layout::array_layout;
 
 use crate::types::{align_shift, PTR_TYPE};
 use crate::CraneliftError;
@@ -729,20 +730,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get element size/alignment for buffer allocation.
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
-        let elem_size = elem_layout.size;
-        let elem_align = elem_layout.align;
-        let elem_stride = datalove_rtdt::layout::align_up(elem_size, elem_align);
-        let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
 
         // A buffer for all the elements, which the list takes them from.
-        let num_elements = elements.len() as u32;
-        let buffer_size = (elem_stride * num_elements).max(8);
-        let scratch = self.take_const_scratch(builder, buffer_size, elem_align)?;
+        let num_elements = const_count(elements.len());
+        let buffer = array_layout(elem_layout, num_elements);
+        let scratch = self.take_const_scratch(builder, buffer.size.max(8), buffer.align)?;
         let elements_addr = scratch.addr;
 
         // Write each element at its offset in the buffer.
         for (i, element_value) in elements.iter().enumerate() {
-            let offset = (i as u32) * elem_stride;
+            let offset = i as u32 * elem_layout.size;
             let elem_addr = builder.ins().iadd_imm_s(elements_addr, offset as i64);
             self.write_const_value_to_addr(builder, elem_addr, &element_type, element_value)?;
         }
@@ -812,15 +809,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let elem_tydesc_ptr = self.tydesc_value(builder, &element_type)?;
 
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
-        let elem_stride =
-            datalove_rtdt::layout::align_up(elem_layout.size, elem_layout.align).max(1);
 
         // The elements, one after another.
-        let buffer_size = (elem_stride * elements.len() as u32).max(8);
-        let elements_scratch = self.take_const_scratch(builder, buffer_size, elem_layout.align)?;
+        let buffer = array_layout(elem_layout, const_count(elements.len()));
+        let elements_scratch = self.take_const_scratch(builder, buffer.size.max(8), buffer.align)?;
         let elements_addr = elements_scratch.addr;
         for (i, element) in elements.iter().enumerate() {
-            let offset = (i as u32) * elem_stride;
+            let offset = i as u32 * elem_layout.size;
             let elem_addr = builder.ins().iadd_imm_s(elements_addr, offset as i64);
             self.write_const_value_to_addr(builder, elem_addr, &element_type, element)?;
         }
@@ -997,18 +992,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).C()).collect();
         let field_offsets = ir_layout::aggregate_field_offsets(&col_types);
         let row_layout = crate::types::ir_type_to_cranelift(&row_ty).layout();
-        let row_max_align = row_layout.align;
-        let row_stride = if row_layout.size == 0 { 1 } else { row_layout.size };
 
         // A buffer for all the rows, which the table takes them from.
-        let num_rows = rows.len() as u32;
-        let buffer_size = (row_stride * num_rows).max(8);
-        let scratch = self.take_const_scratch(builder, buffer_size, row_max_align)?;
+        let num_rows = const_count(rows.len());
+        let buffer = array_layout(row_layout, num_rows);
+        let scratch = self.take_const_scratch(builder, buffer.size.max(8), buffer.align)?;
         let rows_addr = scratch.addr;
 
         // Write each row at its offset in the buffer.
         for (row_idx, row_values) in rows.iter().enumerate() {
-            let row_base_offset = (row_idx as u32) * row_stride;
+            let row_base_offset = row_idx as u32 * row_layout.size;
             for (col_idx, col_value) in row_values.iter().enumerate() {
                 let col_offset = row_base_offset + field_offsets[col_idx];
                 let col_addr = builder.ins().iadd_imm_s(rows_addr, col_offset as i64);
@@ -1378,3 +1371,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 }
 
+/// The number of elements of a constant, as the `u32` a layout counts in.
+fn const_count(len: usize) -> u32 {
+    u32::try_from(len).unwrap_or_else(|_| panic!("a constant of {len} elements, more than a layout can count"))
+}

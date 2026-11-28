@@ -8,12 +8,7 @@ use cranelift_codegen::ir::Type as CraneliftType;
 use datalove_datafun_ir::IrType;
 use datalove_datafun_ir::layout as ir_layout;
 
-/// Size and alignment for a type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TypeLayout {
-    pub size: u32,
-    pub align: u32,
-}
+pub use ir_layout::TypeLayout;
 
 /// Cranelift representation for an IR type.
 ///
@@ -44,13 +39,6 @@ impl CraneliftRepr {
     pub fn is_scalar(&self) -> bool {
         matches!(self, CraneliftRepr::Scalar(_))
     }
-}
-
-/// Align a value up to the given alignment.
-#[inline]
-/// Round `value` up to a multiple of `align`.
-pub fn align_up(value: u32, align: u32) -> u32 {
-    ir_layout::align_up(value, align)
 }
 
 /// Get the Cranelift representation for an IR type.
@@ -87,7 +75,7 @@ pub fn ir_type_to_cranelift(ty: &IrType) -> CraneliftRepr {
         IrType::Ref(_) => CraneliftRepr::Scalar(PTR_TYPE),
 
         // Everything else is held in memory, laid out by the shared authority.
-        _ => CraneliftRepr::Aggregate(to_layout(ir_layout::layout_of(ty))),
+        _ => CraneliftRepr::Aggregate(ir_layout::layout_of(ty)),
     }
 }
 
@@ -204,9 +192,4 @@ mod tests {
         assert_eq!(layout.size, 8);
         assert_eq!(layout.align, 4);
     }
-}
-
-/// Bridge the shared layout type into this backend's own.
-fn to_layout(l: ir_layout::TypeLayout) -> TypeLayout {
-    TypeLayout { size: l.size, align: l.align }
 }

@@ -1,0 +1,13 @@
+// Constant lists of a zero-sized type, and of tuples holding one.
+//
+// Each backend writes a constant's elements to a buffer the runtime builds
+// the collection from, at the element's size apart. The cranelift backend
+// once put zero-sized elements a byte apart, where the runtime reads them at
+// none apart; harmless for a unit, and this pins that every backend still
+// builds the same list now that it does not.
+
+const UNITS: [()] = [(), (), ()]
+const PAIRS: [((), u32)] = [((), : u32 / 1), ((), : u32 / 2)]
+
+debuglog UNITS
+debuglog PAIRS

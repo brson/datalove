@@ -120,6 +120,17 @@ pub fn checked_sequence_layout(
     Some(TypeLayout { size: checked_align_up(offset, align)?, align })
 }
 
+/// Lay out `count` values of layout `elem` one after another, as the
+/// runtime reads a list's, a tensor's or a table's buffer.
+///
+/// A value's size is already a multiple of its alignment, so each element
+/// starts `elem.size` bytes after the last, and the whole is aligned as one
+/// element is. Panics past `u32::MAX`, as the other layouts do.
+pub fn array_layout(elem: TypeLayout, count: u32) -> TypeLayout {
+    debug_assert!(elem.size & (elem.align - 1) == 0, "a size of {} at an alignment of {}", elem.size, elem.align);
+    TypeLayout { size: mul_bytes(elem.size, count), align: elem.align }
+}
+
 /// Lay out an enum: a `u32` discriminant, then room for its largest payload.
 ///
 /// The shared payload offset is the one the most aligned payload needs; a
@@ -666,6 +677,19 @@ mod tests {
     fn a_sequence_past_u32_panics() {
         let parts = [TypeLayout { size: u32::MAX, align: 1 }, TypeLayout { size: 1, align: 1 }];
         sequence_layout(parts, |_| ());
+    }
+
+    #[test]
+    fn an_array_is_its_elements_end_to_end() {
+        let elem = TypeLayout { size: 12, align: 4 };
+        assert_eq!(array_layout(elem, 3), TypeLayout { size: 36, align: 4 });
+        assert_eq!(array_layout(elem, 0), TypeLayout { size: 0, align: 4 });
+    }
+
+    #[test]
+    #[should_panic(expected = "a layout larger than")]
+    fn an_array_past_u32_panics() {
+        array_layout(TypeLayout { size: 1 << 16, align: 8 }, 1 << 16);
     }
 
     #[test]

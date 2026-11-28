@@ -101,7 +101,12 @@ let a write to its last part land past its end. The other harnesses bound
 sizes to a mebibyte and so never reach the check; the sequence harness
 above takes any size, and proves the check fires exactly when it should.
 The frame layout is a sequence too, of values, slots and tracking bytes,
-and calls the same function.
+and calls the same function. So does the interpreter's row layout for a
+table constant, and the Cranelift backend's constant buffers, of a list's,
+a tensor's or a table's elements end to end, are sized by `array_layout`,
+a checked product of the element's size and the count. Cranelift's own
+`TypeLayout` is gone too: there is one, in `rtdt::layout`, re-exported by
+the IR.
 
 The big integer's arithmetic was refactored to make it provable: each
 operation now writes into a limb slice the caller allocated and returns how
