@@ -5,94 +5,191 @@ use datalove_rtdt as rtdt;
 use datalove_rtdt::TyDescRef;
 
 // ============================================================================
-// Stride Computation Helpers
+// View Arithmetic
 // ============================================================================
+//
+// A tensor is a view of a buffer: element `[i0, i1, ...]` is at position
+// `offset + i0 * strides[0] + i1 * strides[1] + ...`, counted in elements
+// from the buffer's start. Slicing, transposing, taking a hyperplane and
+// reshaping each make a new view of the same buffer, or of a copy of part of
+// it, by arithmetic on the offset, the shape and the strides alone. That
+// arithmetic is here, apart from the pointers and allocations around it, so
+// that Kani can prove each new view picks out the elements of the old one it
+// should; see botdocs/kani.md.
 
-/// Compute row-major strides from shape.
+use rtdt::{Index, IndexRepr};
+
+/// The position of the element at `indices` in a view's buffer, or `None` if
+/// an index is past the end of its axis.
 ///
-/// Row-major: strides[i] = product(shape[i+1..])
-fn compute_row_major_strides(shape: &[u32]) -> Vec<rtdt::Index> {
-    let rank = shape.len();
-    let mut strides: Vec<rtdt::Index> = vec![rtdt::Index::ZERO; rank];
-
-    for i in 0..rank {
-        let mut stride: rtdt::IndexRepr = 1;
-        for j in (i + 1)..rank {
-            stride = stride.saturating_mul(shape[j] as rtdt::IndexRepr);
+/// The arithmetic is plain: in a view that is well formed, every element's
+/// position is inside its buffer, so it cannot overflow.
+pub(crate) fn element_position(
+    offset: IndexRepr,
+    shape: &[Index],
+    strides: &[Index],
+    indices: &[IndexRepr],
+) -> Option<IndexRepr> {
+    debug_assert!(shape.len() == strides.len() && shape.len() == indices.len());
+    let mut position = offset;
+    for ((&index, extent), stride) in indices.iter().zip(shape).zip(strides) {
+        if index >= extent.0 {
+            return None;
         }
-        strides[i] = rtdt::Index(stride);
+        position += index * stride.0;
     }
-
-    strides
+    Some(position)
 }
 
-/// Compute column-major strides from shape.
+/// The view of `ranges` of a view: its shape, written to `shape_out`, and its
+/// offset, with the strides unchanged. `None` if a range is empty or runs
+/// past its axis.
 ///
-/// Column-major: strides[i] = product(shape[..i])
-fn compute_col_major_strides(shape: &[u32]) -> Vec<rtdt::Index> {
-    let rank = shape.len();
-    let mut strides: Vec<rtdt::Index> = vec![rtdt::Index::ZERO; rank];
-
-    for i in 0..rank {
-        let mut stride: rtdt::IndexRepr = 1;
-        for j in 0..i {
-            stride = stride.saturating_mul(shape[j] as rtdt::IndexRepr);
-        }
-        strides[i] = rtdt::Index(stride);
+/// A slice's first element is an element of the view, so its offset is a
+/// position inside the buffer and cannot overflow.
+pub(crate) fn slice_view(
+    offset: IndexRepr,
+    shape: &[Index],
+    strides: &[Index],
+    ranges: &[rtdt::SliceRange],
+    shape_out: &mut [Index],
+) -> Option<IndexRepr> {
+    if ranges.iter().zip(shape).any(|(range, extent)| range.start >= range.end || range.end > extent.0) {
+        return None;
     }
-
-    strides
+    let mut new_offset = offset;
+    for ((range, stride), extent_out) in ranges.iter().zip(strides).zip(shape_out.iter_mut()) {
+        new_offset += range.start * stride.0;
+        *extent_out = Index(range.end - range.start);
+    }
+    Some(new_offset)
 }
 
-// ============================================================================
-// Contiguity Check Helpers
-// ============================================================================
+/// Whether `perm` names each axis of a tensor of its length exactly once.
+fn is_permutation(perm: &[u32]) -> bool {
+    perm.iter().enumerate().all(|(i, &axis)| {
+        (axis as usize) < perm.len() && !perm[..i].contains(&axis)
+    })
+}
 
-/// Check if strides match row-major contiguous pattern.
-///
-/// Row-major: strides[i] == product(shape[i+1..])
-fn is_row_major_contiguous(shape: &[rtdt::Index], strides: &[rtdt::Index]) -> bool {
-    if shape.len() != strides.len() {
+/// The view with its axes reordered: axis `i` of the result is axis
+/// `perm[i]` of the view, written to `shape_out` and `strides_out`. The
+/// offset is unchanged. `false` if `perm` is not a permutation of the axes.
+pub(crate) fn transpose_view(
+    shape: &[Index],
+    strides: &[Index],
+    perm: &[u32],
+    shape_out: &mut [Index],
+    strides_out: &mut [Index],
+) -> bool {
+    if !is_permutation(perm) {
         return false;
     }
-
-    for i in 0..shape.len() {
-        let mut expected: rtdt::IndexRepr = 1;
-        for j in (i + 1)..shape.len() {
-            expected = expected.saturating_mul(shape[j].0);
-        }
-        if strides[i].0 != expected {
-            return false;
-        }
+    for (i, &axis) in perm.iter().enumerate() {
+        shape_out[i] = shape[axis as usize];
+        strides_out[i] = strides[axis as usize];
     }
-
     true
 }
 
-/// Check if strides match column-major contiguous pattern.
+/// The offset of the hyperplane at `index` along a view's first axis, whose
+/// shape and strides are the view's after the first. `None` if `index` is
+/// past the first axis.
 ///
-/// Column-major: strides[i] == product(shape[..i])
-fn is_col_major_contiguous(shape: &[rtdt::Index], strides: &[rtdt::Index]) -> bool {
-    if shape.len() != strides.len() {
-        return false;
+/// Only a hyperplane with elements has a position to give; with an empty
+/// axis after the first, the first stride may not be one.
+pub(crate) fn hyperplane_offset(
+    offset: IndexRepr,
+    shape: &[Index],
+    strides: &[Index],
+    index: IndexRepr,
+) -> Option<IndexRepr> {
+    if index >= shape[0].0 {
+        return None;
     }
+    Some(offset + index * strides[0].0)
+}
 
-    for i in 0..shape.len() {
-        let mut expected: rtdt::IndexRepr = 1;
-        for j in 0..i {
-            expected = expected.saturating_mul(shape[j].0);
-        }
-        if strides[i].0 != expected {
+/// The strides that lay a shape out row-major: the last axis adjacent, each
+/// axis before stepping over the whole of the axes after it.
+///
+/// Saturating, because an empty tensor keeps its shape: in `[0, n, n]` the
+/// first stride can be past what an index can say, and is never used, since
+/// there is no element to step to.
+pub(crate) fn row_major_strides(shape: &[Index], strides_out: &mut [Index]) {
+    let mut stride: IndexRepr = 1;
+    for (extent, stride_out) in shape.iter().zip(strides_out.iter_mut()).rev() {
+        *stride_out = Index(stride);
+        stride = stride.saturating_mul(extent.0);
+    }
+}
+
+/// The strides that lay a shape out column-major: the first axis adjacent.
+/// Saturating as `row_major_strides` is.
+pub(crate) fn col_major_strides(shape: &[Index], strides_out: &mut [Index]) {
+    let mut stride: IndexRepr = 1;
+    for (extent, stride_out) in shape.iter().zip(strides_out.iter_mut()) {
+        *stride_out = Index(stride);
+        stride = stride.saturating_mul(extent.0);
+    }
+}
+
+/// Whether `strides` lay `shape` out row-major, as `row_major_strides` would.
+fn is_row_major_contiguous(shape: &[Index], strides: &[Index]) -> bool {
+    let mut stride: IndexRepr = 1;
+    for (extent, actual) in shape.iter().zip(strides).rev() {
+        if actual.0 != stride {
             return false;
         }
+        stride = stride.saturating_mul(extent.0);
     }
-
     true
 }
 
-/// Check if tensor is contiguous (either row-major or column-major).
-fn is_contiguous(shape: &[rtdt::Index], strides: &[rtdt::Index]) -> bool {
-    is_row_major_contiguous(shape, strides) || is_col_major_contiguous(shape, strides)
+/// Whether `strides` lay `shape` out column-major.
+fn is_col_major_contiguous(shape: &[Index], strides: &[Index]) -> bool {
+    let mut stride: IndexRepr = 1;
+    for (extent, actual) in shape.iter().zip(strides) {
+        if actual.0 != stride {
+            return false;
+        }
+        stride = stride.saturating_mul(extent.0);
+    }
+    true
+}
+
+/// The number of elements in a shape. Saturating; see `row_major_strides`.
+fn element_count(shape: impl IntoIterator<Item = IndexRepr>) -> IndexRepr {
+    shape.into_iter().fold(1, |count, extent| count.saturating_mul(extent))
+}
+
+/// The strides of a view reshaped to `new_shape`, written to `strides_out`,
+/// in the order the view already has: row-major if it is, else
+/// column-major. `false` if the view does not start its buffer, is not laid
+/// out contiguously either way, or holds a different number of elements.
+///
+/// A reshape keeps the buffer and the offset of 0, so its elements are the
+/// view's in the same order.
+pub(crate) fn reshape_strides(
+    offset: IndexRepr,
+    shape: &[Index],
+    strides: &[Index],
+    new_shape: &[Index],
+    strides_out: &mut [Index],
+) -> bool {
+    let row_major = is_row_major_contiguous(shape, strides);
+    if offset != 0 || !(row_major || is_col_major_contiguous(shape, strides)) {
+        return false;
+    }
+    if element_count(shape.iter().map(|e| e.0)) != element_count(new_shape.iter().map(|e| e.0)) {
+        return false;
+    }
+    if row_major {
+        row_major_strides(new_shape, strides_out);
+    } else {
+        col_major_strides(new_shape, strides_out);
+    }
+    true
 }
 
 // ============================================================================
@@ -242,15 +339,16 @@ pub unsafe fn tensor_create_from_slice_impl(
 
         // Compute and write strides based on layout.
         let layout_enum = std::mem::transmute::<u8, rtdt::TensorLayout>(layout);
-        let strides = match layout_enum {
+        let shape_written = std::slice::from_raw_parts(shape_array_ptr, rank.as_usize());
+        let strides_out = std::slice::from_raw_parts_mut(strides_array_ptr, rank.as_usize());
+        match layout_enum {
             rtdt::TensorLayout::RowMajor | rtdt::TensorLayout::ColMajorTransposed => {
-                compute_row_major_strides(shape_slice)
+                row_major_strides(shape_written, strides_out)
             }
             rtdt::TensorLayout::ColMajor | rtdt::TensorLayout::RowMajorTransposed => {
-                compute_col_major_strides(shape_slice)
+                col_major_strides(shape_written, strides_out)
             }
-        };
-        std::ptr::copy_nonoverlapping(strides.as_ptr(), strides_array_ptr, rank.as_usize());
+        }
 
         // Initialize Tensor struct.
         let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
@@ -371,9 +469,10 @@ pub unsafe fn tensor_init_impl(
             return RtStatus::Error;
         }
 
-        // Compute row-major strides.
-        let strides = compute_row_major_strides(shape_slice);
-        std::ptr::copy_nonoverlapping(strides.as_ptr(), strides_array_ptr, rank as usize);
+        row_major_strides(
+            std::slice::from_raw_parts(shape_array_ptr, rank as usize),
+            std::slice::from_raw_parts_mut(strides_array_ptr, rank as usize),
+        );
 
         // Initialize Tensor struct.
         let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
@@ -440,14 +539,7 @@ pub unsafe fn tensor_element_slot(
         let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
         let strides_slice = std::slice::from_raw_parts(strides_ptr, rank as usize);
 
-        let mut linear_offset = offset_elems.0;
-        for i in 0..rank as usize {
-            let index = indices_slice[i];
-            if index >= shape_slice[i].0 {
-                return None;
-            }
-            linear_offset = linear_offset.saturating_add(index.saturating_mul(strides_slice[i].0));
-        }
+        let linear_offset = element_position(offset_elems.0, shape_slice, strides_slice, indices_slice)?;
 
         let element_size = element_ty.size() as usize;
         Some((ptr_base as *mut u8).add(linear_offset as usize * element_size))
@@ -528,15 +620,8 @@ pub unsafe fn tensor_transpose_impl(
 
         // Validate permutation.
         let perm_slice = std::slice::from_raw_parts(perm_ptr, rank as usize);
-        let mut seen = vec![false; rank as usize];
-        for &p in perm_slice {
-            if p >= rank {
-                return RtStatus::Error;
-            }
-            if seen[p as usize] {
-                return RtStatus::Error;
-            }
-            seen[p as usize] = true;
+        if !is_permutation(perm_slice) {
+            return RtStatus::Error;
         }
 
         // Allocate new shape array (Usize per dimension).
@@ -565,12 +650,14 @@ pub unsafe fn tensor_transpose_impl(
             return RtStatus::Error;
         }
 
-        // Copy permuted shape and strides.
-        for i in 0..rank as usize {
-            let src_idx = perm_slice[i] as usize;
-            *shape_out_ptr.add(i) = *shape_in_ptr.add(src_idx);
-            *strides_out_ptr.add(i) = *strides_in_ptr.add(src_idx);
-        }
+        let permuted = transpose_view(
+            std::slice::from_raw_parts(shape_in_ptr, rank as usize),
+            std::slice::from_raw_parts(strides_in_ptr, rank as usize),
+            perm_slice,
+            std::slice::from_raw_parts_mut(shape_out_ptr, rank as usize),
+            std::slice::from_raw_parts_mut(strides_out_ptr, rank as usize),
+        );
+        debug_assert!(permuted, "the permutation was checked above");
 
         // Determine output layout.
         // For 2D transpose ([1, 0]): RowMajor <-> ColMajorTransposed, ColMajor <-> RowMajorTransposed
@@ -800,44 +887,23 @@ pub unsafe fn tensor_hyperplane_clone_impl(
             return RtStatus::Error;
         }
 
-        // Copy shape[1..] and compute row-major strides.
-        for i in 0..sub_rank as usize {
-            *new_shape.add(i) = *shape_ptr.add(i + 1);
-        }
-        // Compute row-major strides for contiguous sub-tensor.
-        for i in 0..sub_rank as usize {
-            let mut stride: rtdt::IndexRepr = 1;
-            for j in (i + 1)..sub_rank as usize {
-                stride = stride.saturating_mul((*new_shape.add(j)).0);
-            }
-            *new_strides.add(i) = rtdt::Index(stride);
-        }
+        // The copy is laid out row-major, whatever the source's strides.
+        let shape = std::slice::from_raw_parts(shape_ptr, rank as usize);
+        let strides = std::slice::from_raw_parts(strides_ptr, rank as usize);
+        let (sub_shape, sub_strides) = (&shape[1..], &strides[1..]);
+        std::ptr::copy_nonoverlapping(sub_shape.as_ptr(), new_shape, sub_rank as usize);
+        row_major_strides(sub_shape, std::slice::from_raw_parts_mut(new_strides, sub_rank as usize));
 
-        // Clone elements from the strided source region.
-        // Source base: ptr_base + (offset + axis0_index * strides[0]) * elem_size
-        let src_base_offset = offset_elems.0
-            .saturating_add(axis0_index.saturating_mul((*strides_ptr).0));
-
+        // Clone the plane's elements from the source, in row-major order.
+        let plane_offset = hyperplane_offset(offset_elems.0, shape, strides, axis0_index)
+            .expect("the index was checked against the first axis above");
         let elem_size_usize = element_size as usize;
-
-        // Iterate over the sub-tensor using the source strides[1..].
-        let sub_shape: Vec<rtdt::IndexRepr> = (1..rank as usize)
-            .map(|i| (*shape_ptr.add(i)).0)
-            .collect();
-        let sub_strides: Vec<rtdt::IndexRepr> = (1..rank as usize)
-            .map(|i| (*strides_ptr.add(i)).0)
-            .collect();
 
         let mut dest_idx: rtdt::IndexRepr = 0;
         let mut indices: Vec<rtdt::IndexRepr> = vec![0; sub_rank as usize];
         loop {
-            // Compute source linear offset for current multi-index.
-            let mut src_offset = src_base_offset;
-            for d in 0..sub_rank as usize {
-                src_offset = src_offset.saturating_add(
-                    indices[d].saturating_mul(sub_strides[d])
-                );
-            }
+            let src_offset = element_position(plane_offset, sub_shape, sub_strides, &indices)
+                .expect("the multi-index steps within the plane's shape");
 
             let src_ptr = ptr_base.add(src_offset as usize * elem_size_usize);
             let dst_ptr = new_data.add(dest_idx as usize * elem_size_usize);
@@ -881,7 +947,7 @@ pub unsafe fn tensor_hyperplane_clone_impl(
             for d in (0..sub_rank as usize).rev() {
                 if carry {
                     indices[d] += 1;
-                    if indices[d] < sub_shape[d] {
+                    if indices[d] < sub_shape[d].0 {
                         carry = false;
                     } else {
                         indices[d] = 0;
@@ -953,22 +1019,15 @@ pub unsafe fn tensor_slice_impl(
         let strides = std::slice::from_raw_parts(strides_ptr, rank as usize);
         let ranges = std::slice::from_raw_parts(ranges_ptr, rank as usize);
 
-        // Validate ranges.
-        for i in 0..rank as usize {
-            let start = ranges[i].start;
-            let end = ranges[i].end;
-            let dim_size = shape[i].0;
-
-            // Check: 0 <= start < end <= shape[i]
-            if start >= end || end > dim_size {
-                return error_path(
-                    rt_ref,
-                    tensor_value_in,
-                    tensor_tydesc_ref,
-                    result_value_out,
-                    result_tydesc_ref,
-                );
-            }
+        // Every range must be within its axis and not empty.
+        if ranges.iter().zip(shape).any(|(range, extent)| range.start >= range.end || range.end > extent.0) {
+            return error_path(
+                rt_ref,
+                tensor_value_in,
+                tensor_tydesc_ref,
+                result_value_out,
+                result_tydesc_ref,
+            );
         }
 
         // Allocate new shape array (Usize per dimension).
@@ -1012,20 +1071,14 @@ pub unsafe fn tensor_slice_impl(
             );
         }
 
-        // Compute new offset and populate new shape/strides.
-        let mut new_offset = offset_elems.0;
-        for i in 0..rank as usize {
-            // Update offset: offset += ranges[i].start * strides[i]
-            new_offset = new_offset.saturating_add(
-                ranges[i].start.saturating_mul(strides[i].0)
-            );
-
-            // New shape: new_shape[i] = ranges[i].end - ranges[i].start
-            *new_shape_ptr.add(i) = rtdt::Index(ranges[i].end - ranges[i].start);
-
-            // Copy stride unchanged.
-            *new_strides_ptr.add(i) = strides[i];
-        }
+        let new_offset = slice_view(
+            offset_elems.0,
+            shape,
+            strides,
+            ranges,
+            std::slice::from_raw_parts_mut(new_shape_ptr, rank as usize),
+        ).expect("the ranges were checked above");
+        std::ptr::copy_nonoverlapping(strides.as_ptr(), new_strides_ptr, rank as usize);
 
         // Free old shape and strides arrays.
         rt_ref.alloc.free(
@@ -1159,45 +1212,14 @@ pub unsafe fn tensor_reshape_impl(
         let strides = std::slice::from_raw_parts(strides_ptr, rank as usize);
         let new_shape = std::slice::from_raw_parts(new_shape_data, new_rank.as_usize());
 
-        // Validate offset_elems == 0 (can only reshape full tensor, not view).
-        if offset_elems != rtdt::Index::ZERO {
+        // The view must start its buffer, be laid out contiguously and hold
+        // as many elements as the new shape.
+        let new_shape_indices: Vec<rtdt::Index> = new_shape.iter().map(|&e| rtdt::Index(e as rtdt::IndexRepr)).collect();
+        let mut new_strides_vec = vec![rtdt::Index::ZERO; new_shape.len()];
+        if !reshape_strides(offset_elems.0, shape, strides, &new_shape_indices, &mut new_strides_vec) {
             let _ = crate::c::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
-
-        // Validate tensor is contiguous.
-        if !is_contiguous(shape, strides) {
-            let _ = crate::c::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
-            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
-        }
-
-        // Compute current total elements.
-        let mut current_total: rtdt::IndexRepr = 1;
-        for &dim in shape {
-            current_total = current_total.saturating_mul(dim.0);
-        }
-
-        // Compute new total elements (from u32 new_shape).
-        let mut new_total: rtdt::IndexRepr = 1;
-        for &dim in new_shape {
-            new_total = new_total.saturating_mul(dim as rtdt::IndexRepr);
-        }
-
-        // Validate total elements match.
-        if current_total != new_total {
-            let _ = crate::c::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
-            return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
-        }
-
-        // Determine layout from current strides.
-        let is_row_major = is_row_major_contiguous(shape, strides);
-
-        // Compute new strides based on layout.
-        let new_strides_vec = if is_row_major {
-            compute_row_major_strides(new_shape)
-        } else {
-            compute_col_major_strides(new_shape)
-        };
 
         // Allocate new strides array (Usize per dimension).
         let new_strides_ptr = rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, new_rank.0);
@@ -1221,11 +1243,8 @@ pub unsafe fn tensor_reshape_impl(
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
 
-        // Copy shape data from List (u32) to new array (Usize).
         let new_shape_ptr_typed = new_shape_alloc_ptr as *mut rtdt::Index;
-        for i in 0..new_rank.as_usize() {
-            std::ptr::write(new_shape_ptr_typed.add(i), rtdt::Index(new_shape[i] as rtdt::IndexRepr));
-        }
+        std::ptr::copy_nonoverlapping(new_shape_indices.as_ptr(), new_shape_ptr_typed, new_rank.as_usize());
 
         // Free old strides array.
         rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), strides_ptr as *mut u8);
@@ -1295,6 +1314,225 @@ pub unsafe fn tensor_reshape_impl(
 
                 result_ptr.add(payload_offset as usize)
             }
+        }
+    }
+}
+
+#[cfg(kani)]
+mod kani_proofs {
+    //! Bounded proofs that each new view picks out the elements of the old
+    //! one it should; see botdocs/kani.md.
+    //!
+    //! Views are of rank one to three, with extents to 7, strides to 255 and
+    //! offsets to 65535: far enough apart that every axis is distinct, and
+    //! small enough that no position can overflow, which is what being well
+    //! formed in a buffer promises. The loops run at most three times.
+    //!
+    //! Each value is drawn as a narrow integer and widened, not drawn as an
+    //! index and bounded by an assumption. Widened, its high bits are
+    //! constant zeros the solver folds away, and a product of two is a small
+    //! multiplier; bounded, every bit is still symbolic, and the slice
+    //! harness did not finish in ten minutes.
+
+    use super::*;
+
+    const MAX_RANK: usize = 3;
+
+    /// A view's offset, shape and strides, and its rank.
+    fn any_view(min_rank: usize) -> (IndexRepr, [Index; MAX_RANK], [Index; MAX_RANK], usize) {
+        let rank: usize = kani::any();
+        kani::assume(min_rank <= rank && rank <= MAX_RANK);
+        let offset = kani::any::<u16>() as IndexRepr;
+        let mut shape = [Index::ZERO; MAX_RANK];
+        let mut strides = [Index::ZERO; MAX_RANK];
+        for axis in 0..MAX_RANK {
+            shape[axis] = Index((kani::any::<u8>() & 7) as IndexRepr);
+            strides[axis] = Index(kani::any::<u8>() as IndexRepr);
+        }
+        (offset, shape, strides, rank)
+    }
+
+    /// Any index within `shape`.
+    fn any_index_within(shape: &[Index]) -> [IndexRepr; MAX_RANK] {
+        let mut index = [0; MAX_RANK];
+        for (i, extent) in index.iter_mut().zip(shape) {
+            *i = (kani::any::<u8>() & 7) as IndexRepr;
+            kani::assume(*i < extent.0);
+        }
+        index
+    }
+
+    /// A slice is valid exactly when every range is within its axis and not
+    /// empty, and then its element at any index is the view's at that index
+    /// plus the ranges' starts.
+    ///
+    /// To rank two, where the other harnesses go to three: the property is
+    /// that `(start + j) * stride` is `start * stride + j * stride` on every
+    /// axis at once, which is a multiplier equivalence per axis. It takes 13
+    /// seconds at rank one and 70 at two, and did not finish in ten minutes
+    /// at three. Each axis adds its own product, so two already shows that
+    /// one axis's slice does not disturb another's.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn a_slice_picks_out_the_views_elements() {
+        let (offset, shape, strides, rank) = any_view(1);
+        kani::assume(rank <= 2);
+        let mut ranges = [rtdt::SliceRange { start: 0, end: 0 }; MAX_RANK];
+        for range in ranges.iter_mut() {
+            let (start, end) = (kani::any::<u8>(), kani::any::<u8>());
+            *range = rtdt::SliceRange { start: start as IndexRepr, end: end as IndexRepr };
+        }
+        let (shape, strides, ranges) = (&shape[..rank], &strides[..rank], &ranges[..rank]);
+        let mut sliced_shape = [Index::ZERO; MAX_RANK];
+        let sliced_shape = &mut sliced_shape[..rank];
+
+        let sliced = slice_view(offset, shape, strides, ranges, sliced_shape);
+        let mut valid = true;
+        for (range, extent) in ranges.iter().zip(shape) {
+            valid &= range.start < range.end && range.end <= extent.0;
+        }
+        assert!(sliced.is_some() == valid);
+
+        if let Some(sliced_offset) = sliced {
+            let index = any_index_within(sliced_shape);
+            let mut in_view = [0; MAX_RANK];
+            for axis in 0..rank {
+                in_view[axis] = ranges[axis].start + index[axis];
+            }
+            let element = element_position(sliced_offset, sliced_shape, strides, &index[..rank]);
+            assert!(element.is_some());
+            assert!(element == element_position(offset, shape, strides, &in_view[..rank]));
+        }
+    }
+
+    /// A transpose is valid exactly when every axis is named once, and then
+    /// its element at any index is the view's at that index with the axes
+    /// put back where `perm` took them from.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn a_transpose_reorders_the_views_axes() {
+        let (offset, shape, strides, rank) = any_view(1);
+        let perm: [u32; MAX_RANK] = kani::any();
+        let (shape, strides, perm) = (&shape[..rank], &strides[..rank], &perm[..rank]);
+        let mut shape_out = [Index::ZERO; MAX_RANK];
+        let mut strides_out = [Index::ZERO; MAX_RANK];
+        let (shape_out, strides_out) = (&mut shape_out[..rank], &mut strides_out[..rank]);
+
+        let transposed = transpose_view(shape, strides, perm, shape_out, strides_out);
+        let mut named_once = true;
+        for axis in 0..rank as u32 {
+            named_once &= perm.iter().filter(|&&p| p == axis).count() == 1;
+        }
+        assert!(transposed == named_once);
+
+        if transposed {
+            let index = any_index_within(shape_out);
+            let mut in_view = [0; MAX_RANK];
+            for axis in 0..rank {
+                in_view[perm[axis] as usize] = index[axis];
+            }
+            let element = element_position(offset, shape_out, strides_out, &index[..rank]);
+            assert!(element.is_some());
+            assert!(element == element_position(offset, shape, strides, &in_view[..rank]));
+        }
+    }
+
+    /// The hyperplane at an index along the first axis exists exactly when
+    /// the index is within it, and then its element at any index is the
+    /// view's at that index with the plane's index in front.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn a_hyperplane_is_the_views_elements_at_its_index() {
+        let (offset, shape, strides, rank) = any_view(2);
+        let (shape, strides) = (&shape[..rank], &strides[..rank]);
+        let at = kani::any::<u8>() as IndexRepr;
+
+        let plane = hyperplane_offset(offset, shape, strides, at);
+        assert!(plane.is_some() == (at < shape[0].0));
+
+        if let Some(plane_offset) = plane {
+            let index = any_index_within(&shape[1..]);
+            let mut in_view = [0; MAX_RANK];
+            in_view[0] = at;
+            for axis in 1..rank {
+                in_view[axis] = index[axis - 1];
+            }
+            let element = element_position(plane_offset, &shape[1..], &strides[1..], &index[..rank - 1]);
+            assert!(element.is_some());
+            assert!(element == element_position(offset, shape, strides, &in_view[..rank]));
+        }
+    }
+
+    /// Row-major strides number a shape's elements in row-major order from
+    /// 0, each below the element count, and column-major strides in
+    /// column-major order; each is recognized as what it is.
+    ///
+    /// The orders are stated by Horner's rule, not by strides, so they are
+    /// not the code under proof written again.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn contiguous_strides_number_the_elements_in_order() {
+        let (_, shape, _, rank) = any_view(1);
+        let shape = &shape[..rank];
+        let index = any_index_within(shape);
+        let index = &index[..rank];
+        let count = element_count(shape.iter().map(|e| e.0));
+
+        let mut strides = [Index::ZERO; MAX_RANK];
+        let strides = &mut strides[..rank];
+        row_major_strides(shape, strides);
+        let mut row_order = 0;
+        for (i, extent) in index.iter().zip(shape) {
+            row_order = row_order * extent.0 + i;
+        }
+        assert!(element_position(0, shape, strides, index) == Some(row_order));
+        assert!(row_order < count);
+        assert!(is_row_major_contiguous(shape, strides));
+
+        col_major_strides(shape, strides);
+        let mut col_order = 0;
+        for (i, extent) in index.iter().zip(shape).rev() {
+            col_order = col_order * extent.0 + i;
+        }
+        assert!(element_position(0, shape, strides, index) == Some(col_order));
+        assert!(is_col_major_contiguous(shape, strides));
+    }
+
+    /// A reshape is valid exactly when the view starts its buffer, is laid
+    /// out row-major or column-major, and holds as many elements as the new
+    /// shape, and then gives the new shape strides of the same order.
+    ///
+    /// With the harness above, the reshaped view numbers its elements in the
+    /// order the old one did, from the same buffer: the element at each
+    /// position is the one that was there.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn a_reshape_keeps_the_order_of_the_elements() {
+        let (offset, shape, strides, rank) = any_view(1);
+        let (_, new_shape, _, new_rank) = any_view(1);
+        let (shape, strides, new_shape) = (&shape[..rank], &strides[..rank], &new_shape[..new_rank]);
+        let mut new_strides = [Index::ZERO; MAX_RANK];
+        let new_strides = &mut new_strides[..new_rank];
+
+        let reshaped = reshape_strides(offset, shape, strides, new_shape, new_strides);
+
+        let mut row = [Index::ZERO; MAX_RANK];
+        let mut col = [Index::ZERO; MAX_RANK];
+        row_major_strides(shape, &mut row[..rank]);
+        col_major_strides(shape, &mut col[..rank]);
+        let was_row = strides == &row[..rank];
+        let was_col = strides == &col[..rank];
+        let same_count = element_count(shape.iter().map(|e| e.0)) == element_count(new_shape.iter().map(|e| e.0));
+        assert!(reshaped == (offset == 0 && (was_row || was_col) && same_count));
+
+        if reshaped {
+            let mut expected = [Index::ZERO; MAX_RANK];
+            if was_row {
+                row_major_strides(new_shape, &mut expected[..new_rank]);
+            } else {
+                col_major_strides(new_shape, &mut expected[..new_rank]);
+            }
+            assert!(new_strides == &expected[..new_rank]);
         }
     }
 }

@@ -4,7 +4,7 @@ What the runtime's arithmetic is proved of under Kani, how to run and write
 the harnesses, and what they cannot say. Written November 2026, when the
 first harnesses went in: the layout functions, the byte copies, the
 allocator's size classes and the big integer's limb arithmetic. The value
-layouts, shared since with the IR, came after.
+layouts, shared since with the IR, and the tensor views came after.
 
 ## Contents
 
@@ -74,6 +74,11 @@ it calls free of overflow and invalid access on those inputs.
 | `mul_magnitude_into_multiplies_limbs` | same | a one-limb product is the `u128` product, with no leading zero | one limb by one | 6 seconds |
 | `mul_magnitude_into_stays_in_bounds` | same | a wider product writes in bounds, overflows nothing and panics nowhere | two limbs by two | 6 seconds |
 | `div_magnitude_into_by_a_limb_stays_in_bounds` | same | division by a limb writes in bounds, overflows nothing, panics nowhere, and leaves no leading zero | dividends to three limbs | 3 seconds |
+| `a_slice_picks_out_the_views_elements` | `crates/datalove-rt/src/c/impls/tensor.rs` | a slice is refused exactly when a range is empty or past its axis, and its element at any index is the view's at that index plus the starts | rank to two; extents to 7, strides to 255, offsets to 65535, starts and ends to 255 | 70 seconds |
+| `a_transpose_reorders_the_views_axes` | same | a transpose is refused exactly when `perm` names an axis twice or one past the rank, and its element at any index is the view's with the axes put back | rank to three, the same extents and strides, any `perm` | 15 seconds |
+| `a_hyperplane_is_the_views_elements_at_its_index` | same | the plane at an index along the first axis exists exactly when the index is in it, and its element at any index is the view's with the plane's index in front | rank two and three | 7 seconds |
+| `contiguous_strides_number_the_elements_in_order` | same | row-major strides number a shape's elements in row-major order from 0, below the count, and column-major in column-major order; each is recognized as itself | rank to three, extents to 7 | 22 seconds |
+| `a_reshape_keeps_the_order_of_the_elements` | same | a reshape is refused exactly when the view is offset, not contiguous either way, or a different size, and otherwise keeps its order | ranks to three | 18 seconds |
 
 "Pads minimally" is not "packed". Every part is aligned, and a `u8`
 followed by a `u64` still has seven bytes between them. What the harnesses
@@ -124,6 +129,41 @@ than its largest, and a result sized without the error. The first draft of
 the result harness passed the last of these: its expected payload was built
 the way the code builds it, so it agreed with a wrong one too. It now checks
 that each arm fits.
+
+### Tensor views
+
+A tensor is a view of a buffer: the element at `[i0, i1, ...]` is at
+position `offset + i0 * strides[0] + i1 * strides[1] + ...`. A slice, a
+transpose, a hyperplane (`t[i]` of a tensor of rank above one) and a
+reshape each make a new view by arithmetic on the offset, shape and
+strides, sharing the buffer, so a mistake there reads or writes the wrong
+element rather than crashing. That arithmetic was spread through the
+`tensor_*_impl` functions among the pointer reads and allocations; it is
+now in pure functions at the top of `tensor.rs` (`element_position`,
+`slice_view`, `transpose_view`, `hyperplane_offset`, `row_major_strides`,
+`col_major_strides`, `reshape_strides`), which the functions call.
+
+Each harness says the new view's element at any index is the old view's
+element at the matching index, so a view of a view of a well-formed tensor
+reads only the tensor's own elements. A reshape keeps the buffer and an
+offset of 0, and with row-major or column-major strides on both sides
+numbers the elements in the same order, which the ordering harness proves
+of the strides. The row cursor walks hyperplanes and the stride cursor a
+rank-one view, so compiled code's open-coded advance does the arithmetic
+these prove.
+
+The element position used to be computed with saturating arithmetic, which
+turned an overflow into a position of the largest index, far past any
+buffer, rather than a failure. In a well-formed view no position overflows, so it
+is plain arithmetic now and an overflow is a panic. The stride computations
+stay saturating, because an empty tensor keeps its shape: in `[0, n, n]`
+the first stride can be past what an index holds, and is never used.
+
+The planted faults: a slice one element too long, a slice to the end of
+its axis refused, strides left unpermuted by a transpose, a permutation
+naming the axis one past the rank, a hyperplane stepped by the second
+axis's stride, row-major strides laid out column-major, and a reshape of a
+view that does not start its buffer. Each failed its harness.
 
 ### Where the arithmetic proofs stop
 
@@ -216,6 +256,18 @@ What was learned writing the first ones:
   `value(out) == value(a) * value(b)` is a multiplier equivalence, and the
   solver will not finish it past 32 bits. Prove the value where the operands
   are a limb, and the bounds and absence of panics where they are wider.
+- **Draw narrow and widen, rather than draw wide and assume.** `kani::any::<u8>()
+  as u32` has 24 high bits that are constant zeros, which the solver folds
+  away; `kani::any::<u32>()` with `assume(x <= 255)` has 32 symbolic bits
+  and only a constraint on them. Narrowing cut the tensor harnesses by a
+  third. It was not enough for the rank-three slice, whose multiplier
+  equivalences are still more than the solver finishes.
+- **Check a counterexample concretely before believing it.** The first
+  hyperplane harness copied a prefix with `copy_from_slice` of a symbolic
+  length and failed; `--concrete-playback=print -Z concrete-playback`
+  printed the values, and the same values run as a plain test agreed. A
+  loop in place of the copy proved in 8 seconds. Concrete playback is the
+  quick way to tell a model's artefact from a bug.
 - **Run a new harness alone under `timeout`** before adding it to the
   recipe, and read the tail of a failure: "Verification failed" with "CBMC
   appears to have run out of memory" above it is the solver giving up, not a
