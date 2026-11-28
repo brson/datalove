@@ -251,3 +251,49 @@ fn plain_flag_is_copy() {
         assert_eq!(plain, ty.is_copy(), "plain flag disagrees for {:?}", ty);
     }
 }
+
+/// Descriptors decoded from a type's binary encoding lay the type out as the
+/// interpreter's do.
+///
+/// The binary datalit decoder makes descriptors in a `TyArena`, from bytes,
+/// and the values it makes with them are read by code compiled against the
+/// IR's layout, so the arena is held to the same layout as the rest.
+#[test]
+fn decoded_descriptors_agree() {
+    let mut table = IrTyDescTable::new();
+    let mut arena = datalove_datalit_bin::TyArena::new();
+    let mut types = corpus();
+    for ty in corpus() {
+        types.push(IrType::Set(Box::new(ty.C())));
+        types.push(IrType::Map(Box::new(ty.C()), Box::new(IrType::U8)));
+        types.push(IrType::List(Box::new(ty.C())));
+    }
+    // A discriminant is a variant's place among the descriptor's variants, so
+    // their order is part of the layout. Lowering sorts them by name, as the
+    // encoding does; the corpus writes some out of order, which no lowered
+    // type has.
+    for ty in types.into_iter().filter(variants_in_order) {
+        let ir = unsafe { TyDescRef::from_ptr(table.get_or_create(&ty)) };
+        let bytes = rtdt::tyenc::type_bytes(ir);
+        let decoded = arena.type_from_bytes(&bytes).unwrap_or_else(|e| panic!("{ty:?} decodes: {e}"));
+        let decoded = unsafe { TyDescRef::from_ptr(decoded) };
+        if let Err(e) = datalove_datalit_bin::layouts_agree(ir, decoded) {
+            panic!("{ty:?}: {e}");
+        }
+    }
+}
+
+/// Whether every enum in a type has its variants in name order.
+fn variants_in_order(ty: &IrType) -> bool {
+    match ty {
+        IrType::Enum(variants) => {
+            variants.windows(2).all(|w| w[0].0 < w[1].0)
+                && variants.iter().filter_map(|(_, p)| p.as_ref()).all(variants_in_order)
+        }
+        IrType::Tuple(fields) => fields.iter().all(variants_in_order),
+        IrType::Struct(fields) => fields.iter().all(|(_, t)| variants_in_order(t)),
+        IrType::Option(t) | IrType::Result(t) | IrType::List(t) | IrType::Set(t) | IrType::Term(_, t) => variants_in_order(t),
+        IrType::Map(k, v) => variants_in_order(k) && variants_in_order(v),
+        _ => true,
+    }
+}

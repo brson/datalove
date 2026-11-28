@@ -2,10 +2,13 @@
 
 A design for a binary form of datalit values whose bytes sort in datalit's
 total order, so typed datalit values can be the keys and values of the
-megaspace-iostack KV store. Written November 2026; not implemented. Decided
-since: trees have declared types, enum variants are encoded by name, `data`
-folds recursive types, there is no compact value encoding, and a database
-is either index-32 or index-64.
+megaspace-iostack KV store. Written November 2026. Decided since: trees
+have declared types, enum variants are encoded by name, `data` folds
+recursive types, there is no compact value encoding, and a database is
+either index-32 or index-64. Phases 1 to 6 are implemented (November 2026);
+the format is specified in [datalit-binary.md](datalit-binary.md), and
+[As built](#as-built) says where the code left this design. Phase 7, the
+store, is not done.
 
 ## Contents
 
@@ -21,6 +24,7 @@ is either index-32 or index-64.
 - [Decoding untrusted bytes](#decoding-untrusted-bytes)
 - [Prior art](#prior-art)
 - [One crate, on runtime values](#one-crate-on-runtime-values)
+- [As built](#as-built)
 - [What exists, what is missing](#what-exists-what-is-missing)
 - [Phases](#phases)
 - [Open questions](#open-questions)
@@ -268,17 +272,17 @@ A recursive type and its one-step unfolding are accepted for each other at
 the head ([Meeting at the head](plan-recursive-types.md#meeting-at-the-head)),
 with one layout and the same values. But they are distinct under `≡`, so
 without care `data` would give one value two encodings and the store two
-keys. Therefore `data` folds: before its type is encoded, a type that is
-the unfolding of a `rec` type is replaced by that `rec` type. The candidate
-is found among the type's own parts, since an unfolding of `rec X. B`
-contains `rec X. B` wherever `B` had `X`, and the test is that unfolding it
-gives back the type. Folding applies at the head only, matching the
-language. Unfoldings deeper inside a type are different types under `≡` and
-stay different.
+keys. Therefore `data` folds.
 
-The runtime has to agree. `eq_tydesc` and `cmp_tydesc` must fold the same
-way, or an in-memory `#{data}` would hold two elements that the store holds
-as one.
+As built, it folds at every depth, not only at the head. A descriptor has
+no `rec` node: a recursive type is a cycle of descriptor pointers, and the
+runtime's `eq_tydesc` already takes two descriptors to be one type when they
+unfold to the same tree, at any depth. The encoding has to agree with the
+runtime, or an in-memory `#{data}` would hold one element that the store
+holds as two. So the type encoder walks down from the root and writes a
+type equal to one of its ancestors as a reference to it, with a binder on
+the ancestor. That depends only on the tree, so every unfolding encodes
+alike.
 
 ## The order of types has to be fixed first
 
@@ -484,53 +488,70 @@ carries encoded bytes in its commands and needs nothing from serde. If a
 serde adapter is wanted later, it is a set of thin wrappers over this
 crate, not a second value model.
 
+## As built
+
+Where the code departs from the design above:
+
+- **The type encoder is in rtdt, not the new crate.** The runtime orders
+  `data` by type encoding, so `cmp_tydesc` needs it, and the runtime cannot
+  depend on a crate that depends on it. `rtdt::tyenc` has the type encoding
+  and order, and `rtdt::ordered` the writers it uses. Everything else is in
+  `datalove-datalit-bin`: the value encoding, reading (`read`), and the type
+  decoder and `TyArena` (`tybuild`), which the runtime never uses. A
+  structural `cmp_tydesc` would let the encoder move too, but it would have
+  to reproduce the encoder's folding of recursive types, a second definition
+  of the order to keep in step.
+- **Folding is at every depth**, as
+  [Folding recursive types](#folding-recursive-types) now says.
+- **`cmp_packed` no longer compares type tags first.** A recursive type's
+  encoding starts with its binder, not its constructor's tag, so ordering
+  `data` by tag before type would disagree with the bytes.
+- **The walking helpers stayed in rt.** Once the crate depended on the
+  runtime for decoding, the encoder uses the runtime's exported cursor and
+  `data_borrow` functions, so nothing had to move. `encode` takes a runtime
+  handle for them.
+- **`TyDescTable` was not rebuilt on the arena.** There were already four
+  descriptor builders, held to one layout by tests;
+  `tybuild::layouts_agree` now holds the arena to datalit's `TyDescTable`
+  in the round-trip tests and to the interpreter's `IrTyDescTable` in
+  `layout_conformance_tests.rs`.
+- **An enum variant's type parts are its name and then a flag**, `00` or
+  `01` and the payload type, rather than a kind tag first.
+- **A table of no columns keeps its row count** when decoded. The
+  runtime's builder from rows makes it empty whatever the rows, so the
+  decoder writes the table itself.
+- **The tests** are `crates/datalove-datalit-bin/tests/encoding_tests.rs`:
+  every kind of value round-tripped, runs of values in order, `data` of
+  different types, folding, malformed input, and generated pairs from
+  datalit's `ast_gen` checked against `cmp_total`, with mutated bytes
+  refused or re-encoded alike. `DATALIT_BIN_COUNT` sets how many generated
+  cases; 20,000 pass.
+
 ## What exists, what is missing
 
-What exists:
-
-- The total order, specified in `mandocs/datalit.md` and implemented by
-  `cmp_total` in `crates/datalove-rt/src/c/impls/cmp.rs`. The value order
-  matches the table above for every type checked: ints, floats by
-  `total_cmp`, strings by byte, tensors by shape then row-major, tables by
-  row, and enums by name-sorted discriminant.
-- Type descriptors and layouts (`datalove-rtdt`) that a walker can encode
-  from, as `cmp.rs` already walks them.
-- Sorted bulk builders for the runtime's sets and maps.
-- `TyDescTable`, which makes descriptors at run time, but only from
-  salsa-interned types.
-- Recursive types with de Bruijn binders.
+What exists: everything in phases 1 to 6.
 
 What is missing:
 
-- A specified order of types, and a `cmp_tydesc` without layout.
-- The crate: the value and type encoders, and the strict decoders.
-- The read-only walking helpers in rtdt rather than rt.
-- A descriptor builder in rtdt without salsa.
-- Conformance tests for datalit's `TyDescTable` against the IR layout.
+- The store: phase 7.
 - A printer that round-trips every value, including non-finite floats.
+- `mandocs/datalit.md` still calls the order among the types a `data` may
+  carry unspecified, and says datalit has no canonical serialized form. Both
+  are now settled by [datalit-binary.md](datalit-binary.md); updating the
+  spec is left to its maintainer.
 
 Out of scope: changing a database's index width, migrating a tree to a new
 declared type, and a serde adapter.
 
 ## Phases
 
-1. **Spec.** Add a "Binary encoding" section to `mandocs/datalit.md` with
-   the tables above, and replace "the order among types is unspecified" with
-   the `enc_type` order.
-2. **The order of types.** Change `cmp_tydesc` to the specified order, with
-   no layout, and fold recursive types in it and in `eq_tydesc`.
-3. **Encoding.** Move the four walking helpers into rtdt, and encode
-   `(TyDescRef, *const u8)` and descriptors.
-4. **A descriptor builder without salsa.** Add the arena builder to rtdt,
-   taking its layout from `rtdt::layout`. Add it and datalit's
-   `TyDescTable` to the layout conformance test.
-5. **Decoding.** Decode types into descriptors through the builder, and
-   values into runtime memory, rejecting every non-canonical input.
-6. **Proof by generation.** Generate random types and pairs of values, and
-   check that `memcmp(enc a, enc b) == cmp_total(a, b)`, that
-   `dec(enc a) == a`, and that mutated bytes are rejected or re-encode
-   identically. Hand-written cases are datalit text. This is the phase that
-   makes the claims in this document true.
+1. **Spec.** Done in [datalit-binary.md](datalit-binary.md); not yet in
+   `mandocs/datalit.md`.
+2. **The order of types.** Done.
+3. **Encoding.** Done.
+4. **A descriptor builder without salsa.** Done.
+5. **Decoding.** Done.
+6. **Proof by generation.** Done.
 7. **Typed trees in megaspace.** A state machine whose trees have declared
    datalit key and value types, stored as type bytes, and whose commands carry encoded values. A
    scan over a value range becomes `[enc(lo), enc(hi))`, and a prefix scan

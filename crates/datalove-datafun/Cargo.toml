@@ -60,6 +60,7 @@ datalove-worldgen.workspace = true
 datalove-sys-packages.workspace = true
 datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.workspace = true
+datalove-datalit-bin.workspace = true
 datalove-diagnostic.workspace = true
 datalove-datafun-cranelift-jit.workspace = true
 datalove-ct.workspace = true

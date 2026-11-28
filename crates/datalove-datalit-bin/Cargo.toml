@@ -1,0 +1,22 @@
+[package]
+name = "datalove-datalit-bin"
+description = "An ordered binary encoding of datalit values."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[features]
+index-64 = ["datalove-rtdt/index-64", "datalove-rt/index-64"]
+
+[dependencies]
+datalove-rtdt.workspace = true
+datalove-rt.workspace = true
+
+[dev-dependencies]
+rmx.workspace = true
+bct.workspace = true
+salsa.workspace = true
+datalove-datalit.workspace = true
+datalove-diagnostic.workspace = true

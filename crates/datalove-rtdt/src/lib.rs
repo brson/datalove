@@ -5,6 +5,8 @@ pub mod layout;
 pub mod bytes;
 pub mod anypack;
 pub mod tydesc_ref;
+pub mod ordered;
+pub mod tyenc;
 
 pub use any::{AnyMut, AnyOut, AnyOwned, AnyRef};
 

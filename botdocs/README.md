@@ -23,6 +23,7 @@ script, so it stays true by running.
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datafun Grammar (EBNF)](datafun-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
+- [The Binary Datalit Encoding](datalit-binary.md)
 - [Datafun Typing Rules](datafun-typing-rules.md)
 - [The Formal Model](formal.md)
 - [Sigil Assignments](sigil-assignments.md)

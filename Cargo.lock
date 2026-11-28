@@ -1135,6 +1135,7 @@ dependencies = [
  "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-datalit",
+ "datalove-datalit-bin",
  "datalove-diagnostic",
  "datalove-diagnostic-codes",
  "datalove-exampletest",
@@ -1428,6 +1429,19 @@ dependencies = [
  "rustmax",
  "salsa",
  "serde",
+]
+
+[[package]]
+name = "datalove-datalit-bin"
+version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datalit",
+ "datalove-diagnostic",
+ "datalove-rt",
+ "datalove-rtdt",
+ "rustmax",
+ "salsa",
 ]
 
 [[package]]

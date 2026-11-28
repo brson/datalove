@@ -71,8 +71,7 @@ unsafe fn eq_packed(
 
 /// How two packed values order. See `eq_packed`.
 ///
-/// Two of different types order by their type tags, which is arbitrary but
-/// total, and is what a collection sorted on them needs.
+/// By their types first, in the order `cmp_tydesc` gives, and then by value.
 ///
 /// # Safety
 ///
@@ -82,11 +81,9 @@ unsafe fn cmp_packed(
     b: *const rtdt::Data,
 ) -> crate::c::RtOrdering {
     unsafe {
-        let tytag_a = (*a).tytag();
-        let tytag_b = (*b).tytag();
-        if tytag_a != tytag_b {
-            return ordering_of((tytag_a as u8).cmp(&(tytag_b as u8)));
-        }
+        // Not by type tag first, though that would be cheaper: the order of
+        // types is that of their encodings, which a tag does not decide. A
+        // recursive list's encoding begins with its binder, not a list's tag.
         if std::ptr::eq(a, b) {
             return crate::c::RtOrdering::Equal;
         }
@@ -94,10 +91,8 @@ unsafe fn cmp_packed(
         let mut scratch_b = crate::rust::DataScratch::default();
         let (inner_a, td_a) = data_inner(a, &mut scratch_a);
         let (inner_b, td_b) = data_inner(b, &mut scratch_b);
-        // A tag is not a type: two packed values can share one and still hold
-        // different types, a set of `u32` against a set of `string`. Only
-        // where they are the one type may their values be read through the one
-        // descriptor; where they are not, the types themselves say the order.
+        // Only where they are the one type may their values be read through
+        // the one descriptor; where they are not, the types say the order.
         match cmp_tydesc(td_a, td_b) {
             std::cmp::Ordering::Equal => cmp_value(inner_a, inner_b, td_a),
             ord => ordering_of(ord),
@@ -178,224 +173,21 @@ pub unsafe fn cmp_total(
 
 /// How two type descriptors order.
 ///
-/// Arbitrary but total, and `Equal` exactly where `eq_tydesc` is true. That
-/// correspondence is the point: `cmp_packed` may only compare two packed
-/// values against a single descriptor where they are the one type, and needs
-/// something to order them by where they are not.
+/// `Equal` exactly where `eq_tydesc` is true. That correspondence is the
+/// point: `cmp_packed` may only compare two packed values against a single
+/// descriptor where they are the one type, and needs something to order them
+/// by where they are not.
 ///
-/// Ordered by tag first, then size and alignment, then structure, mirroring
-/// the walk `eq_tydesc` takes -- each of those a total order, so their
-/// composition is one too.
+/// The order is the byte order of the types' binary encodings
+/// (`rtdt::tyenc`), which is the order the binary datalit format sorts a
+/// `data` by. It reads nothing of a type's layout, so it is the same in every
+/// build: ordering by size and alignment, as this once did, put a set of
+/// `data` in a different order on a 32-bit host than on a 64-bit one.
 pub(crate) fn cmp_tydesc(
     td_a: rtdt::TyDescRef,
     td_b: rtdt::TyDescRef,
 ) -> std::cmp::Ordering {
-    cmp_tydesc_in(td_a, td_b, &mut Vec::new())
-}
-
-/// `cmp_tydesc` partway through a walk, with the pairs of collections' descriptors
-/// the walk is inside.
-///
-/// A recursive type's descriptor is among its own parts, inside a collection,
-/// so two descriptors of one recursive type made apart lead back to
-/// themselves without ever meeting. A pair met again inside its own
-/// comparison has been found alike on every step since, and the walk from it
-/// would repeat, so it is taken as alike.
-fn cmp_tydesc_in(
-    td_a: rtdt::TyDescRef,
-    td_b: rtdt::TyDescRef,
-    seen: &mut Vec<(usize, usize)>,
-) -> std::cmp::Ordering {
-    let in_collection = !std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) && matches!(
-        td_a.type_tag(),
-        rtdt::TyTag::List | rtdt::TyTag::Set | rtdt::TyTag::Map | rtdt::TyTag::Tensor | rtdt::TyTag::Table,
-    );
-    if !in_collection {
-        return cmp_tydesc_parts(td_a, td_b, seen);
-    }
-    let pair = (td_a.as_ptr() as usize, td_b.as_ptr() as usize);
-    if seen.contains(&pair) {
-        return std::cmp::Ordering::Equal;
-    }
-    seen.push(pair);
-    let result = cmp_tydesc_parts(td_a, td_b, seen);
-    seen.pop();
-    result
-}
-
-fn cmp_tydesc_parts(
-    td_a: rtdt::TyDescRef,
-    td_b: rtdt::TyDescRef,
-    seen: &mut Vec<(usize, usize)>,
-) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
-
-    if std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) {
-        return Ordering::Equal;
-    }
-
-    let tag_a = td_a.type_tag();
-    let tag_b = td_b.type_tag();
-    match (tag_a as u8).cmp(&(tag_b as u8)) {
-        Ordering::Equal => {}
-        ord => return ord,
-    }
-    match td_a.size().cmp(&td_b.size()) {
-        Ordering::Equal => {}
-        ord => return ord,
-    }
-    match td_a.align().cmp(&td_b.align()) {
-        Ordering::Equal => {}
-        ord => return ord,
-    }
-
-    match tag_a {
-        rtdt::TyTag::Bool | rtdt::TyTag::U8 | rtdt::TyTag::I8 |
-        rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
-        rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Index | rtdt::TyTag::Offset |
-        rtdt::TyTag::F32 | rtdt::TyTag::F64 |
-        rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data |
-        rtdt::TyTag::Error => Ordering::Equal,
-
-        // In a template, a type parameter is its position.
-        rtdt::TyTag::Param => unsafe {
-            td_a.as_ref().type_info.param.index.cmp(&td_b.as_ref().type_info.param.index)
-        },
-
-        // An atom's name is the whole of its identity. `atom Red` and
-        // `atom Blue` are two types and nothing else in their descriptors
-        // tells them apart, both being zero-sized and carrying nothing.
-        rtdt::TyTag::Atom => td_a.atom_info().0.cmp(td_b.atom_info().0),
-
-        rtdt::TyTag::Tuple => {
-            let info_a = td_a.tuple_info();
-            let info_b = td_b.tuple_info();
-            match info_a.num_fields().cmp(&info_b.num_fields()) {
-                Ordering::Equal => {}
-                ord => return ord,
-            }
-            for i in 0..info_a.num_fields() as usize {
-                let field_a = info_a.field(i).X();
-                let field_b = info_b.field(i).X();
-                match field_a.offset().cmp(&field_b.offset()) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-                match cmp_tydesc_in(field_a.tydesc(), field_b.tydesc(), seen) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-            }
-            Ordering::Equal
-        }
-
-        rtdt::TyTag::Struct => {
-            let info_a = td_a.struct_info();
-            let info_b = td_b.struct_info();
-            match info_a.num_fields().cmp(&info_b.num_fields()) {
-                Ordering::Equal => {}
-                ord => return ord,
-            }
-            for i in 0..info_a.num_fields() as usize {
-                let field_a = info_a.field(i).X();
-                let field_b = info_b.field(i).X();
-                match field_a.name().cmp(field_b.name()) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-                match field_a.offset().cmp(&field_b.offset()) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-                match cmp_tydesc_in(field_a.tydesc(), field_b.tydesc(), seen) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-            }
-            Ordering::Equal
-        }
-
-        rtdt::TyTag::Term => {
-            let (name_a, payload_a) = td_a.term_info();
-            let (name_b, payload_b) = td_b.term_info();
-            match name_a.cmp(name_b) {
-                Ordering::Equal => cmp_tydesc_in(payload_a, payload_b, seen),
-                ord => ord,
-            }
-        }
-
-        rtdt::TyTag::Enum => {
-            let info_a = td_a.enum_info();
-            let info_b = td_b.enum_info();
-            match info_a.num_variants().cmp(&info_b.num_variants()) {
-                Ordering::Equal => {}
-                ord => return ord,
-            }
-            for i in 0..info_a.num_variants() as usize {
-                let variant_a = info_a.variant(i).X();
-                let variant_b = info_b.variant(i).X();
-                match variant_a.name().cmp(variant_b.name()) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-                match variant_a.offset().cmp(&variant_b.offset()) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-                // A variant carrying nothing comes before one that does.
-                match (variant_a.payload(), variant_b.payload()) {
-                    (core::option::Option::None, core::option::Option::None) => {}
-                    (core::option::Option::None, core::option::Option::Some(_)) => return Ordering::Less,
-                    (core::option::Option::Some(_), core::option::Option::None) => return Ordering::Greater,
-                    (core::option::Option::Some(pa), core::option::Option::Some(pb)) => {
-                        match cmp_tydesc_in(pa, pb, seen) {
-                            Ordering::Equal => {}
-                            ord => return ord,
-                        }
-                    }
-                }
-            }
-            Ordering::Equal
-        }
-
-        rtdt::TyTag::List => cmp_tydesc_in(td_a.list_element_ty(), td_b.list_element_ty(), seen),
-        rtdt::TyTag::Set => cmp_tydesc_in(td_a.set_element_ty(), td_b.set_element_ty(), seen),
-
-        rtdt::TyTag::Map => {
-            match cmp_tydesc_in(td_a.map_key_ty(), td_b.map_key_ty(), seen) {
-                Ordering::Equal => cmp_tydesc_in(td_a.map_value_ty(), td_b.map_value_ty(), seen),
-                ord => ord,
-            }
-        }
-
-        rtdt::TyTag::Tensor => {
-            match td_a.tensor_rank().cmp(&td_b.tensor_rank()) {
-                Ordering::Equal => cmp_tydesc_in(td_a.tensor_element_ty(), td_b.tensor_element_ty(), seen),
-                ord => ord,
-            }
-        }
-
-        rtdt::TyTag::Table => {
-            match td_a.table_num_columns().cmp(&td_b.table_num_columns()) {
-                Ordering::Equal => {}
-                ord => return ord,
-            }
-            for (col_a, col_b) in td_a.table_column_tydescs().zip(td_b.table_column_tydescs()) {
-                match col_a.name().cmp(col_b.name()) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-                match cmp_tydesc_in(col_a.tydesc(), col_b.tydesc(), seen) {
-                    Ordering::Equal => {}
-                    ord => return ord,
-                }
-            }
-            Ordering::Equal
-        }
-
-        rtdt::TyTag::Option => cmp_tydesc_in(td_a.option_inner_ty(), td_b.option_inner_ty(), seen),
-        rtdt::TyTag::Result => cmp_tydesc_in(td_a.result_ok_ty(), td_b.result_ok_ty(), seen),
-    }
+    rtdt::tyenc::cmp_types(td_a, td_b)
 }
 
 /// Compare two type descriptors for structural equality.
